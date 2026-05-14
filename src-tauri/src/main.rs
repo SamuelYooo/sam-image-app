@@ -1,4 +1,4 @@
 fn main() {
-    samimage_lib::run();
+    samuel_xyz_lib::run();
 }
 

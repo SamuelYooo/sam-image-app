@@ -3234,7 +3234,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "samimage-app"
+name = "samuel-xyz"
 version = "0.1.0"
 dependencies = [
  "anyhow",
