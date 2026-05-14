@@ -1,0 +1,35 @@
+[package]
+name = "samimage-app"
+version = "0.1.0"
+description = "SamImage desktop image generation workspace"
+authors = ["SamImage"]
+edition = "2021"
+
+[lib]
+name = "samimage_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "samimage-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.7"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+thiserror = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
+tower-http = { version = "0.6", features = ["cors"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+rfd = "0.15"
+urlencoding = "2"

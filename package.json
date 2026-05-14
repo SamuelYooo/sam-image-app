@@ -1,0 +1,49 @@
+{
+  "name": "samimage-app",
+  "version": "1.1.0",
+  "private": true,
+  "homepage": "https://gitee.com/SamuelYou/sam-image-app",
+  "bugs": "https://gitee.com/SamuelYou/sam-image-app/issues",
+  "repository": "https://gitee.com/SamuelYou/sam-image-app.git",
+  "license": "MIT",
+  "author": {
+    "name": "sam you",
+    "email": "",
+    "url": "https://gitee.com/SamuelYou/sam-image-app"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vue-tsc --noEmit && vite build",
+    "clean": "powershell -ExecutionPolicy Bypass -File ./scripts/clean.ps1",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "tauri": "powershell -ExecutionPolicy Bypass -File ./scripts/run-tauri.ps1",
+    "build:exe": "npm.cmd run tauri -- build --no-bundle",
+    "build:msi": "powershell -ExecutionPolicy Bypass -File ./scripts/build-msi-local.ps1",
+    "build:msi:tauri": "npm.cmd run tauri -- build --bundles msi",
+    "build:nsis": "npm.cmd run tauri -- build --bundles nsis",
+    "build:all": "node scripts/build-all.cjs",
+    "build:all:win": "node scripts/build-all.cjs --windows",
+    "build:all:mac": "node scripts/build-all.cjs --macos",
+    "build:all:linux": "node scripts/build-all.cjs --linux"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
+    "lucide-vue-next": "^0.468.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@tauri-apps/cli": "^2.8.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "ico-endec": "^0.1.6",
+    "playwright": "^1.60.0",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8",
+    "vue-tsc": "^2.1.10"
+  }
+}
