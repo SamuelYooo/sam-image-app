@@ -372,6 +372,7 @@ async fn create_generation(
         prompt: request.prompt,
         image_url,
         source: request.source,
+        type_: request.type_,
         created_at: Utc::now().to_rfc3339(),
     };
 

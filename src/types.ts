@@ -63,9 +63,11 @@ export interface GenerationRequest {
   seed?: number;
   referenceImages: string[];
   source?: ArtifactSource;
+  type?: ArtifactType;
 }
 
 export type ArtifactSource = 'generate' | 'icon';
+export type ArtifactType = 'type_default' | 'type_icon';
 
 export interface Artifact {
   id: string;
@@ -74,6 +76,7 @@ export interface Artifact {
   prompt: string;
   imageUrl: string;
   source: ArtifactSource;
+  type: ArtifactType;
   createdAt: string;
 }
 

@@ -5,8 +5,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Download,
-  Eye,
-  EyeOff,
   Github,
   Import,
   ImagePlus,
@@ -31,6 +29,7 @@ import {
   Wand2,
 } from 'lucide-vue-next';
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import packageJson from '../package.json';
 import { api } from './api/client';
@@ -79,7 +78,7 @@ import {
   validateReferenceLimit,
 } from './utils/reference-images';
 
-type PageKey = 'generate' | 'icons' | 'models' | 'gallery';
+type PageKey = 'generate' | 'icons' | 'gallery' | 'history';
 
 const appVersion = packageJson.version;
 const page = ref<PageKey>('generate');
@@ -105,11 +104,15 @@ const iconSourceArtifactId = ref('');
 const iconNotice = ref('');
 const isIconGenerating = ref(false);
 const isIconExporting = ref(false);
+const iconReferenceImageItems = ref<ReferenceImageItem[]>([]);
+const iconReferenceImageUrlDraft = ref('');
+const iconReferenceNotice = ref('');
 const referenceImageUrlDraft = ref('');
 const referenceImageItems = ref<ReferenceImageItem[]>([]);
 const referenceNotice = ref('');
 const networkCheck = ref(false);
 const apiKeyVisible = ref(false);
+void apiKeyVisible;
 const modelSearch = ref('');
 const manualModelName = ref('');
 const galleryProfileFilter = ref('all');
@@ -184,6 +187,7 @@ const isTemplateManagerOpen = ref(false);
 const isIconfontSearchOpen = ref(false);
 const isModelSwitcherOpen = ref(false);
 const isModelConfigOpen = ref(false);
+const isBatchOpen = ref(false);
 const isSearchingIconfont = ref(false);
 const renamingProfileId = ref<string | null>(null);
 const renamingProfileName = ref('');
@@ -196,6 +200,33 @@ const templateDraft = reactive<PromptTemplate>({
   isBuiltin: false,
 });
 const templateNotice = ref('');
+const batchPrompts = ref('');
+const isBatchRunning = ref(false);
+const batchResults = ref<Array<{ prompt: string; status: 'pending' | 'running' | 'done' | 'error'; message: string }>>([]);
+const historyProfileFilter = ref('all');
+const historyModeFilter = ref<'all' | WorkMode>('all');
+const historySourceFilter = ref<'all' | 'generate' | 'icon'>('all');
+
+interface OpLog {
+  id: string;
+  time: string;
+  type: 'generate' | 'validate' | 'save' | 'delete' | 'batch' | 'icon' | 'other';
+  message: string;
+  detail?: string;
+}
+
+const opLogs = ref<OpLog[]>([]);
+
+function addOpLog(type: OpLog['type'], message: string, detail?: string) {
+  opLogs.value.unshift({
+    id: crypto.randomUUID(),
+    time: new Date().toISOString(),
+    type,
+    message,
+    detail,
+  });
+  if (opLogs.value.length > 200) opLogs.value.length = 200;
+}
 
 const modeOptions: Array<{ id: WorkMode; label: string; desc: string }> = [
   { id: 'txt2img', label: '文生图', desc: '从提示词创建新图' },
@@ -224,6 +255,7 @@ const endpointPreview = computed(() => {
   const endpoint = draft.chatEndpoint.startsWith('/') ? draft.chatEndpoint : `/${draft.chatEndpoint}`;
   return base ? `${base}${endpoint}` : '';
 });
+void endpointPreview;
 const filteredModels = computed(() => {
   const query = modelSearch.value.trim().toLowerCase();
   const models = mergeModelList(draft.availableModels, draft.model ? [draft.model] : []);
@@ -240,7 +272,15 @@ const groupedModels = computed(() => {
 });
 const galleryArtifacts = computed(() => {
   return artifacts.value.filter((artifact) => {
-    if (artifact.source === 'icon') return false;
+    if (artifact.type === 'type_icon') return false;
+    const profileMatches = galleryProfileFilter.value === 'all' || artifact.profileId === galleryProfileFilter.value;
+    const modeMatches = galleryModeFilter.value === 'all' || artifact.mode === galleryModeFilter.value;
+    return profileMatches && modeMatches;
+  });
+});
+const galleryIconArtifacts = computed(() => {
+  return artifacts.value.filter((artifact) => {
+    if (artifact.type !== 'type_icon') return false;
     const profileMatches = galleryProfileFilter.value === 'all' || artifact.profileId === galleryProfileFilter.value;
     const modeMatches = galleryModeFilter.value === 'all' || artifact.mode === galleryModeFilter.value;
     return profileMatches && modeMatches;
@@ -278,6 +318,16 @@ const selectedOverlayKindLabel = computed(() => {
   if (selectedOverlay.value.kind === 'text') return '文字';
   if (selectedOverlay.value.kind === 'svg') return 'SVG';
   return '图片';
+});
+const defaultArtifacts = computed(() => artifacts.value.filter((a) => a.type === 'type_default'));
+const iconArtifacts = computed(() => artifacts.value.filter((a) => a.type === 'type_icon'));
+const historyArtifacts = computed(() => {
+  return artifacts.value.filter((artifact) => {
+    const profileMatches = historyProfileFilter.value === 'all' || artifact.profileId === historyProfileFilter.value;
+    const modeMatches = historyModeFilter.value === 'all' || artifact.mode === historyModeFilter.value;
+    const sourceMatches = historySourceFilter.value === 'all' || artifact.source === historySourceFilter.value;
+    return profileMatches && modeMatches && sourceMatches;
+  });
 });
 
 watch(selectedArtifactId, () => {
@@ -750,8 +800,7 @@ function newProfile() {
   modelListResult.value = null;
   assignDraft(next);
   isModelSwitcherOpen.value = false;
-  isModelConfigOpen.value = false;
-  page.value = 'models';
+  isModelConfigOpen.value = true;
 }
 
 function selectProfile(id: string) {
@@ -820,8 +869,15 @@ function openModelConfigDialog() {
 
 function openModelConfigPage() {
   isModelSwitcherOpen.value = false;
-  isModelConfigOpen.value = false;
-  page.value = 'models';
+  isModelConfigOpen.value = true;
+}
+
+async function openExternalUrl(url: string) {
+  try {
+    await openUrl(url);
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 }
 
 async function saveProfile() {
@@ -841,6 +897,7 @@ async function saveProfile() {
     activeProfileId.value = saved.id;
     assignDraft(saved);
     notice.value = '模型配置已保存';
+    addOpLog('save', `保存模型配置：${saved.name}`);
   } catch (error) {
     notice.value = error instanceof Error ? error.message : '保存配置失败';
   } finally {
@@ -857,10 +914,12 @@ async function removeProfile() {
     if (profiles.value[0]) selectProfile(profiles.value[0].id);
     else newProfile();
     notice.value = '模型配置已删除';
+    addOpLog('delete', '删除模型配置');
   } catch (error) {
     notice.value = error instanceof Error ? error.message : '删除配置失败';
   }
 }
+void removeProfile;
 
 async function validateModel() {
   validationResult.value = null;
@@ -872,6 +931,7 @@ async function validateModel() {
       profile: { ...draft },
       networkCheck: networkCheck.value,
     });
+    addOpLog('validate', `模型验证${validationResult.value.ok ? '成功' : '失败'}`, validationResult.value.message);
   } catch (error) {
     validationResult.value = {
       ok: false,
@@ -879,6 +939,7 @@ async function validateModel() {
       message: error instanceof Error ? error.message : '模型验证失败',
       latencyMs: 0,
     };
+    addOpLog('validate', '模型验证失败', error instanceof Error ? error.message : '未知错误');
   } finally {
     isValidating.value = false;
   }
@@ -927,11 +988,12 @@ function removeModel(model: string) {
     draft.model = draft.availableModels[0] ?? '';
   }
 }
+void removeModel;
 
 async function generateImage() {
   if (!activeProfileId.value) {
-    notice.value = '请先在模型配置页保存并激活一个模型';
-    page.value = 'models';
+    notice.value = '请先在右上角模型配置中保存并激活一个模型';
+    isModelConfigOpen.value = true;
     return;
   }
   if (!prompt.value.trim()) {
@@ -960,13 +1022,16 @@ async function generateImage() {
       seed: seed.value,
       referenceImages: referenceSources,
       source: 'generate',
+      type: 'type_default',
     };
     const artifact = await api.generate(payload);
     artifacts.value.unshift(artifact);
     selectedArtifactId.value = artifact.id;
     notice.value = '生成任务已完成并入库';
+    addOpLog('generate', `文生图完成 (${modeLabel(mode.value)})`, prompt.value.slice(0, 60));
   } catch (error) {
     notice.value = error instanceof Error ? error.message : '生成失败';
+    addOpLog('generate', `生成失败 (${modeLabel(mode.value)})`, error instanceof Error ? error.message : '未知错误');
   } finally {
     isGenerating.value = false;
   }
@@ -977,6 +1042,91 @@ async function handleReferenceFileInput(event: Event) {
   await addReferenceFiles(Array.from(input.files ?? []), 'file');
   input.value = '';
 }
+
+async function handleIconReferenceFileInput(event: Event) {
+  const input = event.target as HTMLInputElement;
+  await addIconReferenceFiles(Array.from(input.files ?? []), 'file');
+  input.value = '';
+}
+
+async function handleIconReferencePaste(event: ClipboardEvent) {
+  const items = Array.from(event.clipboardData?.items ?? []);
+  const files = items
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+
+  if (files.length > 0) {
+    event.preventDefault();
+    await addIconReferenceFiles(files, 'paste');
+    return;
+  }
+
+  const text = event.clipboardData?.getData('text/plain')?.trim() ?? '';
+  if (text && isLikelyImageUrl(text)) {
+    iconReferenceImageUrlDraft.value = [iconReferenceImageUrlDraft.value, text].filter(Boolean).join('\n');
+    iconReferenceNotice.value = '已识别剪贴板图片链接';
+  }
+}
+
+async function addIconReferenceFiles(files: File[], kind: 'file' | 'paste') {
+  if (files.length === 0) return;
+  const imageFiles = files.filter((file) => isImageMime(file.type));
+  const rejected = files.filter((file) => !isImageMime(file.type));
+
+  if (rejected.length > 0) {
+    iconReferenceNotice.value = `已忽略 ${rejected.length} 个非图片文件`;
+  }
+  if (imageFiles.length === 0) return;
+
+  const converted = await Promise.all(
+    imageFiles.map(async (file) => ({
+      id: crypto.randomUUID(),
+      name: file.name || (kind === 'paste' ? '剪贴板图片' : '本地图片'),
+      source: await fileToDataUrl(file),
+      kind,
+      mime: file.type || 'image/*',
+    })),
+  );
+  iconReferenceImageItems.value = [...iconReferenceImageItems.value, ...converted];
+  const limitError = validateReferenceLimit(
+    collectReferenceSources(iconReferenceImageItems.value, iconReferenceImageUrlDraft.value).length,
+    selectedProfile.value.referenceImageLimit,
+  );
+  iconReferenceNotice.value = limitError ?? `已添加 ${converted.length} 张参考图`;
+}
+
+function removeIconReferenceImage(id: string) {
+  iconReferenceImageItems.value = iconReferenceImageItems.value.filter((item) => item.id !== id);
+}
+
+function useArtifactAsIconReference(artifactId: string) {
+  const artifact = artifacts.value.find((item) => item.id === artifactId);
+  if (!artifact) return;
+  iconReferenceImageItems.value = [
+    ...iconReferenceImageItems.value,
+    {
+      id: crypto.randomUUID(),
+      name: `作品参考 ${artifact.prompt.slice(0, 20)}`,
+      source: artifact.imageUrl,
+      kind: 'file' as const,
+      mime: 'image/*',
+    },
+  ];
+  iconReferenceNotice.value = '已添加作品作为 ICON 参考图';
+}
+
+void referenceUploadIcon;
+void handleReferenceFileInput;
+void handleIconReferenceFileInput;
+void handleIconReferencePaste;
+void addIconReferenceFiles;
+void removeIconReferenceImage;
+void useArtifactAsIconReference;
+void selectedOverlayKindLabel;
+void alignSelectedOverlays;
+void handleSvgUpload;
+void openModelConfigDialog;
 
 async function handleReferencePaste(event: ClipboardEvent) {
   const items = Array.from(event.clipboardData?.items ?? []);
@@ -1021,12 +1171,18 @@ function buildIconPrompt(): string {
 
 async function generateIconImage() {
   if (!activeProfileId.value) {
-    iconNotice.value = '请先在模型配置页保存并激活一个模型';
-    page.value = 'models';
+    iconNotice.value = '请先在右上角模型配置中保存并激活一个模型';
+    isModelConfigOpen.value = true;
     return;
   }
   if (!iconPrompt.value.trim()) {
     iconNotice.value = '请先填写图标描述';
+    return;
+  }
+  const referenceSources = collectReferenceSources(iconReferenceImageItems.value, iconReferenceImageUrlDraft.value);
+  const limitError = validateReferenceLimit(referenceSources.length, selectedProfile.value.referenceImageLimit);
+  if (limitError) {
+    iconNotice.value = limitError;
     return;
   }
   isIconGenerating.value = true;
@@ -1034,19 +1190,22 @@ async function generateIconImage() {
   try {
     const artifact = await api.generate({
       profileId: activeProfileId.value,
-      mode: 'txt2img',
+      mode: referenceSources.length > 0 ? 'img2img' : 'txt2img',
       prompt: buildIconPrompt(),
       negativePrompt: iconNegativePrompt.value,
       size: '1024x1024',
       seed: seed.value,
-      referenceImages: [],
+      referenceImages: referenceSources,
       source: 'icon',
+      type: 'type_icon',
     });
     artifacts.value.unshift(artifact);
     iconSourceArtifactId.value = artifact.id;
     iconNotice.value = 'ICON 母图已生成，可预览并导出多尺寸 ICO';
+    addOpLog('icon', 'ICON 母图生成完成', iconPrompt.value.slice(0, 60));
   } catch (error) {
     iconNotice.value = error instanceof Error ? error.message : '生成 ICON 失败';
+    addOpLog('icon', 'ICON 生成失败', error instanceof Error ? error.message : '未知错误');
   } finally {
     isIconGenerating.value = false;
   }
@@ -1125,6 +1284,50 @@ void selectedOverlayKindLabel;
 void alignSelectedOverlays;
 void handleSvgUpload;
 void openModelConfigDialog;
+void openExternalUrl;
+
+async function runBatchGeneration() {
+  const lines = batchPrompts.value.split('\n').map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) {
+    notice.value = '请输入至少一行提示词';
+    return;
+  }
+  if (!activeProfileId.value) {
+    notice.value = '请先在右上角模型配置中保存并激活一个模型';
+    isModelConfigOpen.value = true;
+    return;
+  }
+  isBatchRunning.value = true;
+  batchResults.value = lines.map((prompt) => ({ prompt, status: 'pending' as const, message: '' }));
+  for (let i = 0; i < lines.length; i++) {
+    batchResults.value[i].status = 'running';
+    const line = lines[i];
+    const referenceSources = collectReferenceSources(referenceImageItems.value, referenceImageUrlDraft.value);
+    try {
+      const payload: GenerationRequest = {
+        profileId: activeProfileId.value,
+        mode: mode.value,
+        prompt: line,
+        negativePrompt: negativePrompt.value,
+        size: size.value,
+        seed: seed.value,
+        referenceImages: referenceSources,
+        source: 'generate',
+        type: 'type_default',
+      };
+      const artifact = await api.generate(payload);
+      artifacts.value.unshift(artifact);
+      batchResults.value[i].status = 'done';
+      batchResults.value[i].message = '生成成功';
+    } catch (error) {
+      batchResults.value[i].status = 'error';
+      batchResults.value[i].message = error instanceof Error ? error.message : '生成失败';
+    }
+  }
+  isBatchRunning.value = false;
+  notice.value = '批量生成已完成';
+  addOpLog('batch', `批量生成完成 (${lines.length} 条)`, batchResults.value.filter(r => r.status === 'done').length + ' 成功 / ' + batchResults.value.filter(r => r.status === 'error').length + ' 失败');
+}
 
 async function addReferenceFiles(files: File[], kind: 'file' | 'paste') {
   if (files.length === 0) return;
@@ -1366,6 +1569,13 @@ onMounted(loadAll);
         >
           我的作品集
         </button>
+        <button
+          class="rounded-full px-4 py-2 transition"
+          :class="page === 'history' ? 'bg-[#1e2428] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-white'"
+          @click="page = 'history'"
+        >
+          历史
+        </button>
       </nav>
 
       <div class="ml-auto flex items-center gap-3">
@@ -1478,7 +1688,7 @@ onMounted(loadAll);
             <Wand2 :size="17" />
             生图画布
           </div>
-          <p class="mt-1 text-xs text-[var(--muted)]">主界面只保留创作流程；模型、密钥和服务地址统一在模型配置页管理。</p>
+          <p class="mt-1 text-xs text-[var(--muted)]">主界面只保留创作流程；模型、密钥和服务地址统一在右上角配置中管理。</p>
         </div>
 
         <div class="absolute right-6 top-5 z-20">
@@ -1537,7 +1747,7 @@ onMounted(loadAll);
              <span class="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-[var(--muted)]">已激活</span>
           </div>
           <p class="line-clamp-3 break-all text-xs leading-5 text-[var(--muted)]">{{ activeSummary }}</p>
-          <button class="mt-3 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50" @click="page = 'models'">
+          <button class="mt-3 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50" @click="openModelConfigPage">
              切换或配置模型
           </button>
         </div>
@@ -1575,6 +1785,10 @@ onMounted(loadAll);
                 <Loader2 v-if="isGenerating" :size="16" class="animate-spin" />
                 <Play v-else :size="16" />
                 开始生成
+              </button>
+              <button class="secondary-btn min-w-[100px] px-4" @click="isBatchOpen = !isBatchOpen">
+                <Images :size="16" />
+                批量
               </button>
             </div>
 
@@ -1660,6 +1874,46 @@ onMounted(loadAll);
               </div>
             </div>
           </section>
+
+          <section v-if="isBatchOpen" class="glass-panel rounded-2xl p-4">
+            <div class="mb-3 flex items-center justify-between">
+              <div>
+                <h2 class="text-sm font-semibold">批量生成</h2>
+                <p class="mt-1 text-xs text-[var(--muted)]">每行一个提示词，将按顺序逐个生成。</p>
+              </div>
+              <button class="icon-btn h-8 w-8" title="关闭批量面板" @click="isBatchOpen = false">
+                <X :size="14" />
+              </button>
+            </div>
+
+            <textarea
+              v-model="batchPrompts"
+              class="h-40 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
+              placeholder="每行输入一个提示词&#10;例如：&#10;一只橘猫在书架上晒太阳&#10;赛博朋克城市夜景&#10;水下的珊瑚礁花园"
+            ></textarea>
+
+            <div v-if="batchResults.length > 0" class="mt-3 grid max-h-[200px] gap-1.5 overflow-auto">
+              <div
+                v-for="(result, index) in batchResults"
+                :key="index"
+                class="flex items-center justify-between gap-3 rounded-lg border border-black/5 bg-white/70 px-3 py-2 text-xs"
+              >
+                <span class="min-w-0 flex-1 truncate">{{ result.prompt }}</span>
+                <span
+                  class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                  :class="result.status === 'done' ? 'bg-emerald-50 text-emerald-700' : result.status === 'error' ? 'bg-red-50 text-red-700' : result.status === 'running' ? 'bg-sky-50 text-sky-700' : 'bg-slate-50 text-slate-500'"
+                >
+                  {{ result.status === 'done' ? '完成' : result.status === 'error' ? '失败' : result.status === 'running' ? '生成中' : '等待中' }}
+                </span>
+              </div>
+            </div>
+
+            <button class="primary-btn mt-3" :disabled="isBatchRunning || !batchPrompts.trim()" @click="runBatchGeneration">
+              <Loader2 v-if="isBatchRunning" :size="16" class="animate-spin" />
+              <Images v-else :size="16" />
+              {{ isBatchRunning ? '批量生成中...' : '开始批量生成' }}
+            </button>
+          </section>
         </div>
       </section>
 
@@ -1690,7 +1944,7 @@ onMounted(loadAll);
 
         <div v-else class="grid gap-3">
           <article
-            v-for="artifact in artifacts"
+            v-for="artifact in defaultArtifacts"
             :key="artifact.id"
             class="overflow-hidden rounded-2xl border border-black/5 bg-white transition hover:-translate-y-0.5 hover:shadow-lg"
           >
@@ -1698,7 +1952,6 @@ onMounted(loadAll);
             <div class="p-3">
               <div class="mb-1 flex items-center gap-1.5">
                 <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
-                <span v-if="artifact.source === 'icon'" class="gallery-mode-tag" style="background:#f5f0ff;color:#7c3aed;">ICON</span>
                 <span class="ml-auto text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
               </div>
               <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
@@ -1720,137 +1973,203 @@ onMounted(loadAll);
       </aside>
     </section>
 
-    <section v-else-if="page === 'icons'" class="grid h-full grid-cols-[340px_1fr_340px] gap-5 px-6 pb-6 pt-20">
-      <aside class="glass-panel thin-scrollbar overflow-auto rounded-[18px] p-4">
-        <div class="mb-4">
-          <h1 class="text-base font-semibold">SamToICON</h1>
-          <p class="mt-1 text-xs leading-5 text-[var(--muted)]">先生成一张高清母图，再自动导出 32 到 512 的多尺寸 ICO。</p>
-        </div>
+    <section v-else-if="page === 'icons'" class="h-full overflow-hidden px-6 pb-6 pt-20">
+      <div class="grid h-full gap-5 grid-cols-[400px_1fr]">
 
-        <div v-if="iconNotice" class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-800">
-          {{ iconNotice }}
-        </div>
+        <aside class="glass-panel thin-scrollbar overflow-auto rounded-[18px] p-5">
+          <div class="mb-4">
+            <h1 class="text-lg font-bold">SamToICON</h1>
+            <p class="mt-1 text-xs leading-5 text-[var(--muted)]">从图标描述或参考图开始，生成高清母图后导出多尺寸 ICO。</p>
+          </div>
 
-        <div class="grid gap-4">
-          <label>
-            <span class="field-label">图标名称</span>
-            <input v-model="iconName" class="field-input" placeholder="weather-app" />
-          </label>
+          <div v-if="iconNotice" class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-800">
+            {{ iconNotice }}
+          </div>
 
-          <label>
-            <span class="field-label">图标描述</span>
-            <textarea
-              v-model="iconPrompt"
-              class="h-32 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
-              placeholder="描述图标主体、用途、颜色和风格"
-            ></textarea>
-          </label>
-
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid gap-4">
             <label>
-              <span class="field-label">风格</span>
-              <select v-model="iconStyle" class="field-input">
-                <option value="modern">现代 App</option>
-                <option value="flat">扁平矢量</option>
-                <option value="threeD">3D 质感</option>
-                <option value="line">线性极简</option>
-                <option value="glass">毛玻璃</option>
-              </select>
+              <span class="field-label">图标名称</span>
+              <input v-model="iconName" class="field-input" placeholder="weather-app" />
             </label>
+
             <label>
-              <span class="field-label">主色</span>
-              <input v-model="iconPrimaryColor" class="field-input h-[42px] p-1" type="color" />
+              <span class="field-label">图标描述</span>
+              <textarea
+                v-model="iconPrompt"
+                class="h-24 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
+                placeholder="描述图标主体、用途、颜色和风格"
+              ></textarea>
             </label>
-          </div>
 
-          <label>
-            <span class="field-label">背景</span>
-            <select v-model="iconBackground" class="field-input">
-              <option value="keep">跟随生成结果</option>
-              <option value="transparent">提示透明背景</option>
-              <option value="solid">导出时铺主色底</option>
-            </select>
-          </label>
-
-          <label>
-            <span class="field-label">负向提示词</span>
-            <input v-model="iconNegativePrompt" class="field-input" />
-          </label>
-
-          <button class="primary-btn" :disabled="isIconGenerating" @click="generateIconImage">
-            <Loader2 v-if="isIconGenerating" :size="16" class="animate-spin" />
-            <Images v-else :size="16" />
-            {{ isIconGenerating ? '正在生成' : '生成 ICON 母图' }}
-          </button>
-        </div>
-      </aside>
-
-      <section class="glass-panel flex min-h-0 flex-col rounded-[18px] p-5">
-        <div class="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h2 class="text-lg font-bold">图标预览</h2>
-            <p class="mt-1 text-xs text-[var(--muted)]">母图用于缩放导出，下面的小尺寸预览用于检查识别度。</p>
-          </div>
-          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[var(--muted)]">ICO</span>
-        </div>
-
-        <div class="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-black/5 bg-[#eef2f5] p-6">
-          <img
-            v-if="iconSourceArtifact"
-            :src="iconSourceArtifact.imageUrl"
-            :alt="iconSourceArtifact.prompt"
-            class="aspect-square max-h-full max-w-full rounded-[22px] object-cover shadow-xl shadow-slate-900/15"
-          />
-          <div v-else class="text-center text-sm text-[var(--muted)]">
-            <Images :size="28" class="mx-auto mb-3" />
-            生成后会在这里显示 ICON 母图
-          </div>
-        </div>
-
-        <div class="mt-4 grid grid-cols-5 gap-3">
-          <div v-for="item in ICON_SIZES" :key="item" class="rounded-xl border border-black/5 bg-white/70 p-3 text-center">
-            <div class="mx-auto flex aspect-square items-center justify-center rounded-lg bg-slate-100" :style="{ width: `${Math.min(item, 72)}px` }">
-              <img
-                v-if="iconSourceArtifact"
-                :src="iconSourceArtifact.imageUrl"
-                :alt="`${item} icon preview`"
-                class="h-full w-full rounded-md object-cover"
-              />
+            <div class="grid grid-cols-2 gap-3">
+              <label>
+                <span class="field-label">风格</span>
+                <select v-model="iconStyle" class="field-input">
+                  <option value="modern">现代 App</option>
+                  <option value="flat">扁平矢量</option>
+                  <option value="threeD">3D 质感</option>
+                  <option value="line">线性极简</option>
+                  <option value="glass">毛玻璃</option>
+                </select>
+              </label>
+              <label>
+                <span class="field-label">主色</span>
+                <input v-model="iconPrimaryColor" class="field-input h-[42px] p-1" type="color" />
+              </label>
             </div>
-            <div class="mt-2 text-xs font-semibold">{{ item }}x{{ item }}</div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <label>
+                <span class="field-label">背景</span>
+                <select v-model="iconBackground" class="field-input">
+                  <option value="keep">跟随生成结果</option>
+                  <option value="transparent">提示透明背景</option>
+                  <option value="solid">导出时铺主色底</option>
+                </select>
+              </label>
+              <label>
+                <span class="field-label">负向提示词</span>
+                <input v-model="iconNegativePrompt" class="field-input" placeholder="文字，水印..." />
+              </label>
+            </div>
+
+            <button class="primary-btn" :disabled="isIconGenerating" @click="generateIconImage">
+              <Loader2 v-if="isIconGenerating" :size="16" class="animate-spin" />
+              <Play v-else :size="16" />
+              {{ isIconGenerating ? '正在生成' : '生成 ICON 母图' }}
+            </button>
+
+            <section class="rounded-xl border border-black/5 bg-white/65 p-3">
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-700">参考图（可选）</span>
+                <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
+                  {{ collectReferenceSources(iconReferenceImageItems, iconReferenceImageUrlDraft).length }}/{{ selectedProfile.referenceImageLimit }}
+                </span>
+              </div>
+
+              <label
+                class="flex h-[56px] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#176bff]/50 hover:bg-white"
+                @paste="handleIconReferencePaste"
+              >
+                <Paperclip :size="14" class="mb-0.5 text-[#176bff]" />
+                <span class="text-[11px] font-semibold">上传或粘贴参考图</span>
+                <input type="file" accept="image/*" multiple class="hidden" @change="handleIconReferenceFileInput" />
+              </label>
+
+              <textarea
+                v-model="iconReferenceImageUrlDraft"
+                class="mt-2 h-10 w-full resize-none rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] leading-4 outline-none focus:border-[#176bff]"
+                placeholder="也可以每行粘贴一个图片 URL"
+                @paste="handleIconReferencePaste"
+              ></textarea>
+
+              <div v-if="iconReferenceNotice" class="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-2 text-[11px] leading-4 text-sky-800">
+                {{ iconReferenceNotice }}
+              </div>
+
+              <div v-if="iconReferenceImageItems.length" class="mt-2 grid grid-cols-3 gap-1.5">
+                <div v-for="item in iconReferenceImageItems" :key="item.id" class="group relative overflow-hidden rounded-lg border border-black/5 bg-white">
+                  <img :src="item.source" :alt="item.name" class="aspect-square w-full object-cover" />
+                  <button
+                    class="absolute right-1 top-1 rounded-md bg-white/90 p-0.5 text-slate-500 opacity-0 shadow-sm transition group-hover:opacity-100"
+                    title="移除"
+                    @click="removeIconReferenceImage(item.id)"
+                  >
+                    <X :size="11" />
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="iconArtifacts.length > 0" class="mt-2">
+                <div class="mb-1.5 text-[11px] font-semibold text-[var(--muted)]">从 ICON 作品选取</div>
+                <div class="grid max-h-[100px] gap-1.5 overflow-auto">
+                  <button
+                    v-for="artifact in iconArtifacts.slice(0, 6)"
+                    :key="artifact.id"
+                    class="flex items-center gap-2 rounded-lg border border-black/5 bg-white/70 px-2 py-1 text-left transition hover:border-[#176bff]/30 hover:bg-white"
+                    @click="useArtifactAsIconReference(artifact.id)"
+                  >
+                    <img :src="artifact.imageUrl" :alt="artifact.prompt" class="h-7 w-7 shrink-0 rounded object-cover" />
+                    <span class="min-w-0 flex-1 truncate text-[11px] text-slate-600">{{ artifact.prompt.slice(0, 24) }}</span>
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
-        </div>
-      </section>
+        </aside>
 
-      <aside class="glass-panel thin-scrollbar overflow-auto rounded-[18px] p-4">
-        <div class="mb-4">
-          <h2 class="text-base font-semibold">导出尺寸</h2>
-          <p class="mt-1 text-xs leading-5 text-[var(--muted)]">勾选需要的尺寸，一次选择文件夹后批量导出。</p>
-        </div>
+        <section class="glass-panel flex min-h-0 flex-col rounded-[18px] p-5">
+          <div class="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 class="text-lg font-bold">图标预览与导出</h2>
+              <p v-if="iconSourceArtifact" class="mt-1 text-xs text-[var(--muted)]">母图已生成，可预览多尺寸并导出 ICO。</p>
+              <p v-else class="mt-1 text-xs text-[var(--muted)]">填写参数后点击左侧"生成 ICON 母图"。</p>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[var(--muted)]">ICO</span>
+              <button v-if="iconSourceArtifact" class="secondary-btn w-auto px-3" @click="iconSourceArtifactId = ''">
+                <X :size="14" />
+                重新生成
+              </button>
+            </div>
+          </div>
 
-        <div class="grid gap-2">
-          <button
-            v-for="item in ICON_SIZES"
-            :key="item"
-            class="flex items-center justify-between rounded-xl border px-3 py-3 text-left transition"
-            :class="normalizedSelectedIconSizes.includes(item) ? 'border-[#176bff]/35 bg-[#176bff]/8' : 'border-black/5 bg-white/65 hover:bg-white'"
-            @click="toggleIconSize(item)"
-          >
-            <span class="font-semibold">{{ item }}x{{ item }}</span>
-            <span class="text-xs text-[var(--muted)]">{{ normalizedSelectedIconSizes.includes(item) ? '已选择' : '未选择' }}</span>
-          </button>
-        </div>
+          <div class="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-black/5 bg-[#eef2f5] p-6">
+            <img
+              v-if="iconSourceArtifact"
+              :src="iconSourceArtifact.imageUrl"
+              :alt="iconSourceArtifact.prompt"
+              class="aspect-square max-h-full max-w-full rounded-[22px] object-cover shadow-xl shadow-slate-900/15"
+            />
+            <div v-else class="text-center text-sm text-[var(--muted)]">
+              <Images :size="28" class="mx-auto mb-3" />
+              生成后会在这里显示 ICON 母图
+            </div>
+          </div>
 
-        <button class="primary-btn mt-4" :disabled="isIconExporting || !iconSourceArtifact" @click="exportIconSizes">
-          <Loader2 v-if="isIconExporting" :size="16" class="animate-spin" />
-          <Download v-else :size="16" />
-          {{ isIconExporting ? '正在导出' : '导出选中尺寸' }}
-        </button>
+          <div class="mt-4 grid grid-cols-5 gap-3">
+            <div v-for="item in ICON_SIZES" :key="item" class="rounded-xl border border-black/5 bg-white/70 p-3 text-center">
+              <div class="mx-auto flex aspect-square items-center justify-center rounded-lg bg-slate-100" :style="{ width: `${Math.min(item, 72)}px` }">
+                <img
+                  v-if="iconSourceArtifact"
+                  :src="iconSourceArtifact.imageUrl"
+                  :alt="`${item} icon preview`"
+                  class="h-full w-full rounded-md object-cover"
+                />
+              </div>
+              <div class="mt-2 text-xs font-semibold">{{ item }}x{{ item }}</div>
+            </div>
+          </div>
 
-        <div class="mt-4 rounded-xl border border-black/5 bg-white/65 p-3 text-xs leading-5 text-[var(--muted)]">
-          当前会从母图中心裁切成正方形，再缩放为多尺寸 ICO。小尺寸建议使用简洁主体、少细节、强轮廓。
-        </div>
-      </aside>
+          <div class="mt-5">
+            <div class="mb-3 flex items-center justify-between">
+              <h3 class="text-sm font-semibold">导出尺寸</h3>
+              <span class="text-xs text-[var(--muted)]">{{ normalizedSelectedIconSizes.length }} 个已选</span>
+            </div>
+            <div class="grid grid-cols-5 gap-2">
+              <button
+                v-for="item in ICON_SIZES"
+                :key="item"
+                class="rounded-lg border px-2 py-2 text-center text-xs transition"
+                :class="normalizedSelectedIconSizes.includes(item) ? 'border-[#176bff] bg-[#176bff]/10 font-semibold text-[#176bff]' : 'border-black/5 bg-white/60 text-[var(--muted)] hover:bg-white'"
+                @click="toggleIconSize(item)"
+              >
+                {{ item }}
+              </button>
+            </div>
+
+            <button class="primary-btn mt-3" :disabled="isIconExporting || !iconSourceArtifact" @click="exportIconSizes">
+              <Loader2 v-if="isIconExporting" :size="16" class="animate-spin" />
+              <Download v-else :size="16" />
+              {{ isIconExporting ? '正在导出' : '导出选中尺寸' }}
+            </button>
+
+            <div class="mt-3 rounded-xl border border-black/5 bg-white/65 p-3 text-xs leading-5 text-[var(--muted)]">
+              母图会自动裁切为正方形再缩放为多尺寸 ICO。小尺寸建议使用简洁主体、少细节、强轮廓。
+            </div>
+          </div>
+        </section>
+      </div>
     </section>
 
     <section v-else-if="page === 'gallery'" class="h-full overflow-hidden px-6 pb-6 pt-20">
@@ -1883,27 +2202,53 @@ onMounted(loadAll);
             </label>
           </div>
 
-          <div v-if="galleryArtifacts.length === 0" class="rounded-2xl border border-dashed border-black/15 bg-white/50 p-8 text-center text-sm text-[var(--muted)]">
+          <div v-if="galleryArtifacts.length === 0 && galleryIconArtifacts.length === 0" class="rounded-2xl border border-dashed border-black/15 bg-white/50 p-8 text-center text-sm text-[var(--muted)]">
             当前筛选下还没有作品。
           </div>
 
-          <div v-else class="grid gap-2">
-            <button
-              v-for="artifact in galleryArtifacts"
-              :key="artifact.id"
-              class="gallery-list-item"
-              :class="selectedArtifact?.id === artifact.id ? 'is-active' : ''"
-              @click="selectedArtifactId = artifact.id"
-            >
-              <img :src="artifact.imageUrl" :alt="artifact.prompt" class="gallery-list-thumb" />
-              <div class="flex min-w-0 flex-col justify-between py-1">
-                <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
-                <div class="mt-auto flex items-center gap-1.5 pt-1">
-                  <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
-                  <span class="text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
+          <div v-if="galleryArtifacts.length > 0" class="mb-3">
+            <div class="mb-2 text-xs font-semibold text-slate-700">默认作品</div>
+            <div class="grid gap-2">
+              <button
+                v-for="artifact in galleryArtifacts"
+                :key="artifact.id"
+                class="gallery-list-item"
+                :class="selectedArtifact?.id === artifact.id ? 'is-active' : ''"
+                @click="selectedArtifactId = artifact.id"
+              >
+                <img :src="artifact.imageUrl" :alt="artifact.prompt" class="gallery-list-thumb" />
+                <div class="flex min-w-0 flex-col justify-between py-1">
+                  <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
+                  <div class="mt-auto flex items-center gap-1.5 pt-1">
+                    <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
+                    <span class="text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="galleryIconArtifacts.length > 0" class="mb-3">
+            <div class="mb-2 text-xs font-semibold text-slate-700">ICON 作品</div>
+            <div class="grid gap-2">
+              <button
+                v-for="artifact in galleryIconArtifacts"
+                :key="artifact.id"
+                class="gallery-list-item"
+                :class="selectedArtifact?.id === artifact.id ? 'is-active' : ''"
+                @click="selectedArtifactId = artifact.id"
+              >
+                <img :src="artifact.imageUrl" :alt="artifact.prompt" class="gallery-list-thumb" />
+                <div class="flex min-w-0 flex-col justify-between py-1">
+                  <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
+                  <div class="mt-auto flex items-center gap-1.5 pt-1">
+                    <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
+                    <span class="gallery-mode-tag" style="background:#f5f0ff;color:#7c3aed;">ICON</span>
+                    <span class="text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
+                  </div>
+                </div>
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -2314,229 +2659,128 @@ onMounted(loadAll);
       </div>
     </section>
 
-    <section v-else class="h-full overflow-auto px-6 pb-8 pt-20">
-      <div class="mx-auto grid max-w-[1280px] grid-cols-[320px_1fr] gap-5">
-        <aside class="glass-panel h-fit rounded-[18px] p-4">
-          <div class="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h1 class="text-base font-semibold">模型配置</h1>
-              <p class="mt-1 text-xs text-[var(--muted)]">管理服务地址、密钥和主模型。</p>
-            </div>
-            <button class="icon-btn" title="新建配置" @click="newProfile">
-              <ImagePlus :size="16" />
-            </button>
-          </div>
-
-          <div class="grid gap-2">
-            <button
-              v-for="profile in profiles"
-              :key="profile.id"
-              class="rounded-xl border p-3 text-left transition"
-              :class="profile.id === activeProfileId ? 'border-[#176bff]/35 bg-[#176bff]/8' : 'border-black/5 bg-white/60 hover:bg-white'"
-              @click="selectProfile(profile.id)"
-            >
-              <div class="flex min-w-0 items-center justify-between gap-3">
-                <div class="min-w-0 flex-1 truncate text-sm font-semibold" :title="profile.name">{{ profile.name }}</div>
-                <Star v-if="profile.id === activeProfileId" :size="14" class="shrink-0 text-[#176bff]" />
-              </div>
-              <div class="mt-1 line-clamp-2 break-all text-xs leading-5 text-[var(--muted)]" :title="profileSummary(profile)">{{ profileSummary(profile) }}</div>
-            </button>
-          </div>
-
-          <div v-if="profiles.length === 0" class="rounded-xl border border-dashed border-black/15 bg-white/50 p-5 text-center text-xs text-[var(--muted)]">
-            暂无配置，右侧填写后保存。
-          </div>
-        </aside>
-
+    <section v-else-if="page === 'history'" class="h-full overflow-auto px-6 pb-6 pt-20">
+      <div class="mx-auto grid max-w-[1320px] grid-cols-[minmax(0,1.05fr)_minmax(340px,0.75fr)] gap-5">
         <section class="glass-panel rounded-[18px] p-5">
           <div class="mb-5 flex items-start justify-between gap-4 border-b border-black/5 pb-4">
             <div>
-              <h2 class="text-xl font-bold tracking-tight">模型服务</h2>
-              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">支持自定义服务地址、获取多个模型，并把其中一个设为主模型。</p>
+              <h1 class="text-xl font-bold tracking-tight">操作日志</h1>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">记录生成、批量任务、ICON、模型检测和配置变更，包含请求大模型后的成功或失败信息。</p>
             </div>
-            <div class="flex items-center gap-2">
-                <button class="secondary-btn w-auto px-4" :disabled="isValidating || draftErrors.length > 0" @click="validateModel">
-                  <Loader2 v-if="isValidating" :size="15" class="animate-spin" />
-                  <Activity v-else :size="15" />
-                  检测
-                </button>
-              <button class="primary-btn w-auto px-4" :disabled="isSaving || draftErrors.length > 0 || !isImageModelAdapter" @click="saveProfile">
-                <Loader2 v-if="isSaving" :size="15" class="animate-spin" />
-                <Save v-else :size="15" />
-                保存
-              </button>
-              <button class="icon-danger-btn" :disabled="!activeProfileId" title="删除配置" @click="removeProfile">
-                <Trash2 :size="16" />
-              </button>
-            </div>
+            <button class="secondary-btn w-auto px-4" @click="loadAll">
+              <RefreshCw :size="14" />
+              刷新数据
+            </button>
           </div>
 
-          <div class="grid gap-7">
-            <section>
-              <div class="setting-title">
-                <span>API 密钥</span>
-                <SlidersHorizontal :size="18" />
-              </div>
-              <div class="mt-3 flex rounded-xl border border-emerald-400 bg-white focus-within:border-emerald-500">
-                <input
-                  v-model="draft.apiKey"
-                  :type="apiKeyVisible ? 'text' : 'password'"
-                  class="min-w-0 flex-1 rounded-l-xl bg-transparent px-4 py-3 text-sm outline-none"
-                  placeholder="可填写多个密钥，使用英文逗号分隔"
-                />
-                <button class="border-l border-black/10 px-4 text-[var(--muted)]" type="button" @click="apiKeyVisible = !apiKeyVisible">
-                  <EyeOff v-if="apiKeyVisible" :size="18" />
-                  <Eye v-else :size="18" />
-                </button>
-                <button class="border-l border-black/10 px-5 text-sm font-semibold" type="button" @click="validateModel">
-                  检测
-                </button>
-              </div>
-              <p class="mt-2 text-xs text-[var(--muted)]">多个密钥使用英文逗号分隔，后续可扩展轮询策略。</p>
-            </section>
+          <div v-if="opLogs.length === 0" class="rounded-2xl border border-dashed border-black/15 bg-white/55 p-12 text-center">
+            <Activity :size="32" class="mx-auto mb-3 text-[var(--muted)]" />
+            <div class="text-sm font-semibold">暂无操作日志</div>
+            <p class="mt-2 text-xs text-[var(--muted)]">执行生图、ICON、批量生成或模型检测后，日志会显示在这里。</p>
+          </div>
 
-            <section>
-              <div class="setting-title">
-                <span>API 地址</span>
-                <SlidersHorizontal :size="18" />
-              </div>
-              <div class="mt-3 grid grid-cols-[1fr_180px] gap-3">
-                <input v-model="draft.baseUrl" class="field-input h-11" placeholder="https://code.linlong.xyz" />
-                <select v-model="draft.adapter" class="field-input h-11">
-                  <option v-for="adapter in adapters" :key="adapter.id" :value="adapter.id">{{ adapter.name }}</option>
-                  <option v-if="adapters.length === 0" value="openai_images">OpenAI 图像</option>
-                </select>
-              </div>
-              <p v-if="!isImageModelAdapter" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-                ⚠️ 当前适配器不支持图像生成功能，请选择支持文生图或图生图的适配器。
-              </p>
-              <p class="mt-2 text-xs text-[var(--muted)]">预览：{{ endpointPreview || '请先填写服务地址' }}</p>
-            </section>
-
-            <section class="grid grid-cols-2 gap-3">
-              <label>
-                <span class="field-label">配置名称</span>
-                <input v-model="draft.name" class="field-input" placeholder="例如：Linlong API" />
-              </label>
-              <label>
-                <span class="field-label">主模型</span>
-                <div class="flex min-h-[42px] min-w-0 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800">
-                  <Star :size="15" class="shrink-0" />
-                  <span class="min-w-0 flex-1 truncate" :title="draft.model">{{ draft.model || '请从模型列表选择' }}</span>
-                </div>
-              </label>
-              <label>
-                <span class="field-label">对话接口路径</span>
-                <input v-model="draft.chatEndpoint" class="field-input" />
-              </label>
-              <label>
-                <span class="field-label">图像接口路径</span>
-                <input v-model="draft.imageEndpoint" class="field-input" />
-              </label>
-            </section>
-
-            <section>
-              <div class="mb-3 flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                  <div class="setting-title mb-0">
-                    <span>模型</span>
-                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-[var(--muted)]">{{ filteredModels.length }}</span>
-                  </div>
-                  <div class="relative">
-                    <Search :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
-                    <input v-model="modelSearch" class="h-10 w-56 rounded-xl border border-black/10 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#176bff]" placeholder="搜索模型" />
-                  </div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <button class="secondary-btn w-auto px-4" :disabled="isFetchingModels || draftErrors.length > 0" @click="fetchModelList">
-                    <Loader2 v-if="isFetchingModels" :size="15" class="animate-spin" />
-                    <RefreshCw v-else :size="15" />
-                    获取模型列表
-                  </button>
-                  <div class="flex overflow-hidden rounded-xl border border-black/10 bg-white">
-                    <input v-model="manualModelName" class="h-10 w-48 px-3 text-sm outline-none" placeholder="手动添加模型" @keyup.enter="addManualModel" />
-                    <button class="border-l border-black/10 px-3" title="添加模型" @click="addManualModel">
-                      <Plus :size="18" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="modelListResult" class="mb-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
-                {{ modelListResult.message }}
-              </div>
-
-              <div class="overflow-hidden rounded-2xl border border-black/10 bg-white">
-                <div v-if="groupedModels.length === 0" class="p-8 text-center text-sm text-[var(--muted)]">
-                  还没有模型。点击“获取模型列表”，或手动添加一个模型。
-                </div>
-
-                <div v-for="group in groupedModels" :key="group.name" class="border-b border-black/5 last:border-b-0">
-                  <div class="flex items-center gap-3 bg-slate-50 px-4 py-3">
-                    <ChevronDown :size="16" class="text-[var(--muted)]" />
-                    <span class="font-semibold">{{ group.name }}</span>
-                    <span class="rounded-full bg-white px-2 py-0.5 text-xs text-[var(--muted)]">{{ group.models.length }}</span>
-                  </div>
-
-                  <div v-for="model in group.models" :key="model" class="grid grid-cols-[28px_minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-5 py-3">
-                    <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-[#176bff]/10 text-[#176bff]">
-                      <Sparkles :size="15" />
-                    </div>
-                    <button class="min-w-0 break-all text-left text-sm font-medium leading-5 line-clamp-2" :title="model" @click="setMainModel(model)">
-                      {{ model }}
-                    </button>
-                    <span v-if="draft.model === model" class="shrink-0 whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                      主模型
-                    </span>
-                    <span v-else class="w-[52px]"></span>
-                    <button class="shrink-0 whitespace-nowrap rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold hover:bg-slate-200" @click="setMainModel(model)">
-                      设为主模型
-                    </button>
-                    <button class="shrink-0 rounded-lg px-2 py-1.5 text-[var(--muted)] hover:bg-red-50 hover:text-red-600" title="移除模型" @click="removeModel(model)">
-                      <Trash2 :size="15" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section class="grid grid-cols-2 gap-3">
-              <label>
-                <span class="field-label">请求超时（秒）</span>
-                <input v-model.number="draft.timeoutSec" class="field-input" type="number" min="10" max="1800" />
-              </label>
-              <label>
-                <span class="field-label">参考图上限</span>
-                <input v-model.number="draft.referenceImageLimit" class="field-input" type="number" min="1" max="16" />
-              </label>
-            </section>
-
-            <div class="flex items-center gap-2 rounded-xl border border-black/5 bg-white/60 p-3 text-xs">
-              <input id="networkCheck" v-model="networkCheck" type="checkbox" class="h-4 w-4 accent-[#176bff]" />
-              <label for="networkCheck" class="text-[var(--muted)]">模型检测时请求服务地址</label>
-            </div>
-
-            <div v-if="draftErrors.length" class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-700">
-              <div v-for="error in draftErrors" :key="error">{{ error }}</div>
-            </div>
-
-            <div
-              v-if="validationResult"
-              class="rounded-xl border p-3 text-xs leading-5"
-              :class="validationResult.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'"
+          <div v-else class="thin-scrollbar max-h-[calc(100vh-190px)] overflow-auto pr-1">
+            <article
+              v-for="log in opLogs"
+              :key="log.id"
+              class="mb-3 rounded-2xl border border-black/5 bg-white/75 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              <CheckCircle2 v-if="validationResult.ok" :size="15" class="mr-1 inline" />
-              <AlertCircle v-else :size="15" class="mr-1 inline" />
-              {{ validationResult.message }}
-              <span v-if="validationResult.latencyMs"> 路 {{ validationResult.latencyMs }}ms</span>
-            </div>
-
-            <div v-if="currentAdapter" class="rounded-xl border border-[#176bff]/15 bg-[#176bff]/5 p-3 text-xs leading-5 text-slate-700">
-              <ShieldCheck :size="15" class="mr-1 inline text-[#176bff]" />
-              {{ currentAdapter.description }}
-            </div>
+              <div class="flex items-start gap-3">
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#176bff]/10 text-[#176bff]">
+                  <Activity v-if="log.type === 'validate'" :size="16" />
+                  <ImagePlus v-else-if="log.type === 'generate' || log.type === 'icon'" :size="16" />
+                  <RefreshCw v-else-if="log.type === 'batch'" :size="16" />
+                  <Trash2 v-else-if="log.type === 'delete'" :size="16" />
+                  <Save v-else-if="log.type === 'save'" :size="16" />
+                  <Sparkles v-else :size="16" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{{ log.type }}</span>
+                    <span class="text-sm font-bold text-slate-900">{{ log.message }}</span>
+                    <span class="ml-auto text-[11px] text-slate-400">{{ log.time.slice(0, 19).replace('T', ' ') }}</span>
+                  </div>
+                  <p v-if="log.detail" class="mt-2 break-words rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-[var(--muted)]">{{ log.detail }}</p>
+                </div>
+              </div>
+            </article>
           </div>
         </section>
+
+        <aside class="grid gap-5">
+          <section class="glass-panel rounded-[18px] p-5">
+            <div class="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-bold">大模型请求记录</h2>
+                <p class="mt-1 text-xs text-[var(--muted)]">按配置、模式和来源筛选已入库的生成结果。</p>
+              </div>
+              <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-[var(--muted)]">{{ historyArtifacts.length }}</span>
+            </div>
+
+            <div class="mb-4 flex flex-wrap gap-2">
+              <select v-model="historyProfileFilter" class="field-input h-9 min-w-0 flex-1 text-xs">
+                <option value="all">全部配置</option>
+                <option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
+              </select>
+              <select v-model="historyModeFilter" class="field-input h-9 min-w-0 flex-1 text-xs">
+                <option value="all">全部模式</option>
+                <option v-for="item in modeOptions" :key="item.id" :value="item.id">{{ item.label }}</option>
+              </select>
+              <select v-model="historySourceFilter" class="field-input h-9 min-w-0 flex-1 text-xs">
+                <option value="all">全部来源</option>
+                <option value="generate">生图</option>
+                <option value="icon">ICON</option>
+              </select>
+            </div>
+
+            <div v-if="historyArtifacts.length === 0" class="rounded-2xl border border-dashed border-black/10 bg-white/55 px-4 py-8 text-center text-xs text-[var(--muted)]">
+              暂无匹配的请求记录
+            </div>
+            <div v-else class="thin-scrollbar grid max-h-[440px] gap-3 overflow-auto pr-1">
+              <article v-for="artifact in historyArtifacts" :key="artifact.id" class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-2xl border border-black/5 bg-white/75 p-2.5">
+                <img :src="artifact.imageUrl" :alt="artifact.prompt" class="h-[72px] w-[72px] rounded-xl object-cover" />
+                <div class="min-w-0">
+                  <div class="mb-1 flex items-center gap-1.5">
+                    <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
+                    <span v-if="artifact.source === 'icon'" class="gallery-mode-tag" style="background:#f5f0ff;color:#7c3aed;">ICON</span>
+                  </div>
+                  <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
+                  <div class="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                    <span>{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
+                    <button class="font-semibold text-[#176bff] hover:underline" @click="openGallery(artifact.id)">查看</button>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="glass-panel rounded-[18px] p-5">
+            <div class="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-bold">当前模型</h2>
+                <p class="mt-1 text-xs text-[var(--muted)]">模型配置统一从右上角入口管理。</p>
+              </div>
+              <button class="icon-btn" title="配置模型" @click="openModelConfigPage">
+                <SlidersHorizontal :size="15" />
+              </button>
+            </div>
+            <div class="rounded-2xl border border-black/5 bg-white/70 p-4">
+              <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#176bff] text-white">
+                  <Star :size="17" />
+                </div>
+                <div class="min-w-0">
+                  <div class="truncate text-sm font-bold text-slate-900">{{ activeProfile?.name || '尚未选择模型' }}</div>
+                  <div class="mt-1 truncate text-xs text-[var(--muted)]" :title="activeSummary">{{ activeSummary }}</div>
+                </div>
+              </div>
+              <button class="primary-btn mt-4 h-10 w-full text-xs" @click="openModelConfigPage">
+                <SlidersHorizontal :size="14" />
+                打开模型配置
+              </button>
+            </div>
+          </section>
+        </aside>
       </div>
     </section>
 
@@ -2750,9 +2994,9 @@ onMounted(loadAll);
             暂无配置，先创建一个模型服务。
           </div>
 
-          <button class="secondary-btn mt-4" @click="openModelConfigPage">
+          <button class="secondary-btn mt-4" @click="newProfile">
             <SlidersHorizontal :size="15" />
-            进入完整配置
+            新建模型配置
           </button>
         </aside>
 
@@ -2869,6 +3113,7 @@ onMounted(loadAll);
       </section>
     </div>
 
+
     <div v-if="isHelpOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-6 backdrop-blur-sm" @click.self="isHelpOpen = false">
       <section class="w-full max-w-[560px] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
         <header class="flex items-start justify-between gap-4 border-b border-black/5 bg-slate-50 px-5 py-4">
@@ -2917,17 +3162,15 @@ onMounted(loadAll);
           <section class="rounded-2xl border border-black/5 bg-white p-4">
             <h3 class="text-sm font-bold">开源与联系</h3>
             <div class="mt-3 grid gap-3 text-sm">
-              <a
-                class="flex items-center justify-between gap-3 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5 font-semibold text-[#176bff] hover:bg-slate-100"
-                href="https://gitee.com/SamuelYou/sam-image-app.git"
-                target="_blank"
-                rel="noreferrer"
+              <button
+                class="flex w-full items-center justify-between gap-3 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5 text-left font-semibold text-[#176bff] hover:bg-slate-100"
+                @click="openExternalUrl('https://github.com/SamuelYooo/sam-image-app')"
               >
                 <span class="flex min-w-0 items-center gap-2">
                   <Github :size="16" class="shrink-0" />
-                  <span class="truncate">https://gitee.com/SamuelYou/sam-image-app.git</span>
+                  <span class="truncate">https://github.com/SamuelYooo/sam-image-app</span>
                 </span>
-              </a>
+              </button>
               <div class="flex items-center justify-between gap-4 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5">
                 <span class="text-[var(--muted)]">微信</span>
                 <span class="font-semibold">malovoz</span>
@@ -3087,6 +3330,15 @@ onMounted(loadAll);
 
 .field-input:focus {
   border-color: #176bff;
+}
+
+select.field-input {
+  padding-right: 1.75rem;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
 }
 
 .primary-btn,

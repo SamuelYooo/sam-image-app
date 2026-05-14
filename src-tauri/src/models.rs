@@ -111,10 +111,16 @@ pub struct GenerationRequest {
     pub reference_images: Vec<String>,
     #[serde(default = "default_source")]
     pub source: String,
+    #[serde(default = "default_type")]
+    pub type_: String,
 }
 
 fn default_source() -> String {
     "generate".to_string()
+}
+
+fn default_type() -> String {
+    "type_default".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +133,8 @@ pub struct Artifact {
     pub image_url: String,
     #[serde(default = "default_source")]
     pub source: String,
+    #[serde(default = "default_type")]
+    pub type_: String,
     pub created_at: String,
 }
 

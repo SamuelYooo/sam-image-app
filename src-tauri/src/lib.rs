@@ -159,6 +159,7 @@ fn ensure_image_extension(file_name: &str, extension: &str) -> String {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             save_image_with_dialog,
             save_images_to_directory
