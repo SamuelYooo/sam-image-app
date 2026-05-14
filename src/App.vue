@@ -3019,41 +3019,72 @@ onMounted(loadAll);
           </header>
 
           <div class="grid gap-5">
-            <section class="grid grid-cols-3 gap-3">
-              <div class="rounded-xl border border-black/5 bg-slate-50 p-3">
-                <div class="text-[11px] font-semibold text-[var(--muted)]">服务地址</div>
-                <div class="mt-1 truncate text-xs font-semibold text-slate-800" :title="draft.baseUrl">{{ draft.baseUrl || '未填写' }}</div>
-              </div>
-              <div class="rounded-xl border border-black/5 bg-slate-50 p-3">
-                <div class="text-[11px] font-semibold text-[var(--muted)]">适配器</div>
-                <div class="mt-1 truncate text-xs font-semibold text-slate-800">{{ currentAdapter?.name || draft.adapter }}</div>
-              </div>
-              <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                <div class="text-[11px] font-semibold text-emerald-700">主模型</div>
-                <div class="mt-1 truncate text-xs font-bold text-emerald-800" :title="draft.model">{{ draft.model || '未选择' }}</div>
+            <section class="rounded-2xl border border-black/5 bg-white p-4">
+              <h3 class="mb-3 text-xs font-bold text-slate-700">基础配置</h3>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="grid gap-1">
+                  <span class="text-[11px] font-semibold text-[var(--muted)]">配置名称</span>
+                  <input v-model="draft.name" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="模型配置名称" />
+                </label>
+                <label class="grid gap-1">
+                  <span class="text-[11px] font-semibold text-[var(--muted)]">适配器</span>
+                  <select v-model="draft.adapter" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]">
+                    <option v-for="adapter in adapters" :key="adapter.id" :value="adapter.id">{{ adapter.name }}</option>
+                  </select>
+                </label>
+                <label class="grid gap-1">
+                  <span class="text-[11px] font-semibold text-[var(--muted)]">服务地址</span>
+                  <input v-model="draft.baseUrl" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="https://api.openai.com" />
+                </label>
+                <label class="grid gap-1">
+                  <span class="text-[11px] font-semibold text-[var(--muted)]">API 密钥</span>
+                  <input v-model="draft.apiKey" type="password" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="sk-..." />
+                </label>
               </div>
             </section>
 
-            <section class="flex flex-wrap items-center justify-between gap-3">
-              <div class="relative min-w-[220px] flex-1">
-                <Search :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
-                <input v-model="modelSearch" class="h-10 w-full rounded-xl border border-black/10 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#176bff]" placeholder="搜索模型" />
+            <section class="rounded-2xl border border-black/5 bg-white p-4">
+              <h3 class="mb-3 text-xs font-bold text-slate-700">接口与模型</h3>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="grid gap-1">
+                  <span class="text-[11px] font-semibold text-[var(--muted)]">对话接口路径</span>
+                  <input v-model="draft.chatEndpoint" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="/v1/chat/completions" />
+                </label>
+                <label class="grid gap-1">
+                  <span class="text-[11px] font-semibold text-[var(--muted)]">图像接口路径</span>
+                  <input v-model="draft.imageEndpoint" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="/v1/images/generations" />
+                </label>
+                <label class="grid gap-1">
+                  <span class="text-[11px] font-semibold text-[var(--muted)]">超时时间（秒）</span>
+                  <input v-model.number="draft.timeoutSec" type="number" min="10" max="1800" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" />
+                </label>
+                <label class="grid gap-1">
+                  <span class="text-[11px] font-semibold text-[var(--muted)]">参考图上限</span>
+                  <input v-model.number="draft.referenceImageLimit" type="number" min="1" max="16" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" />
+                </label>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
-                <button class="secondary-btn w-auto px-4" :disabled="isValidating || draftErrors.length > 0" @click="validateModel">
-                  <Loader2 v-if="isValidating" :size="15" class="animate-spin" />
-                  <Activity v-else :size="15" />
+            </section>
+
+            <section class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/5 bg-slate-50 p-3">
+              <div class="relative min-w-[200px] flex-1">
+                <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
+                <input v-model="modelSearch" class="h-9 w-full rounded-lg border border-black/10 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#176bff]" placeholder="搜索模型" />
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[#176bff38] bg-[#176bff14] px-3 text-xs font-bold text-[#176bff] transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none" :disabled="isValidating || draftErrors.length > 0" @click="validateModel">
+                  <Loader2 v-if="isValidating" :size="14" class="animate-spin" />
+                  <Activity v-else :size="14" />
                   检测
                 </button>
-                <button class="secondary-btn w-auto px-4" :disabled="isFetchingModels || draftErrors.length > 0" @click="fetchModelList">
-                  <Loader2 v-if="isFetchingModels" :size="15" class="animate-spin" />
-                  <RefreshCw v-else :size="15" />
+                <button class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[#176bff38] bg-[#176bff14] px-3 text-xs font-bold text-[#176bff] transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none" :disabled="isFetchingModels || draftErrors.length > 0" @click="fetchModelList">
+                  <Loader2 v-if="isFetchingModels" :size="14" class="animate-spin" />
+                  <RefreshCw v-else :size="14" />
                   获取模型
                 </button>
-                <button class="primary-btn w-auto px-4" :disabled="isSaving || draftErrors.length > 0" @click="saveProfile">
-                  <Loader2 v-if="isSaving" :size="15" class="animate-spin" />
-                  <Save v-else :size="15" />
-                  保存
+                <button class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-[#176bff] px-4 text-xs font-bold text-white transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none" :disabled="isSaving || draftErrors.length > 0" @click="saveProfile">
+                  <Loader2 v-if="isSaving" :size="14" class="animate-spin" />
+                  <Save v-else :size="14" />
+                  保存配置
                 </button>
               </div>
             </section>

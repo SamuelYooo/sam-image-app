@@ -1,5 +1,5 @@
 [package]
-name = "samuel-xyz"
+name = "SamImage"
 version = "0.1.0"
 description = "SamImage desktop image generation workspace"
 authors = ["SamImage"]
@@ -10,7 +10,7 @@ name = "samuel_xyz_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "samuel-xyz"
+name = "SamImage"
 path = "src/main.rs"
 
 [build-dependencies]

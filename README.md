@@ -35,7 +35,7 @@ SamImage 是一款面向 AI 图片生成流程的桌面端应用，基于 Tauri 
 │   │       └── comfyui.rs
 │   ├── Cargo.toml            Rust 包配置
 │   └── tauri.conf.json       Tauri 应用配置
-├── package.json              npm 包配置（包名: samuel-xyz）
+├── package.json              npm 包配置（包名: SamImage）
 └── vite.config.ts            Vite 构建配置
 ```
 
@@ -150,7 +150,7 @@ npm.cmd run build:exe
 生成后的可执行文件：
 
 ```text
-src-tauri\target\release\samuel-xyz.exe
+src-tauri\target\release\SamImage.exe
 ```
 
 ### 2. 生成 MSI 安装包
