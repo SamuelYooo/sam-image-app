@@ -1,7 +1,0 @@
-node_modules/
-dist/
-target/
-src-tauri/target/
-*.log
-samimage-runtime-check.png
-
