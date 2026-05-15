@@ -84,6 +84,7 @@ const appVersion = packageJson.version;
 const page = ref<PageKey>('generate');
 const adapters = ref<AdapterInfo[]>([]);
 const profiles = ref<ModelProfile[]>([]);
+const draftProfileId = ref('');
 const artifacts = ref<Artifact[]>([]);
 const promptTemplates = ref<PromptTemplate[]>([]);
 const activeProfileId = ref('');
@@ -242,7 +243,13 @@ const fontFamilyOptions: Array<{ id: FontFamily; label: string; css: string }> =
 ];
 
 const draftErrors = computed(() => validateProfileDraft(draft));
+const modelListErrors = computed(() => validateProfileDraft({ ...draft, model: draft.model || 'placeholder' }));
 const activeProfile = computed(() => profiles.value.find((item) => item.id === activeProfileId.value));
+const configListProfiles = computed(() => {
+  const hasDraft = draftProfileId.value && !profiles.value.some((item) => item.id === draftProfileId.value);
+  return hasDraft ? [{ ...draft, id: draftProfileId.value }, ...profiles.value] : profiles.value;
+});
+const selectedConfigId = computed(() => draftProfileId.value || activeProfileId.value);
 const selectedProfile = computed(() => activeProfile.value ?? draft);
 const activeSummary = computed(() => profileSummary(selectedProfile.value));
 const currentAdapter = computed(() => adapters.value.find((item) => item.id === draft.adapter));
@@ -796,6 +803,7 @@ function newProfile() {
   const next = defaultProfile();
   next.name = `模型配置 ${profiles.value.length + 1}`;
   activeProfileId.value = '';
+  draftProfileId.value = next.id;
   validationResult.value = null;
   modelListResult.value = null;
   assignDraft(next);
@@ -804,9 +812,14 @@ function newProfile() {
 }
 
 function selectProfile(id: string) {
+  if (id === draftProfileId.value) {
+    activeProfileId.value = '';
+    return;
+  }
   const profile = profiles.value.find((item) => item.id === id);
   if (!profile) return;
   activeProfileId.value = id;
+  draftProfileId.value = '';
   validationResult.value = null;
   modelListResult.value = null;
   assignDraft(profile);
@@ -895,6 +908,7 @@ async function saveProfile() {
     if (index >= 0) profiles.value.splice(index, 1, saved);
     else profiles.value.unshift(saved);
     activeProfileId.value = saved.id;
+    draftProfileId.value = '';
     assignDraft(saved);
     notice.value = '模型配置已保存';
     addOpLog('save', `保存模型配置：${saved.name}`);
@@ -947,7 +961,7 @@ async function validateModel() {
 
 async function fetchModelList() {
   modelListResult.value = null;
-  if (draftErrors.value.length > 0) return;
+  if (modelListErrors.value.length > 0) return;
   isFetchingModels.value = true;
   notice.value = '';
   try {
@@ -979,7 +993,7 @@ function setMainModel(model: string) {
   assignDraft(updated);
   const index = profiles.value.findIndex((item) => item.id === draft.id);
   if (index >= 0) profiles.value.splice(index, 1, { ...profiles.value[index], model: draft.model, availableModels: [...draft.availableModels] });
-    notice.value = `主模型已切换为 ${draft.model}`;
+  notice.value = `主模型已切换为 ${draft.model}`;
 }
 
 function removeModel(model: string) {
@@ -2961,8 +2975,8 @@ onMounted(loadAll);
       </section>
     </div>
 
-    <div v-if="isModelConfigOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-6 backdrop-blur-sm" @click.self="isModelConfigOpen = false">
-      <section class="grid max-h-[86vh] w-full max-w-[980px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
+    <div v-if="isModelConfigOpen" class="fixed inset-0 z-50 overflow-auto bg-slate-950/35 p-6 backdrop-blur-sm" @click.self="isModelConfigOpen = false">
+      <section class="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-[1180px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
         <aside class="thin-scrollbar overflow-auto border-r border-black/5 bg-slate-50 p-5">
           <div class="mb-4 flex items-start justify-between gap-3">
             <div>
@@ -2974,19 +2988,22 @@ onMounted(loadAll);
             </button>
           </div>
 
-          <div v-if="profiles.length > 0" class="grid gap-2">
+          <div v-if="configListProfiles.length > 0" class="grid gap-2">
             <button
-              v-for="profile in profiles"
+              v-for="profile in configListProfiles"
               :key="profile.id"
               class="model-config-profile"
-              :class="profile.id === activeProfileId ? 'is-active' : ''"
+              :class="profile.id === selectedConfigId ? 'is-active' : ''"
               @click="selectProfile(profile.id)"
             >
               <div class="min-w-0">
-                <div class="truncate text-sm font-bold text-slate-900">{{ profile.name }}</div>
+                <div class="flex items-center gap-2">
+                  <div class="truncate text-sm font-bold text-slate-900">{{ profile.name }}</div>
+                  <span v-if="profile.id === draftProfileId" class="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">未保存</span>
+                </div>
                 <div class="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-[var(--muted)]">{{ profileSummary(profile) }}</div>
               </div>
-              <Star v-if="profile.id === activeProfileId" :size="14" class="shrink-0 text-[#176bff]" />
+              <Star v-if="profile.id === selectedConfigId" :size="14" class="shrink-0 text-[#176bff]" />
             </button>
           </div>
 
@@ -3000,7 +3017,7 @@ onMounted(loadAll);
           </button>
         </aside>
 
-        <section class="thin-scrollbar overflow-auto p-5">
+        <section class="p-5">
           <header class="mb-5 flex items-start justify-between gap-4 border-b border-black/5 pb-4">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
@@ -3008,7 +3025,7 @@ onMounted(loadAll);
                   <Star :size="16" />
                 </div>
                 <div class="min-w-0">
-                  <h2 class="truncate text-lg font-bold">{{ activeProfile?.name || draft.name || '模型配置' }}</h2>
+                  <h2 class="truncate text-lg font-bold">{{ draftProfileId ? draft.name : activeProfile?.name || draft.name || '模型配置' }}</h2>
                   <p class="mt-0.5 truncate text-xs text-[var(--muted)]">{{ activeSummary }}</p>
                 </div>
               </div>
@@ -3076,7 +3093,7 @@ onMounted(loadAll);
                   <Activity v-else :size="14" />
                   检测
                 </button>
-                <button class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[#176bff38] bg-[#176bff14] px-3 text-xs font-bold text-[#176bff] transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none" :disabled="isFetchingModels || draftErrors.length > 0" @click="fetchModelList">
+                <button class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[#176bff38] bg-[#176bff14] px-3 text-xs font-bold text-[#176bff] transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none" :disabled="isFetchingModels || modelListErrors.length > 0" @click="fetchModelList">
                   <Loader2 v-if="isFetchingModels" :size="14" class="animate-spin" />
                   <RefreshCw v-else :size="14" />
                   获取模型
@@ -3097,7 +3114,8 @@ onMounted(loadAll);
             </section>
 
             <div v-if="modelListResult" class="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
-              {{ modelListResult.message }}
+              <div>{{ modelListResult.message }}</div>
+              <div v-if="modelListResult.models.length" class="mt-1 text-sky-700">已获取 {{ modelListResult.models.length }} 个模型，列表如下。</div>
             </div>
 
             <div v-if="draftErrors.length" class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-700">
@@ -3114,28 +3132,40 @@ onMounted(loadAll);
               {{ validationResult.message }} · {{ validationResult.latencyMs }}ms
             </div>
 
-            <section class="overflow-hidden rounded-2xl border border-black/10 bg-white">
+            <section class="rounded-2xl border border-black/10 bg-white">
+              <div class="flex items-center justify-between gap-3 border-b border-black/5 bg-slate-50 px-4 py-3">
+                <div class="flex min-w-0 items-center gap-3">
+                  <Sparkles :size="15" class="shrink-0 text-[#176bff]" />
+                  <div class="min-w-0">
+                    <h3 class="text-sm font-bold text-slate-800">模型列表</h3>
+                    <p class="mt-0.5 text-xs text-[var(--muted)]">{{ filteredModels.length }} 个模型可用</p>
+                  </div>
+                </div>
+              </div>
+
               <div v-if="groupedModels.length === 0" class="p-8 text-center text-sm text-[var(--muted)]">
                 还没有模型。可以获取模型列表，或手动添加一个模型名称。
               </div>
 
-              <div v-for="group in groupedModels" :key="group.name" class="border-b border-black/5 last:border-b-0">
-                <div class="flex items-center gap-3 bg-slate-50 px-4 py-3">
-                  <Sparkles :size="15" class="text-[#176bff]" />
-                  <span class="font-semibold">{{ group.name }}</span>
-                  <span class="rounded-full bg-white px-2 py-0.5 text-xs text-[var(--muted)]">{{ group.models.length }}</span>
-                </div>
+              <div v-else class="max-h-[48vh] overflow-auto thin-scrollbar">
+                <div v-for="group in groupedModels" :key="group.name" class="border-b border-black/5 last:border-b-0">
+                  <div class="sticky top-0 z-10 flex items-center gap-3 bg-slate-50 px-4 py-3">
+                    <Sparkles :size="15" class="text-[#176bff]" />
+                    <span class="font-semibold">{{ group.name }}</span>
+                    <span class="rounded-full bg-white px-2 py-0.5 text-xs text-[var(--muted)]">{{ group.models.length }}</span>
+                  </div>
 
-                <div v-for="model in group.models" :key="model" class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-3">
-                  <button class="min-w-0 break-all text-left text-sm font-medium leading-5 line-clamp-2" :title="model" @click="setMainModel(model)">
-                    {{ model }}
-                  </button>
-                  <span v-if="draft.model === model" class="shrink-0 whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                    主模型
-                  </span>
-                  <button v-else class="shrink-0 whitespace-nowrap rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold hover:bg-slate-200" @click="setMainModel(model)">
-                    设为主模型
-                  </button>
+                  <div v-for="model in group.models" :key="model" class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-3">
+                    <button class="min-w-0 break-all text-left text-sm font-medium leading-5 line-clamp-2" :title="model" @click="setMainModel(model)">
+                      {{ model }}
+                    </button>
+                    <span v-if="draft.model === model" class="shrink-0 whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      主模型
+                    </span>
+                    <button v-else class="shrink-0 whitespace-nowrap rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold hover:bg-slate-200" @click="setMainModel(model)">
+                      设为主模型
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>

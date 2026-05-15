@@ -4,7 +4,7 @@ use crate::models::{
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::time::Instant;
 
 pub mod comfyui;
@@ -85,7 +85,7 @@ pub async fn generate(profile: &ModelProfile, request: &GenerationRequest) -> Re
 }
 
 pub async fn list_models(profile: &ModelProfile) -> Result<ModelListResult> {
-    validate_common(profile)?;
+    validate_model_list_profile(profile)?;
     let adapter = adapter_for(&profile.adapter)?;
     match fetch_remote_models(profile).await {
         Ok(models) if !models.is_empty() => Ok(ModelListResult {
@@ -130,15 +130,7 @@ fn futures_validate(adapter: &dyn ImageAdapter, profile: &ModelProfile) -> Resul
 }
 
 fn validate_common(profile: &ModelProfile) -> Result<()> {
-    if profile.name.trim().is_empty() {
-        return Err(anyhow!("配置名称不能为空"));
-    }
-    if profile.base_url.trim().is_empty() {
-        return Err(anyhow!("服务地址不能为空"));
-    }
-    if !(profile.base_url.starts_with("http://") || profile.base_url.starts_with("https://")) {
-        return Err(anyhow!("服务地址必须以 http:// 或 https:// 开头"));
-    }
+    validate_model_list_profile(profile)?;
     if profile.model.trim().is_empty() {
         return Err(anyhow!("模型名称不能为空"));
     }
@@ -151,14 +143,43 @@ fn validate_common(profile: &ModelProfile) -> Result<()> {
     Ok(())
 }
 
+fn validate_model_list_profile(profile: &ModelProfile) -> Result<()> {
+    if profile.name.trim().is_empty() {
+        return Err(anyhow!("配置名称不能为空"));
+    }
+    if profile.base_url.trim().is_empty() {
+        return Err(anyhow!("服务地址不能为空"));
+    }
+    if !(profile.base_url.starts_with("http://") || profile.base_url.starts_with("https://")) {
+        return Err(anyhow!("服务地址必须以 http:// 或 https:// 开头"));
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 struct RemoteModelList {
+    #[serde(default)]
     data: Vec<RemoteModel>,
+    #[serde(default)]
+    models: Vec<RemoteModel>,
 }
 
 #[derive(Deserialize)]
 struct RemoteModel {
+    #[serde(deserialize_with = "deserialize_model_id")]
     id: String,
+}
+
+fn deserialize_model_id<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::String(value) => value,
+        serde_json::Value::Number(value) => value.to_string(),
+        other => other.to_string().trim_matches('"').to_string(),
+    })
 }
 
 async fn fetch_remote_models(profile: &ModelProfile) -> Result<Vec<String>> {
@@ -179,8 +200,9 @@ async fn fetch_remote_models(profile: &ModelProfile) -> Result<Vec<String>> {
     let mut models = body
         .data
         .into_iter()
-        .map(|item| item.id)
-        .filter(|id| !id.trim().is_empty())
+        .chain(body.models.into_iter())
+        .map(|item| item.id.trim().to_string())
+        .filter(|id| !id.is_empty())
         .collect::<Vec<_>>();
     models.sort();
     models.dedup();
