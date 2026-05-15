@@ -1,6 +1,6 @@
 [package]
-name = "samuel-xyz"
-version = "0.1.0"
+name = "SamImage"
+version = "1.4.0"
 description = "SamImage desktop image generation workspace"
 authors = ["SamImage"]
 edition = "2021"
@@ -10,7 +10,7 @@ name = "samuel_xyz_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "samuel-xyz"
+name = "SamImage"
 path = "src/main.rs"
 
 [build-dependencies]
@@ -27,6 +27,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
 thiserror = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
 tower-http = { version = "0.6", features = ["cors"] }

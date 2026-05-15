@@ -64,6 +64,7 @@ fn migrate(conn: &Connection) -> Result<()> {
             prompt TEXT NOT NULL,
             image_url TEXT NOT NULL,
             source TEXT NOT NULL DEFAULT 'generate',
+            type TEXT NOT NULL DEFAULT 'type_default',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
         );
@@ -81,6 +82,7 @@ fn migrate(conn: &Connection) -> Result<()> {
     )?;
     ensure_column(conn, "profiles", "available_models", "TEXT NOT NULL DEFAULT '[]'")?;
     ensure_column(conn, "artifacts", "source", "TEXT NOT NULL DEFAULT 'generate'")?;
+    ensure_column(conn, "artifacts", "type", "TEXT NOT NULL DEFAULT 'type_default'")?;
     seed_default_prompt_templates(conn)?;
     Ok(())
 }
@@ -171,8 +173,8 @@ pub fn delete_profile(conn: &Connection, id: &str) -> Result<()> {
 pub fn insert_artifact(conn: &Connection, artifact: &Artifact) -> Result<Artifact> {
     conn.execute(
         r#"
-        INSERT INTO artifacts (id, profile_id, mode, prompt, image_url, source, created_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))
+        INSERT INTO artifacts (id, profile_id, mode, prompt, image_url, source, type, created_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))
         "#,
         params![
             artifact.id,
@@ -181,6 +183,7 @@ pub fn insert_artifact(conn: &Connection, artifact: &Artifact) -> Result<Artifac
             artifact.prompt,
             artifact.image_url,
             artifact.source,
+            artifact.type_,
         ],
     )?;
     list_artifacts(conn)?
@@ -197,7 +200,7 @@ pub fn delete_artifact(conn: &Connection, id: &str) -> Result<()> {
 pub fn list_artifacts(conn: &Connection) -> Result<Vec<Artifact>> {
     let mut stmt = conn.prepare(
         r#"
-        SELECT id, profile_id, mode, prompt, image_url, source, created_at
+        SELECT id, profile_id, mode, prompt, image_url, source, type, created_at
         FROM artifacts
         ORDER BY created_at DESC
         "#,
@@ -302,6 +305,7 @@ fn artifact_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Artifact> {
     };
 
     let source: String = row.get(5)?;
+    let type_: String = row.get(6)?;
 
     Ok(Artifact {
         id: row.get(0)?,
@@ -310,7 +314,8 @@ fn artifact_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Artifact> {
         prompt: row.get(3)?,
         image_url: row.get(4)?,
         source,
-        created_at: row.get(6)?,
+        type_,
+        created_at: row.get(7)?,
     })
 }
 
