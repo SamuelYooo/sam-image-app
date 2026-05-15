@@ -41,11 +41,14 @@ SamImage 是一款面向 AI 图片生成流程的桌面端应用，基于 Tauri 
 
 # 界面效果图
 
-![image-20260514165006127](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20260514165006127.png)
 
-![image-20260514165030706](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20260514165030706.png)
 
-![image-20260514164925203](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20260514164925203.png)
+![image-20260514165006127](https://gitee.com/SamuelYou/pic/raw/master/images/20260515165314273.png)
+
+![image-20260514165030706](https://gitee.com/SamuelYou/pic/raw/master/images/20260515165320542.png)
+
+![image-20260514164925203](https://gitee.com/SamuelYou/pic/raw/master/images/20260515165332462.png)
+
 
 ## 本地开发
 
