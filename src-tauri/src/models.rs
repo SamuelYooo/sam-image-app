@@ -186,3 +186,15 @@ impl WorkMode {
         }
     }
 }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolishRequest {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolishResult {
+    pub polished: String,
+}

@@ -107,3 +107,11 @@ export interface ApiErrorBody {
     details?: unknown;
   };
 }
+
+export interface PolishRequest {
+  text: string;
+}
+
+export interface PolishResult {
+  polished: string;
+}

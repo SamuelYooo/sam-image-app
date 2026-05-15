@@ -1,6 +1,6 @@
 [package]
 name = "SamImage"
-version = "0.1.0"
+version = "1.4.0"
 description = "SamImage desktop image generation workspace"
 authors = ["SamImage"]
 edition = "2021"
