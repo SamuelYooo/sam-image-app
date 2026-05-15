@@ -180,6 +180,9 @@ const isDownloading = ref(false);
 const apiOnline = ref(false);
 const validationResult = ref<ModelValidationResult | null>(null);
 const modelListResult = ref<ModelListResult | null>(null);
+const isPolishing = ref(false);
+const isPolishingIcon = ref(false);
+const isPolishingBatch = ref(false);
 const notice = ref('');
 const galleryNotice = ref('');
 const isHelpOpen = ref(false);
@@ -1004,6 +1007,53 @@ function removeModel(model: string) {
 }
 void removeModel;
 
+async function polishPrompt() {
+  if (isPolishing.value || !prompt.value.trim()) return;
+  isPolishing.value = true;
+  try {
+    const result = await api.polishPrompt({ text: prompt.value });
+    prompt.value = result.polished;
+    notice.value = '提示词已润色';
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : '润色失败';
+  } finally {
+    isPolishing.value = false;
+  }
+}
+
+async function polishIconPrompt() {
+  if (isPolishingIcon.value || !iconPrompt.value.trim()) return;
+  isPolishingIcon.value = true;
+  try {
+    const result = await api.polishPrompt({ text: iconPrompt.value });
+    iconPrompt.value = result.polished;
+    iconNotice.value = '提示词已润色';
+  } catch (error) {
+    iconNotice.value = error instanceof Error ? error.message : '润色失败';
+  } finally {
+    isPolishingIcon.value = false;
+  }
+}
+
+async function polishBatchPrompts() {
+  if (isPolishingBatch.value || !batchPrompts.value.trim()) return;
+  isPolishingBatch.value = true;
+  try {
+    const lines = batchPrompts.value.split('\n').filter((item) => item.trim());
+    const polishedLines: string[] = [];
+    for (const line of lines) {
+      const result = await api.polishPrompt({ text: line.trim() });
+      polishedLines.push(result.polished);
+    }
+    batchPrompts.value = polishedLines.join('\n');
+    notice.value = `${lines.length} 个提示词已润色`;
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : '润色失败';
+  } finally {
+    isPolishingBatch.value = false;
+  }
+}
+
 async function generateImage() {
   if (!activeProfileId.value) {
     notice.value = '请先在右上角模型配置中保存并激活一个模型';
@@ -1824,6 +1874,11 @@ onMounted(loadAll);
               class="h-24 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
               placeholder="描述你想生成的画面"
             ></textarea>
+            <button class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isPolishing || !prompt.trim()" @click="polishPrompt">
+              <Loader2 v-if="isPolishing" :size="13" class="animate-spin" />
+              <Wand2 v-else :size="13" />
+              {{ isPolishing ? '润色中...' : '润色提示词' }}
+            </button>
 
             <div class="mt-3 grid grid-cols-[1fr_150px_120px] gap-3">
               <input v-model="negativePrompt" class="field-input" placeholder="负向提示词" />
@@ -1905,6 +1960,11 @@ onMounted(loadAll);
               class="h-40 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
               placeholder="每行输入一个提示词&#10;例如：&#10;一只橘猫在书架上晒太阳&#10;赛博朋克城市夜景&#10;水下的珊瑚礁花园"
             ></textarea>
+            <button class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isPolishingBatch || !batchPrompts.trim()" @click="polishBatchPrompts">
+              <Loader2 v-if="isPolishingBatch" :size="13" class="animate-spin" />
+              <Wand2 v-else :size="13" />
+              {{ isPolishingBatch ? '润色中...' : '批量润色' }}
+            </button>
 
             <div v-if="batchResults.length > 0" class="mt-3 grid max-h-[200px] gap-1.5 overflow-auto">
               <div
@@ -2013,6 +2073,11 @@ onMounted(loadAll);
                 class="h-24 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
                 placeholder="描述图标主体、用途、颜色和风格"
               ></textarea>
+              <button class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isPolishingIcon || !iconPrompt.trim()" @click="polishIconPrompt">
+                <Loader2 v-if="isPolishingIcon" :size="13" class="animate-spin" />
+                <Wand2 v-else :size="13" />
+                {{ isPolishingIcon ? '润色中...' : '润色提示词' }}
+              </button>
             </label>
 
             <div class="grid grid-cols-2 gap-3">

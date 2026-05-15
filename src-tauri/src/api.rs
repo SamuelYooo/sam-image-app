@@ -2,7 +2,8 @@
 use crate::db;
 use crate::models::{
     AdapterInfo, Artifact, GenerationRequest, ModelListRequest, ModelListResult, ModelProfile,
-    IconfontSearchItem, ModelValidationRequest, ModelValidationResult, PromptTemplate,
+    IconfontSearchItem, ModelValidationRequest, ModelValidationResult, PolishRequest, PolishResult,
+    PromptTemplate,
 };
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -13,7 +14,7 @@ use reqwest::Client;
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
@@ -51,6 +52,7 @@ pub fn router(conn: Connection) -> Router {
             axum::routing::get(list_artifacts).post(create_generation),
         )
         .route("/api/generations/:id", axum::routing::delete(delete_artifact))
+        .route("/api/polish", axum::routing::post(polish_prompt))
         .with_state(state)
 }
 
@@ -399,6 +401,144 @@ async fn delete_artifact(
     db::delete_artifact(&conn, &id)
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|err| ApiError::internal(format!("删除作品失败: {err}")))
+}
+
+const GLM_API_URL: &str = "https://open.bigmodel.cn/api/paas/v4";
+const GLM_MODEL: &str = "glm-4.5-flash";
+
+fn glm_api_key() -> String {
+    let encrypted: [u8; 49] = [99,5,92,127,15,7,81,81,30,0,86,83,0,76,53,4,1,68,86,65,17,36,16,102,3,14,43,90,86,95,92,29,28,3,65,76,119,7,50,45,25,22,44,110,50,116,101,5,95];
+    let passphrase = b"SamImage-2024-Secret!@#";
+    encrypted
+        .iter()
+        .enumerate()
+        .map(|(i, &b)| (b ^ passphrase[i % passphrase.len()]) as char)
+        .collect()
+}
+
+async fn polish_prompt(
+    Json(request): Json<PolishRequest>,
+) -> Result<Json<PolishResult>, ApiError> {
+    let text = request.text.trim().to_string();
+    if text.is_empty() {
+        return Err(ApiError::bad_request("提示词不能为空"));
+    }
+
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|err| ApiError::internal(format!("初始化客户端失败: {err}")))?;
+
+    let system_prompt = r#"你是一位专业的 AI 图像提示词工程师，负责把用户输入的简短想法润色成可直接用于 AI 生图的中文提示词。
+
+你的方法论基于「五层拆解法」，但最终只输出一段完整中文提示词，不输出标题、解释、Markdown、列表或英文。
+
+【核心原则】
+1. 画面先行：先明确主题、场景、主体、动作与整体画面。
+2. 五层拆解：整体基调 → 质感材质 → 笔触细节 → 构图规则 → 文字系统（仅在需要文字时）。
+3. 正向为主：重点描述想要的画面，不大量堆砌负面词。
+4. 抽象词具象化：把「高级」「好看」「治愈」「科技感」等抽象词转化为可见的光线、材质、色彩、布局、镜头语言。
+5. 参照物锚定：当用户提到某种风格时，补充合理的视觉参照、材质和色彩特征。
+
+【润色时必须覆盖】
+- 画面介绍：主体是什么、在哪里、正在发生什么。
+- 整体基调：具体风格与情绪氛围。
+- 质感材质：介质、工艺、肌理、表面反光或颗粒感。
+- 笔触细节：线条、色彩分布、明暗关系。
+- 构图规则：景别、镜头角度、视觉重心、画面比例倾向、空间层次。
+- 画质描述：高清、细节丰富、干净背景、专业摄影/插画/渲染质量等。
+- 文字系统：仅当用户明确需要信息图、海报、卡片、logo、标题文字时，才描述字体、层级与排版；否则不要主动加入文字。
+
+【风格预设知识库】
+- 童趣涂鸦：蜡笔/彩色铅笔在粗糙画纸上的手绘感，粗拙歪扭轮廓线，高饱和基础色，儿童绘本氛围。
+- 极简现代：哑光纸面或干净平面渲染，大量留白，几何构图，1-2 种主题色，严格对齐。
+- 复古胶片：胶片颗粒、轻微暗角、漏光、暖色调、低饱和、生活化抓拍感，Kodak Gold 200 氛围。
+- 日系插画：柔和粉彩色、透明水彩或干净数字扁平插画、细线条、舒适留白、治愈氛围。
+- 赛博朋克：深黑/深蓝底色，霓虹品红、电光蓝、酸性绿，金属与雨水反射，强透视、高信息密度。
+- 学术信息图：白色或浅灰底，统一线性图标，清晰网格系统，箭头/连线引导，标题与正文层级明确。
+
+【输出要求】
+- 只输出润色后的中文生图提示词，一段即可。
+- 保持用户原意，不要添加与需求冲突的主体或用途。
+- 如果用户输入很短，要主动补全合理细节。
+- 输出应完整，不要截断，不要用省略号。
+- 不要输出英文提示词，不要输出 Midjourney/DALL-E/Stable Diffusion 分栏。
+"#;
+
+    let body = json!({
+        "model": GLM_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": [{"type": "text", "text": format!("请基于 image-prompt-generator 的五层拆解法，润色以下生图提示词，并只返回一段完整中文提示词：\n\n{text}")}]}
+        ],
+        "temperature": 0.65,
+        "max_tokens": 1800,
+        "stream": false
+    });
+
+    let response = client
+        .post(format!("{GLM_API_URL}/chat/completions"))
+        .header("Authorization", format!("Bearer {}", glm_api_key()))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|err| ApiError::bad_request(format!("请求智谱API失败: {err}")))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let text_body = response.text().await.unwrap_or_default();
+        return Err(ApiError::bad_request(format!(
+            "智谱API返回错误 ({}): {}",
+            status,
+            text_body.chars().take(200).collect::<String>()
+        )));
+    }
+
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|err| ApiError::internal(format!("解析智谱API响应失败: {err}")))?;
+
+    let polished = extract_content(&payload);
+
+    if polished.is_empty() {
+        return Err(ApiError::bad_request(format!(
+            "智谱API返回了空的润色结果: {}",
+            payload.to_string().chars().take(500).collect::<String>()
+        )));
+    }
+
+    Ok(Json(PolishResult { polished }))
+}
+
+fn extract_content(payload: &Value) -> String {
+    let choice = &payload["choices"][0]["message"];
+    match &choice["content"] {
+        Value::String(s) => s.trim().to_string(),
+        Value::Array(arr) => {
+            let mut parts = Vec::new();
+            for part in arr {
+                if let Some(t) = part.get("text").and_then(Value::as_str) {
+                    let trimmed = t.trim();
+                    if !trimmed.is_empty() {
+                        parts.push(trimmed.to_string());
+                    }
+                } else if let Some(t) = part.get("content").and_then(Value::as_str) {
+                    let trimmed = t.trim();
+                    if !trimmed.is_empty() {
+                        parts.push(trimmed.to_string());
+                    }
+                }
+            }
+            parts.join("")
+        }
+        Value::Object(map) => map
+            .get("text")
+            .and_then(Value::as_str)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
 }
 
 fn lock_db(state: &ApiState) -> Result<std::sync::MutexGuard<'_, Connection>, ApiError> {

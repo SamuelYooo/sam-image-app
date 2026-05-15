@@ -9,6 +9,8 @@ import type {
   ModelValidationRequest,
   ModelValidationResult,
   IconfontSearchItem,
+  PolishRequest,
+  PolishResult,
   PromptTemplate,
 } from '../types';
 
@@ -85,5 +87,10 @@ export const api = {
   deleteArtifact: (id: string) =>
     requestJson<void>(`/api/generations/${encodeURIComponent(id)}`, {
       method: 'DELETE',
+    }),
+  polishPrompt: (payload: PolishRequest) =>
+    requestJson<PolishResult>('/api/polish', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 };
