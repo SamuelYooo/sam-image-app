@@ -4,6 +4,8 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Github,
   Import,
@@ -80,6 +82,70 @@ import {
 
 type PageKey = 'generate' | 'icons' | 'gallery' | 'history';
 
+const IMAGE_SIZE_MAX = 20480;
+const imageSizePresetGroups = [
+  {
+    label: '常用尺寸',
+    options: [
+      { value: '512x512', label: '512 × 512' },
+      { value: '768x768', label: '768 × 768' },
+      { value: '1024x1024', label: '1024 × 1024' },
+      { value: '1536x1536', label: '1536 × 1536' },
+      { value: '2048x2048', label: '2048 × 2048' },
+    ],
+  },
+  {
+    label: '微信公众号',
+    options: [
+      { value: '900x383', label: '大封面 900 × 383（2.35:1）' },
+      { value: '200x200', label: '小封面 200 × 200（1:1）' },
+    ],
+  },
+  {
+    label: '微信视频号',
+    options: [
+      { value: '1080x1260', label: '竖版 1080 × 1260（6:7）' },
+      { value: '1080x608', label: '横版 1080 × 608（16:9）' },
+    ],
+  },
+  {
+    label: '小红书图文',
+    options: [
+      { value: '1242x1660', label: '竖版 1242 × 1660（3:4）' },
+      { value: '1080x1080', label: '方版 1080 × 1080（1:1）' },
+      { value: '2560x1440', label: '横版 2560 × 1440（16:9）' },
+    ],
+  },
+  {
+    label: '小红书视频',
+    options: [
+      { value: '1080x1440', label: '竖版 1080 × 1440（3:4）' },
+      { value: '1920x1080', label: '横版 1920 × 1080（16:9）' },
+    ],
+  },
+  {
+    label: '抖音',
+    options: [
+      { value: '1125x633', label: '个人背景图 1125 × 633' },
+      { value: '1242x1660', label: '视频封面竖图 1242 × 1660（9:16 原始尺寸）' },
+      { value: '1080x608', label: '视频封面横图 1080 × 608' },
+    ],
+  },
+  {
+    label: '微博',
+    options: [
+      { value: '980x300', label: '主页封面 980 × 300' },
+      { value: '980x560', label: '头条封面 980 × 560' },
+      { value: '540x260', label: '焦点图片 540 × 260' },
+      { value: '800x2000', label: '长图 800 × 2000' },
+    ],
+  },
+  {
+    label: 'B站',
+    options: [{ value: '1146x717', label: '视频封面 1146 × 717' }],
+  },
+] as const;
+
 const appVersion = packageJson.version;
 const page = ref<PageKey>('generate');
 const adapters = ref<AdapterInfo[]>([]);
@@ -91,7 +157,9 @@ const activeProfileId = ref('');
 const draft = reactive<ModelProfile>(defaultProfile());
 const prompt = ref('清晨的玻璃温室里，一台银色机器人正在修剪发光植物，电影感构图，高细节');
 const negativePrompt = ref('低清晰度，畸形，文字水印');
-const size = ref('1024x1024');
+const sizePreset = ref('1024x1024');
+const customSizeWidth = ref(1024);
+const customSizeHeight = ref(1024);
 const mode = ref<WorkMode>('txt2img');
 const seed = ref<number | undefined>(undefined);
 const iconPrompt = ref('一个现代天气 App 图标，圆角方形图标，蓝色渐变背景，白色云朵和金色阳光，简洁、清晰、适合小尺寸');
@@ -119,7 +187,8 @@ const manualModelName = ref('');
 const galleryProfileFilter = ref('all');
 const galleryModeFilter = ref<'all' | WorkMode>('all');
 const selectedArtifactId = ref('');
-const isGalleryListCollapsed = ref(true);
+const isGalleryLeftCollapsed = ref(true);
+const isGalleryRightCollapsed = ref(true);
 const isLightboxOpen = ref(false);
 const exportFormat = ref<ExportFormat>('png');
 const exportQuality = ref(86);
@@ -189,6 +258,7 @@ const isHelpOpen = ref(false);
 const isTemplatePickerOpen = ref(false);
 const isTemplateManagerOpen = ref(false);
 const isIconfontSearchOpen = ref(false);
+const isPromptExpanded = ref(false);
 const isModelSwitcherOpen = ref(false);
 const isModelConfigOpen = ref(false);
 const isBatchOpen = ref(false);
@@ -248,11 +318,22 @@ const fontFamilyOptions: Array<{ id: FontFamily; label: string; css: string }> =
 const draftErrors = computed(() => validateProfileDraft(draft));
 const modelListErrors = computed(() => validateProfileDraft({ ...draft, model: draft.model || 'placeholder' }));
 const activeProfile = computed(() => profiles.value.find((item) => item.id === activeProfileId.value));
-const configListProfiles = computed(() => {
-  const hasDraft = draftProfileId.value && !profiles.value.some((item) => item.id === draftProfileId.value);
-  return hasDraft ? [{ ...draft, id: draftProfileId.value }, ...profiles.value] : profiles.value;
+const size = computed(() => {
+  if (sizePreset.value !== 'custom') return sizePreset.value;
+  return `${Math.trunc(Number(customSizeWidth.value))}x${Math.trunc(Number(customSizeHeight.value))}`;
+});
+const customSizeValidationError = computed(() => {
+  const parsedWidth = Number(customSizeWidth.value);
+  const parsedHeight = Number(customSizeHeight.value);
+  if (!Number.isInteger(parsedWidth) || !Number.isInteger(parsedHeight)) return '请输入整数宽高';
+  if (parsedWidth < 1 || parsedHeight < 1) return '自定义尺寸必须大于 0';
+  if (parsedWidth > IMAGE_SIZE_MAX || parsedHeight > IMAGE_SIZE_MAX) {
+    return `自定义尺寸不能超过 ${IMAGE_SIZE_MAX} × ${IMAGE_SIZE_MAX}`;
+  }
+  return '';
 });
 const selectedConfigId = computed(() => draftProfileId.value || activeProfileId.value);
+const configListProfiles = computed(() => profiles.value);
 const selectedProfile = computed(() => activeProfile.value ?? draft);
 const activeSummary = computed(() => profileSummary(selectedProfile.value));
 const currentAdapter = computed(() => adapters.value.find((item) => item.id === draft.adapter));
@@ -296,10 +377,17 @@ const galleryIconArtifacts = computed(() => {
     return profileMatches && modeMatches;
   });
 });
+const galleryVisibleArtifacts = computed(() => [...galleryArtifacts.value, ...galleryIconArtifacts.value]);
 const selectedArtifact = computed(() => {
-  const visible = galleryArtifacts.value;
+  const visible = galleryVisibleArtifacts.value;
   return visible.find((item) => item.id === selectedArtifactId.value) ?? visible[0] ?? null;
 });
+const selectedGalleryIndex = computed(() => {
+  if (!selectedArtifact.value) return -1;
+  return galleryVisibleArtifacts.value.findIndex((item) => item.id === selectedArtifact.value?.id);
+});
+const hasPreviousGalleryArtifact = computed(() => selectedGalleryIndex.value > 0);
+const hasNextGalleryArtifact = computed(() => selectedGalleryIndex.value >= 0 && selectedGalleryIndex.value < galleryVisibleArtifacts.value.length - 1);
 const iconSourceArtifact = computed(() => {
   return artifacts.value.find((item) => item.id === iconSourceArtifactId.value) ?? null;
 });
@@ -351,8 +439,17 @@ function modeLabel(value: WorkMode): string {
 function openGallery(artifactId?: string) {
   if (artifactId) selectedArtifactId.value = artifactId;
   else if (!selectedArtifactId.value && artifacts.value[0]) selectedArtifactId.value = artifacts.value[0].id;
-  isGalleryListCollapsed.value = true;
+  isGalleryLeftCollapsed.value = true;
+  isGalleryRightCollapsed.value = true;
   page.value = 'gallery';
+}
+
+function selectAdjacentGalleryArtifact(direction: 'previous' | 'next') {
+  const currentIndex = selectedGalleryIndex.value;
+  if (currentIndex < 0) return;
+  const nextIndex = direction === 'previous' ? currentIndex - 1 : currentIndex + 1;
+  const artifact = galleryVisibleArtifacts.value[nextIndex];
+  if (artifact) selectedArtifactId.value = artifact.id;
 }
 
 function openLightbox() {
@@ -1062,6 +1159,10 @@ async function generateImage() {
   }
   if (!prompt.value.trim()) {
     notice.value = '提示词不能为空';
+    return;
+  }
+  if (sizePreset.value === 'custom' && customSizeValidationError.value) {
+    notice.value = customSizeValidationError.value;
     return;
   }
   const referenceSources = collectReferenceSources(referenceImageItems.value, referenceImageUrlDraft.value);
@@ -1871,8 +1972,10 @@ onMounted(loadAll);
 
             <textarea
               v-model="prompt"
-              class="h-24 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
+              class="h-24 w-full cursor-text resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
               placeholder="描述你想生成的画面"
+              title="点击展开查看完整提示词"
+              @click="isPromptExpanded = true"
             ></textarea>
             <button class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isPolishing || !prompt.trim()" @click="polishPrompt">
               <Loader2 v-if="isPolishing" :size="13" class="animate-spin" />
@@ -1880,15 +1983,25 @@ onMounted(loadAll);
               {{ isPolishing ? '润色中...' : '润色提示词' }}
             </button>
 
-            <div class="mt-3 grid grid-cols-[1fr_150px_120px] gap-3">
+            <div class="mt-3 grid grid-cols-[1fr_160px_120px] gap-3">
               <input v-model="negativePrompt" class="field-input" placeholder="负向提示词" />
-              <select v-model="size" class="field-input">
-                <option>1024x1024</option>
-                <option>1024x1536</option>
-                <option>1536x1024</option>
-                <option>768x768</option>
+              <select v-model="sizePreset" class="field-input">
+                <optgroup v-for="group in imageSizePresetGroups" :key="group.label" :label="group.label">
+                  <option v-for="option in group.options" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </optgroup>
+                <option value="custom">自定义尺寸</option>
               </select>
               <input v-model.number="seed" class="field-input" type="number" placeholder="随机种子" />
+            </div>
+
+            <div v-if="sizePreset === 'custom'" class="mt-3 grid grid-cols-[1fr_1fr] gap-3">
+              <input v-model.number="customSizeWidth" class="field-input" type="number" min="1" :max="IMAGE_SIZE_MAX" placeholder="宽度" />
+              <input v-model.number="customSizeHeight" class="field-input" type="number" min="1" :max="IMAGE_SIZE_MAX" placeholder="高度" />
+            </div>
+            <div v-if="sizePreset === 'custom' && customSizeValidationError" class="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
+              {{ customSizeValidationError }}
             </div>
           </section>
 
@@ -1997,7 +2110,7 @@ onMounted(loadAll);
             <h2 class="text-base font-semibold">作品集</h2>
             <p class="mt-1 text-xs text-[var(--muted)]">{{ artifacts.length }} 张作品</p>
           </div>
-          <button class="icon-btn" title="收起作品列表" @click="isGalleryListCollapsed = true">
+          <button class="icon-btn" title="收起作品列表" @click="isGalleryLeftCollapsed = true">
             <PanelLeftClose :size="16" />
           </button>
         </div>
@@ -2252,14 +2365,22 @@ onMounted(loadAll);
     </section>
 
     <section v-else-if="page === 'gallery'" class="h-full overflow-hidden px-6 pb-6 pt-20">
-      <div class="grid h-full gap-5" :class="isGalleryListCollapsed ? 'grid-cols-[1fr_360px]' : 'grid-cols-[280px_1fr_360px]'">
-        <aside v-if="!isGalleryListCollapsed" class="glass-panel thin-scrollbar overflow-auto rounded-[18px] p-4">
+      <div
+        class="grid h-full gap-5"
+        :class="{
+          'grid-cols-[1fr]': isGalleryLeftCollapsed && isGalleryRightCollapsed,
+          'grid-cols-[320px_minmax(0,1fr)]': !isGalleryLeftCollapsed && isGalleryRightCollapsed,
+          'grid-cols-[minmax(0,1fr)_360px]': isGalleryLeftCollapsed && !isGalleryRightCollapsed,
+          'grid-cols-[320px_minmax(0,1fr)_360px]': !isGalleryLeftCollapsed && !isGalleryRightCollapsed,
+        }"
+      >
+        <aside v-if="!isGalleryLeftCollapsed" class="glass-panel thin-scrollbar overflow-auto rounded-[18px] p-4">
           <div class="mb-4 flex items-start justify-between gap-3">
             <div>
               <h1 class="text-base font-semibold">作品列表</h1>
               <p class="mt-1 text-xs text-[var(--muted)]">选择作品、预览画布并完成导出。</p>
             </div>
-            <button class="icon-btn" title="收起作品列表" @click="isGalleryListCollapsed = true">
+            <button class="icon-btn" title="收起作品列表" @click="isGalleryLeftCollapsed = true">
               <PanelLeftClose :size="16" />
             </button>
           </div>
@@ -2335,12 +2456,9 @@ onMounted(loadAll);
           <div class="mb-4 flex items-start justify-between gap-4">
             <div class="min-w-0 flex-1">
               <div class="mb-2 flex items-center gap-2">
-                <button v-if="isGalleryListCollapsed" class="icon-btn" title="展开作品列表" @click="isGalleryListCollapsed = false">
-                  <PanelLeftOpen :size="16" />
-                </button>
                 <h2 class="truncate text-lg font-bold">作品预览</h2>
               </div>
-              <p class="mt-1 truncate text-xs text-[var(--muted)]">{{ selectedProfileName }}</p>
+              <p class="truncate text-xs text-[var(--muted)]">{{ selectedProfileName }}</p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <button class="icon-btn" :title="textOverlayEnabled ? '关闭再编辑' : '开启再编辑'" @click="textOverlayEnabled = !textOverlayEnabled">
@@ -2363,11 +2481,27 @@ onMounted(loadAll);
           </div>
 
           <div class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-200 bg-[#eef2f5] shadow-inner">
+            <button
+              v-if="isGalleryLeftCollapsed"
+              class="gallery-panel-float-btn gallery-panel-edge-btn gallery-panel-edge-btn-left absolute left-0 top-1/2 z-10 -translate-y-1/2"
+              title="展开作品列表"
+              @click="isGalleryLeftCollapsed = false"
+            >
+              <PanelLeftOpen :size="18" />
+            </button>
+            <button
+              v-if="isGalleryRightCollapsed"
+              class="gallery-panel-float-btn gallery-panel-edge-btn gallery-panel-edge-btn-right absolute right-0 top-1/2 z-10 -translate-y-1/2"
+              title="展开右侧信息"
+              @click="isGalleryRightCollapsed = false"
+            >
+              <PanelLeftClose :size="18" class="rotate-180" />
+            </button>
             <template v-if="selectedArtifact">
               <img
                 :src="selectedArtifact.imageUrl"
                 :alt="selectedArtifact.prompt"
-                class="max-h-full max-w-full object-contain cursor-zoom-in"
+                class="max-h-full max-w-full cursor-zoom-in object-contain"
                 @load="syncGalleryPreviewAspectRatio"
                 @dblclick="openLightbox"
               />
@@ -2415,31 +2549,65 @@ onMounted(loadAll);
             </div>
           </div>
 
-          <div v-if="selectedArtifact" class="mt-4 rounded-2xl border border-black/5 bg-white/65 p-3">
-            <div class="flex items-center justify-between text-xs">
-              <div class="flex items-center gap-2 text-[var(--muted)]">
-                <span>{{ selectedProfileName }}</span>
-                <span class="text-slate-300">·</span>
-                <span id="gallery-image-dimensions">加载中...</span>
+          <div v-if="selectedArtifact" class="mt-4 flex flex-col gap-3">
+            <div class="rounded-2xl border border-black/5 bg-white/65 p-3">
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2 text-[var(--muted)]">
+                  <span>{{ selectedProfileName }}</span>
+                  <span class="text-slate-300">·</span>
+                  <span id="gallery-image-dimensions">加载中...</span>
+                </div>
+                <span class="text-[var(--muted)]">{{ selectedArtifact.createdAt.slice(0, 19).replace('T', ' ') }}</span>
               </div>
-              <span class="text-[var(--muted)]">{{ selectedArtifact.createdAt.slice(0, 19).replace('T', ' ') }}</span>
+              <p class="mt-2 text-sm leading-6 text-slate-700">{{ selectedArtifact.prompt }}</p>
             </div>
-            <p class="mt-2 text-sm leading-6 text-slate-700">{{ selectedArtifact.prompt }}</p>
+            <div v-if="galleryVisibleArtifacts.length > 1" class="flex items-center justify-center gap-4">
+              <button
+                class="gallery-artifact-nav-btn gallery-artifact-nav-prev"
+                :disabled="!hasPreviousGalleryArtifact"
+                title="上一个作品"
+                @click="selectAdjacentGalleryArtifact('previous')"
+              >
+                <ChevronLeft :size="22" />
+                <span>上一个</span>
+              </button>
+              <button
+                class="gallery-artifact-nav-btn gallery-artifact-nav-next"
+                :disabled="!hasNextGalleryArtifact"
+                title="下一个作品"
+                @click="selectAdjacentGalleryArtifact('next')"
+              >
+                <span>下一个</span>
+                <ChevronRight :size="22" />
+              </button>
+            </div>
           </div>
         </section>
 
-        <aside class="glass-panel thin-scrollbar overflow-auto rounded-[18px] p-4">
-          <div v-if="!selectedArtifact" class="flex h-full items-center justify-center text-sm text-[var(--muted)]">
-            请先选择一张作品
-          </div>
-
+        <aside v-if="!isGalleryRightCollapsed" class="glass-panel thin-scrollbar overflow-auto rounded-[18px] p-4">
+          <template v-if="!selectedArtifact">
+            <div class="flex h-full items-center justify-center text-sm text-[var(--muted)]">请先选择一张作品</div>
+          </template>
           <template v-else>
-            <div class="mb-4 rounded-xl border border-black/5 bg-white/70 p-3">
+            <div class="mb-4 flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h3 class="text-base font-semibold">作品详情</h3>
+                <p class="mt-1 line-clamp-2 text-xs text-[var(--muted)]">{{ selectedArtifact.prompt }}</p>
+              </div>
+              <button class="icon-btn" title="收起右侧信息" @click="isGalleryRightCollapsed = true">
+                <PanelLeftClose :size="16" />
+              </button>
+            </div>
+
+            <div class="mb-4 rounded-2xl border border-black/5 bg-white/70 p-3">
               <div class="mb-2 flex items-center gap-2">
                 <span class="gallery-mode-tag" :class="`tag-${selectedArtifact.mode}`">{{ modeLabel(selectedArtifact.mode) }}</span>
-                <span class="ml-auto text-[10px] text-slate-400">{{ selectedArtifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
+                <span v-if="selectedArtifact.source === 'icon'" class="gallery-mode-tag" style="background:#f5f0ff;color:#7c3aed;">ICON</span>
               </div>
-              <p class="line-clamp-3 text-xs leading-5 text-slate-700">{{ selectedArtifact.prompt }}</p>
+              <div class="flex items-center justify-between text-[11px] text-slate-400">
+                <span>{{ selectedProfileName }}</span>
+                <span>{{ selectedArtifact.createdAt.slice(0, 19).replace('T', ' ') }}</span>
+              </div>
             </div>
 
             <div class="mb-4 grid grid-cols-2 gap-2">
@@ -2452,6 +2620,7 @@ onMounted(loadAll);
                 删除作品
               </button>
             </div>
+
             <section class="mb-4 rounded-xl border border-black/5 bg-white/70 p-3">
               <h3 class="mb-3 text-sm font-semibold text-slate-900">导出设置</h3>
               <label class="mb-3 block">
@@ -3328,6 +3497,32 @@ onMounted(loadAll);
         />
       </div>
     </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="isPromptExpanded"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
+        @click.self="isPromptExpanded = false"
+        @keydown.escape.window="isPromptExpanded = false"
+      >
+        <div class="mx-4 w-full max-w-2xl rounded-2xl border border-white/80 bg-white p-5 shadow-2xl">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <h2 class="text-base font-bold">完整提示词</h2>
+            <button class="icon-btn" title="关闭" @click="isPromptExpanded = false">
+              <X :size="16" />
+            </button>
+          </div>
+          <textarea
+            v-model="prompt"
+            class="h-64 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
+            placeholder="描述你想生成的画面"
+          ></textarea>
+          <div class="mt-3 flex items-center justify-end gap-2">
+            <button class="secondary-btn" @click="isPromptExpanded = false">关闭</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -3346,11 +3541,94 @@ onMounted(loadAll);
   font-weight: 600;
 }
 
-.icon-btn {
+.gallery-panel-float-btn {
+  display: inline-flex;
+  height: 3rem;
+  width: 3rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 107, 255, 0.22);
+  background: linear-gradient(135deg, rgba(23, 107, 255, 0.14), rgba(255, 255, 255, 0.96));
+  color: #176bff;
+  box-shadow: 0 18px 38px rgba(23, 107, 255, 0.18);
+  backdrop-filter: blur(18px);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.gallery-panel-float-btn:hover {
+  transform: translateY(-1px) scale(1.03);
+  border-color: rgba(23, 107, 255, 0.34);
+  box-shadow: 0 22px 44px rgba(23, 107, 255, 0.24);
+}
+
+.gallery-panel-edge-btn {
+  border-radius: 0 999px 999px 0;
+  border-left: 0;
+}
+
+.gallery-panel-edge-btn-right {
+  border-radius: 999px 0 0 999px;
+  border-left: 1px solid rgba(23, 107, 255, 0.22);
+  border-right: 0;
+}
+
+.prompt-expand-btn {
+  display: inline-flex;
   height: 2.25rem;
   width: 2.25rem;
-  padding: 0;
+  align-items: center;
+  justify-content: center;
   border-radius: 0.75rem;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  color: #1e293b;
+  transition: background 0.16s ease;
+}
+.prompt-expand-btn:hover {
+  background: white;
+}
+
+.gallery-artifact-nav {
+  pointer-events: none;
+}
+
+.gallery-artifact-nav-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0 1.1rem;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(18px);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease, filter 0.16s ease;
+}
+
+.gallery-artifact-nav-prev {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+}
+
+.gallery-artifact-nav-next {
+  background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+}
+
+.gallery-artifact-nav-btn:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.03);
+  filter: brightness(1.05);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.22);
+}
+
+.gallery-artifact-nav-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  filter: grayscale(0.2);
 }
 
 .model-switcher-trigger {
