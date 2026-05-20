@@ -5,3 +5,6 @@ src-tauri/target/
 *.log
 samimage-runtime-check.png
 
+.worktrees/
+.bitfun/
+/.bitfun/search/flashgrep-index/

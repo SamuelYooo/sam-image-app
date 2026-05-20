@@ -161,3 +161,82 @@ export function distributeOverlayCenters(values: number[], start: number, end: n
   const step = (end - start) / (values.length - 1);
   return values.map((_, index) => start + step * index);
 }
+
+// ── Gallery Filter System ───────────────────────────────────────────────────
+
+export interface GalleryFilterAdjustments {
+  brightness: number;   // 默认 100，范围 50-150
+  contrast: number;     // 默认 100，范围 50-150
+  saturation: number;   // 默认 100，范围 0-200
+  temperature: number;  // 默认 0，范围 -100 到 100
+  hue: number;          // 默认 0，范围 -180 到 180
+  vignette: number;     // 默认 0，范围 0-100
+}
+
+export const defaultGalleryFilters: GalleryFilterAdjustments = {
+  brightness: 100,
+  contrast: 100,
+  saturation: 100,
+  temperature: 0,
+  hue: 0,
+  vignette: 0,
+};
+
+export interface GalleryFilterPreset {
+  name: string;
+  filters: GalleryFilterAdjustments;
+}
+
+export const galleryFilterPresets: GalleryFilterPreset[] = [
+  { name: '原图',      filters: { brightness: 100, contrast: 100, saturation: 100, temperature: 0,  hue: 0,   vignette: 0  } },
+  { name: '暖调',      filters: { brightness: 100, contrast: 105, saturation: 115, temperature: 15,  hue: 0,   vignette: 0  } },
+  { name: '冷调',      filters: { brightness: 100, contrast: 105, saturation: 100, temperature: -15, hue: 0,   vignette: 0  } },
+  { name: '复古',      filters: { brightness: 95,  contrast: 110, saturation: 85,  temperature: 5,   hue: -10, vignette: 20 } },
+  { name: '黑白',      filters: { brightness: 100, contrast: 120, saturation: 0,   temperature: 0,   hue: 0,   vignette: 15 } },
+  { name: '鲜明',      filters: { brightness: 105, contrast: 115, saturation: 120, temperature: 0,   hue: 0,   vignette: 0  } },
+];
+
+export function normalizeGalleryFilters(filters: Partial<GalleryFilterAdjustments>): GalleryFilterAdjustments {
+  return {
+    brightness: Math.max(50, Math.min(150, filters.brightness ?? 100)),
+    contrast:   Math.max(50, Math.min(150, filters.contrast ?? 100)),
+    saturation: Math.max(0,   Math.min(200, filters.saturation ?? 100)),
+    temperature: Math.max(-100, Math.min(100, filters.temperature ?? 0)),
+    hue:        Math.max(-180, Math.min(180, filters.hue ?? 0)),
+    vignette:   Math.max(0,   Math.min(100, filters.vignette ?? 0)),
+  };
+}
+
+export function cssFilterForGalleryFilters(filters: GalleryFilterAdjustments): string {
+  const parts: string[] = [];
+  if (filters.brightness !== 100) parts.push(`brightness(${filters.brightness}%)`);
+  if (filters.contrast !== 100)   parts.push(`contrast(${filters.contrast}%)`);
+  if (filters.saturation !== 100) parts.push(`saturate(${filters.saturation}%)`);
+  if (filters.temperature !== 0)   parts.push(`sepia(${Math.abs(filters.temperature) / 100})`);
+  if (filters.hue !== 0)           parts.push(`hue-rotate(${filters.hue}deg)`);
+  if (filters.vignette > 0) {
+    const pct = filters.vignette / 100;
+    parts.push(`drop-shadow(0 0 ${Math.round(pct * 20)}px rgba(0,0,0,${pct.toFixed(2)}))`);
+  }
+  return parts.length > 0 ? parts.join(' ') : 'none';
+}
+
+export function canvasFilterForGalleryFilters(filters: GalleryFilterAdjustments): string {
+  const parts: string[] = [];
+  if (filters.brightness !== 100) parts.push(`brightness(${filters.brightness / 100})`);
+  if (filters.contrast !== 100)   parts.push(`contrast(${filters.contrast / 100})`);
+  if (filters.saturation !== 100) parts.push(`saturate(${filters.saturation / 100})`);
+  if (filters.hue !== 0)           parts.push(`hue-rotate(${filters.hue}deg)`);
+  return parts.length > 0 ? parts.join(' ') : 'none';
+}
+
+export function hasActiveGalleryFilters(filters: GalleryFilterAdjustments): boolean {
+  return (
+    filters.brightness !== 100 ||
+    filters.contrast !== 100 ||
+    filters.saturation !== 100 ||
+    filters.temperature !== 0 ||
+    filters.hue !== 0 ||
+    filters.vignette > 0
+  );
+}

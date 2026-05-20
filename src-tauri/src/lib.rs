@@ -157,12 +157,103 @@ fn ensure_image_extension(file_name: &str, extension: &str) -> String {
     }
 }
 
+#[tauri::command]
+async fn save_images_as_zip(
+    file_name: String,
+    files: Vec<(String, Vec<u8>)>,
+) -> Result<SaveImageResult, String> {
+    if files.is_empty() {
+        return Err("没有可打包的图片数据".to_string());
+    }
+
+    let zip_name = ensure_zip_extension(&file_name);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let dialog = rfd::FileDialog::new()
+            .set_title("保存分镜 ZIP")
+            .set_file_name(&zip_name)
+            .add_filter("ZIP 压缩包", &["zip"]);
+
+        let Some(path) = dialog.save_file() else {
+            return Ok(SaveImageResult { path: None });
+        };
+
+        let bytes = build_zip_bytes(&files).map_err(|err| format!("打包 ZIP 失败: {err}"))?;
+        std::fs::write(&path, bytes).map_err(|err| format!("保存 ZIP 失败: {err}"))?;
+        Ok(SaveImageResult {
+            path: Some(path.to_string_lossy().to_string()),
+        })
+    })
+    .await
+    .map_err(|err| format!("打开保存窗口失败: {err}"))?
+}
+
+fn ensure_zip_extension(file_name: &str) -> String {
+    let trimmed = file_name.trim();
+    let base = if trimmed.is_empty() { "SamImage-storyboard" } else { trimmed };
+    if base.to_ascii_lowercase().ends_with(".zip") {
+        base.to_string()
+    } else {
+        format!("{base}.zip")
+    }
+}
+
+fn build_zip_bytes(files: &[(String, Vec<u8>)]) -> Result<Vec<u8>, String> {
+    use std::io::{Cursor, Write};
+    use zip::write::SimpleFileOptions;
+    use zip::CompressionMethod;
+
+    let mut buffer = Cursor::new(Vec::<u8>::new());
+    {
+        let mut writer = zip::ZipWriter::new(&mut buffer);
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .unix_permissions(0o644);
+        let mut seen = std::collections::HashSet::new();
+        for (raw_name, data) in files {
+            if data.is_empty() {
+                return Err(format!("{raw_name} 没有可写入的数据"));
+            }
+            let entry_name = unique_zip_entry_name(raw_name, &mut seen);
+            writer
+                .start_file(&entry_name, options)
+                .map_err(|err| err.to_string())?;
+            writer.write_all(data).map_err(|err| err.to_string())?;
+        }
+        writer.finish().map_err(|err| err.to_string())?;
+    }
+    Ok(buffer.into_inner())
+}
+
+fn unique_zip_entry_name(raw_name: &str, seen: &mut std::collections::HashSet<String>) -> String {
+    let trimmed = raw_name.trim();
+    let base = if trimmed.is_empty() { "image.png" } else { trimmed };
+    if !seen.contains(base) {
+        seen.insert(base.to_string());
+        return base.to_string();
+    }
+    let (stem, ext) = match base.rfind('.') {
+        Some(index) if index > 0 => (&base[..index], &base[index..]),
+        _ => (base, ""),
+    };
+    let mut counter: u32 = 2;
+    loop {
+        let candidate = format!("{stem}-{counter}{ext}");
+        if !seen.contains(&candidate) {
+            seen.insert(candidate.clone());
+            return candidate;
+        }
+        counter += 1;
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             save_image_with_dialog,
-            save_images_to_directory
+            save_images_to_directory,
+            save_images_as_zip
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -179,7 +270,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_image_extension, normalize_image_extension, wrap_png_as_ico};
+    use super::{
+        build_zip_bytes, ensure_image_extension, ensure_zip_extension, normalize_image_extension,
+        unique_zip_entry_name, wrap_png_as_ico,
+    };
 
     #[test]
     fn accepts_supported_image_extensions() {
@@ -219,5 +313,43 @@ mod tests {
         assert_eq!(ico[6], 1); // width = 1
         assert_eq!(ico[7], 1); // height = 1
         assert_eq!(&ico[14..18], &((png.len() as u32).to_le_bytes())); // data size
+    }
+
+    #[test]
+    fn ensures_zip_extension() {
+        assert_eq!(ensure_zip_extension("storyboard"), "storyboard.zip");
+        assert_eq!(ensure_zip_extension("storyboard.zip"), "storyboard.zip");
+        assert_eq!(ensure_zip_extension("  "), "SamImage-storyboard.zip");
+    }
+
+    #[test]
+    fn deduplicates_zip_entry_names() {
+        let mut seen = std::collections::HashSet::new();
+        assert_eq!(unique_zip_entry_name("a.png", &mut seen), "a.png");
+        assert_eq!(unique_zip_entry_name("a.png", &mut seen), "a-2.png");
+        assert_eq!(unique_zip_entry_name("a.png", &mut seen), "a-3.png");
+        assert_eq!(unique_zip_entry_name("noext", &mut seen), "noext");
+        assert_eq!(unique_zip_entry_name("noext", &mut seen), "noext-2");
+    }
+
+    #[test]
+    fn build_zip_contains_entries() {
+        let files = vec![
+            ("master.png".to_string(), b"hello-master".to_vec()),
+            ("shot-01.png".to_string(), b"hello-shot-01".to_vec()),
+        ];
+        let bytes = build_zip_bytes(&files).unwrap();
+        // Local file header signature is "PK\x03\x04"
+        assert_eq!(&bytes[0..4], b"PK\x03\x04");
+        let cursor = std::io::Cursor::new(bytes);
+        let mut archive = zip::ZipArchive::new(cursor).unwrap();
+        assert_eq!(archive.len(), 2);
+        let names: Vec<_> = archive.file_names().map(|name| name.to_string()).collect();
+        assert!(names.iter().any(|name| name == "master.png"));
+        assert!(names.iter().any(|name| name == "shot-01.png"));
+        let mut master = archive.by_name("master.png").unwrap();
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut master, &mut buf).unwrap();
+        assert_eq!(buf, b"hello-master");
     }
 }

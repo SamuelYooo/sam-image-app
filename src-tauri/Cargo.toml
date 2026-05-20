@@ -22,10 +22,11 @@ async-trait = "0.1"
 axum = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+base64 = "0.22"
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 thiserror = "1"
@@ -34,3 +35,4 @@ tower-http = { version = "0.6", features = ["cors"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 rfd = "0.15"
 urlencoding = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }

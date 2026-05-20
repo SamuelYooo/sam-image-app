@@ -46,6 +46,20 @@ describe('ui component contracts', () => {
     expect(source).toContain('ui-field--textarea');
   });
 
+  it('supports grouped select options for media size presets', () => {
+    const selectSource = readSource('components/ui/UiSelect.vue');
+    const appSource = readSource('App.vue');
+
+    expect(selectSource).toContain('interface SelectOptionGroup');
+    expect(selectSource).toContain('<optgroup');
+    expect(selectSource).toContain('isSelectOptionGroup');
+    expect(appSource).toContain('const sizePresetOptions = computed(() => [');
+    expect(appSource).toContain("label: '微信 / 公众号'");
+    expect(appSource).toContain("label: '小红书'");
+    expect(appSource).toContain("label: '抖音'");
+    expect(appSource).not.toContain('imageSizePresetGroups.flatMap');
+  });
+
   it('uses shared controls for gallery history template iconfont and model config actions', () => {
     const source = readSource('App.vue');
 
@@ -68,5 +82,50 @@ describe('ui component contracts', () => {
     const source = readSource('App.vue');
 
     expect(source).not.toContain('style="overflow:visible;"');
+  });
+
+  it('keeps SamTo image bottom workspace in stable two-column layout', () => {
+    const source = readSource('App.vue');
+
+    expect(source).toContain('grid h-[54vh] grid-cols-[minmax(0,1fr)_360px]');
+    expect(source).toContain('row-span-2 min-h-0 overflow-auto rounded-2xl p-4');
+    expect(source).toContain('grid grid-cols-[minmax(0,1fr)_80px]');
+    expect(source).toContain('v-if="isStoryboardMode" class="mt-3 flex items-center gap-3"');
+  });
+
+  it('keeps SamTo batch controls inside the left scroll column', () => {
+    const source = readSource('App.vue');
+    const leftColumnStart = source.indexOf('<div class="thin-scrollbar grid min-h-0 gap-4 overflow-auto pr-1">');
+    const referenceColumnStart = source.indexOf('<section class="glass-panel thin-scrollbar row-span-2');
+    const leftColumnSource = source.slice(leftColumnStart, referenceColumnStart);
+
+    expect(leftColumnStart).toBeGreaterThan(-1);
+    expect(referenceColumnStart).toBeGreaterThan(leftColumnStart);
+    expect(leftColumnSource).toContain('<section v-if="isBatchOpen"');
+  });
+
+  it('completes gallery filtering and visual filter controls', () => {
+    const source = readSource('App.vue');
+
+    expect(source).toContain('gallerySearchQuery');
+    expect(source).toContain('galleryTypeFilterOptions');
+    expect(source).toContain('galleryTypeFilter');
+    expect(source).toContain('galleryVisualFilters');
+    expect(source).toContain('selectedGalleryFilterPreset');
+    expect(source).toContain('galleryPreviewFilterStyle');
+    expect(source).toContain('galleryFilteredArtifacts');
+    expect(source).toContain('视觉滤镜');
+    expect(source).toContain('清空筛选');
+    expect(source).toContain(':style="galleryPreviewFilterStyle"');
+  });
+
+  it('applies gallery visual filters during export and uses unified layer delete buttons', () => {
+    const source = readSource('App.vue');
+
+    expect(source).toContain('canvasFilterForGalleryFilters(galleryVisualFilters.value)');
+    expect(source).toContain('ctx.filter = canvasFilterForGalleryFilters(galleryVisualFilters.value)');
+    expect(source).toContain('hasActiveGalleryFilters(galleryVisualFilters.value)');
+    expect(source).toContain('layer-delete-btn');
+    expect(source).toContain('@click.stop="removeOverlay(overlay.id)"');
   });
 });

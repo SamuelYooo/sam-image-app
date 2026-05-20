@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SamImage",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "identifier": "xyz.samuel.app",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://127.0.0.1:1420",
+    "devUrl": "http://127.0.0.1:2001",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },

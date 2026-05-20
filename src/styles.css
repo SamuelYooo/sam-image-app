@@ -1,27 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  color: #1e2428;
-  background: #eef1f4;
+  /* Kraken Design System - Light Theme */
+  /* Primary */
+  --purple:        #7132f5;
+  --purple-dark:    #5741d8;
+  --purple-deep:    #5b1ecf;
+  --purple-subtle:  rgba(133, 91, 251, 0.16);
+  /* Neutral */
+  --near-black:     #101114;
+  --cool-gray:      #686b82;
+  --silver-blue:    #9497a9;
+  --border-gray:    #dedee5;
+  /* Semantic */
+  --green:          #149e61;
+  --green-text:     #026b3f;
+  --green-subtle:   rgba(20, 158, 97, 0.16);
+  --red:            #dc2626;
+  --red-text:       #b91c1c;
+  --red-subtle:     rgba(220, 38, 38, 0.10);
+
+  /* App-level aliases (backwards compatible) */
+  --ink:    #101114;
+  --muted:  #686b82;
+  --line:   rgba(104, 107, 130, 0.12);
+  --panel:  rgba(255, 255, 255, 0.78);
+  --panel-solid: #ffffff;
+
+  color: #101114;
+  background: #ffffff;
   font-family:
-    "Aptos",
-    "Segoe UI Variable",
-    "Segoe UI",
+    "IBM Plex Sans",
     "PingFang SC",
     "Microsoft YaHei",
+    "Helvetica Neue",
+    Helvetica,
+    Arial,
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --ink: #1e2428;
-  --muted: #65717b;
-  --line: rgba(31, 41, 48, 0.1);
-  --panel: rgba(255, 255, 255, 0.78);
-  --panel-solid: #ffffff;
-  --blue: #176bff;
-  --teal: #0f9f8f;
-  --amber: #c77911;
-  --red: #d64545;
 }
 
 * {
@@ -33,10 +51,7 @@ body {
   min-width: 1100px;
   min-height: 100vh;
   overflow: hidden;
-  background:
-    linear-gradient(120deg, rgba(23, 107, 255, 0.1), transparent 34%),
-    linear-gradient(250deg, rgba(15, 159, 143, 0.14), transparent 38%),
-    linear-gradient(180deg, #f7f8fa 0%, #eef2f4 46%, #e3e8ec 100%);
+  background: #ffffff;
 }
 
 button,
@@ -50,6 +65,72 @@ button {
   cursor: pointer;
 }
 
+/* ── Buttons ─────────────────────────────────────────────── */
+
+/* Primary CTA — Kraken Purple */
+.ui-button--primary,
+.primary-btn {
+  color: #ffffff;
+  background: #7132f5;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+.ui-button--primary:hover:not(:disabled),
+.primary-btn:hover:not(:disabled) {
+  background: #5b1ecf;
+}
+
+/* Outlined — Purple border */
+.ui-button--secondary,
+.secondary-btn {
+  color: #5741d8;
+  background: #ffffff;
+  border: 1px solid #5741d8;
+}
+
+.ui-button--secondary:hover:not(:disabled),
+.secondary-btn:hover:not(:disabled) {
+  background: var(--purple-subtle);
+}
+
+/* Subtle — 16% purple bg */
+.ui-button--subtle {
+  color: #7132f5;
+  background: var(--purple-subtle);
+  border: 1px solid transparent;
+}
+
+.ui-button--subtle:hover:not(:disabled) {
+  background: rgba(133, 91, 251, 0.25);
+}
+
+/* Ghost */
+.ui-button--ghost {
+  color: var(--cool-gray);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.ui-button--ghost:hover:not(:disabled) {
+  background: rgba(104, 107, 130, 0.08);
+  color: #101114;
+}
+
+/* Danger */
+.ui-button--danger,
+.icon-danger-btn {
+  color: #ffffff;
+  background: #dc2626;
+  border: 1px solid transparent;
+}
+
+.ui-button--danger:hover:not(:disabled),
+.icon-danger-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+/* Base .ui-button shared rules */
 .ui-button,
 .primary-btn,
 .secondary-btn {
@@ -59,8 +140,7 @@ button {
   gap: 0.5rem;
   min-height: 2.5rem;
   padding: 0.65rem 1rem;
-  border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 12px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -80,62 +160,9 @@ button {
   opacity: 0.56;
 }
 
-.ui-button--primary,
-.primary-btn {
-  color: #ffffff;
-  background: linear-gradient(180deg, #2d80ff 0%, #176bff 100%);
-  box-shadow: 0 8px 20px rgba(23, 107, 255, 0.22);
-}
-
-.ui-button--primary:hover:not(:disabled),
-.primary-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, #3a8aff 0%, #256fff 100%);
-}
-
-.ui-button--secondary,
-.secondary-btn {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(31, 41, 48, 0.12);
-  box-shadow: 0 8px 20px rgba(42, 54, 68, 0.08);
-}
-
-.ui-button--secondary:hover:not(:disabled),
-.secondary-btn:hover:not(:disabled) {
-  background: #ffffff;
-  border-color: rgba(31, 41, 48, 0.18);
-}
-
-.ui-button--subtle {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.58);
-  border-color: rgba(31, 41, 48, 0.08);
-}
-
-.ui-button--subtle:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.82);
-}
-
-.ui-button--danger {
-  color: #ffffff;
-  background: linear-gradient(180deg, #ea5d5d 0%, #d64545 100%);
-  box-shadow: 0 8px 20px rgba(214, 69, 69, 0.22);
-}
-
-.ui-button--danger:hover:not(:disabled) {
-  background: linear-gradient(180deg, #ef6a6a 0%, #db4f4f 100%);
-}
-
-.ui-button--ghost {
-  color: var(--ink);
-  background: transparent;
-}
-
-.ui-button--ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.6);
-}
-
-.ui-button--sm {
+/* Size variants */
+.ui-button--sm,
+.primary-btn--sm {
   min-height: 2rem;
   padding: 0.4rem 0.75rem;
   border-radius: 12px;
@@ -153,17 +180,18 @@ button {
   font-size: 1rem;
 }
 
+/* ── Icon Buttons ────────────────────────────────────────── */
 .ui-icon-button,
-.icon-btn,
-.icon-danger-btn {
+.icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--border-gray);
   border-radius: 12px;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.86);
+  color: #101114;
+  background: #ffffff;
+  box-shadow: rgba(0, 0, 0, 0.03) 0px 4px 24px;
   transition:
     background-color 0.16s ease,
     border-color 0.16s ease,
@@ -172,38 +200,50 @@ button {
     transform 0.16s ease;
 }
 
+.ui-icon-button:hover:not(:disabled),
+.icon-btn:hover:not(:disabled) {
+  border-color: #5741d8;
+  color: #5741d8;
+  box-shadow: rgba(0, 0, 0, 0.03) 0px 4px 24px;
+}
+
 .ui-icon-button:disabled,
-.icon-btn:disabled,
-.icon-danger-btn:disabled {
+.icon-btn:disabled {
   cursor: not-allowed;
   opacity: 0.56;
 }
 
-.ui-icon-button--default,
-.icon-btn {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.86);
-  border-color: rgba(31, 41, 48, 0.08);
+/* Icon button variants */
+.ui-icon-button--default {
+  color: #101114;
+  background: #ffffff;
+  border-color: var(--border-gray);
 }
 
 .ui-icon-button--primary {
   color: #ffffff;
-  background: linear-gradient(180deg, #2d80ff 0%, #176bff 100%);
-  box-shadow: 0 8px 20px rgba(23, 107, 255, 0.18);
+  background: #7132f5;
+  border-color: #7132f5;
 }
 
-.ui-icon-button--danger,
-.icon-danger-btn {
+.ui-icon-button--primary:hover:not(:disabled) {
+  background: #5b1ecf;
+}
+
+.ui-icon-button--danger {
   color: #ffffff;
-  background: linear-gradient(180deg, #ea5d5d 0%, #d64545 100%);
-  box-shadow: 0 8px 20px rgba(214, 69, 69, 0.18);
+  background: #dc2626;
+  border-color: #dc2626;
 }
 
 .ui-icon-button--ghost {
-  color: var(--ink);
+  color: #686b82;
   background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
+/* Sizes */
 .ui-icon-button--sm {
   width: 2rem;
   height: 2rem;
@@ -219,32 +259,31 @@ button {
   height: 3rem;
 }
 
+/* ── Form Fields ─────────────────────────────────────────── */
 .ui-field,
 .field-input {
   width: 100%;
   min-width: 0;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid rgba(31, 41, 48, 0.12);
-  border-radius: 14px;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.66);
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-gray);
+  border-radius: 12px;
+  color: #101114;
+  background: #ffffff;
   transition:
     border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    background-color 0.16s ease;
+    box-shadow 0.16s ease;
 }
 
 .ui-field::placeholder,
 .field-input::placeholder {
-  color: rgba(101, 113, 123, 0.82);
+  color: #9497a9;
 }
 
 .ui-field:focus,
 .field-input:focus {
   outline: none;
-  border-color: rgba(23, 107, 255, 0.45);
-  box-shadow: 0 0 0 3px rgba(23, 107, 255, 0.12);
+  border-color: #7132f5;
+  box-shadow: 0 0 0 1px #7132f5;
   background: #ffffff;
 }
 
@@ -253,17 +292,43 @@ button {
   min-height: 7.5rem;
 }
 
+/* ── Selects ─────────────────────────────────────────────── */
 .ui-select {
   width: 100%;
   min-width: 0;
-  border: 1px solid rgba(31, 41, 48, 0.12);
-  border-radius: 14px;
-  padding: 0.7rem 0.9rem;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border-gray);
+  border-radius: 12px;
+  padding: 0.75rem 2.5rem 0.75rem 1rem;
+  color: #101114;
+  background-color: #ffffff;
+  /* Replace native arrow with custom purple chevron */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23686b82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.ui-select:hover:not(:disabled) {
+  border-color: #5741d8;
+}
+
+.ui-select:focus {
+  outline: none;
+  border-color: #7132f5;
+  box-shadow: 0 0 0 1px #7132f5;
+}
+
+.ui-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .ui-select--fit {
@@ -280,15 +345,16 @@ button {
   white-space: nowrap;
 }
 
+/* ── Cards / Panels ─────────────────────────────────────── */
 .glass-panel {
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.74);
-  box-shadow: 0 18px 60px rgba(42, 54, 68, 0.12);
-  backdrop-filter: blur(22px) saturate(170%);
+  border: 1px solid var(--border-gray);
+  background: #ffffff;
+  box-shadow: rgba(0, 0, 0, 0.03) 0px 4px 24px;
 }
 
+/* ── Scrollbars ──────────────────────────────────────────── */
 .thin-scrollbar {
-  scrollbar-color: rgba(54, 65, 78, 0.28) transparent;
+  scrollbar-color: rgba(104, 107, 130, 0.28) transparent;
   scrollbar-width: thin;
 }
 
@@ -298,7 +364,6 @@ button {
 }
 
 .thin-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(54, 65, 78, 0.24);
+  background: rgba(104, 107, 130, 0.24);
   border-radius: 999px;
 }
-

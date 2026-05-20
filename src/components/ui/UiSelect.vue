@@ -10,9 +10,16 @@ interface SelectOption {
   disabled?: boolean;
 }
 
+interface SelectOptionGroup {
+  label: string;
+  options: SelectOption[];
+}
+
+type SelectItem = SelectOption | SelectOptionGroup;
+
 interface Props {
   modelValue?: string | number | boolean;
-  options: SelectOption[];
+  options: SelectItem[];
   layout?: SelectLayout;
   disabled?: boolean;
   title?: string;
@@ -30,10 +37,12 @@ const emit = defineEmits<{
 
 const classes = computed(() => [
   'ui-select',
-  'ui-select--fit',
-  'ui-select--fluid',
   `ui-select--${props.layout}`,
 ]);
+
+function isSelectOptionGroup(item: SelectItem): item is SelectOptionGroup {
+  return 'options' in item;
+}
 
 function onChange(event: Event) {
   const target = event.target as HTMLSelectElement | null;
@@ -50,14 +59,26 @@ function onChange(event: Event) {
     :title="props.title"
     @change="onChange"
   >
-    <option
-      v-for="option in props.options"
-      :key="String(option.value)"
-      :value="option.value"
-      :title="option.title ?? option.label"
-      :disabled="option.disabled"
-    >
-      {{ option.label }}
-    </option>
+    <template v-for="item in props.options" :key="item.label">
+      <optgroup v-if="isSelectOptionGroup(item)" :label="item.label">
+        <option
+          v-for="option in item.options"
+          :key="String(option.value)"
+          :value="option.value"
+          :title="option.title ?? option.label"
+          :disabled="option.disabled"
+        >
+          {{ option.label }}
+        </option>
+      </optgroup>
+      <option
+        v-else
+        :value="item.value"
+        :title="item.title ?? item.label"
+        :disabled="item.disabled"
+      >
+        {{ item.label }}
+      </option>
+    </template>
   </select>
 </template>

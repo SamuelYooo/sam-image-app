@@ -4,6 +4,7 @@ use crate::models::{
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use base64::Engine;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::time::Instant;
 
@@ -52,6 +53,10 @@ pub trait ImageAdapter: Send + Sync {
         generate_openai_compatible_image(profile, request).await
     }
 
+    async fn reverse_prompt(&self, profile: &ModelProfile, request: &GenerationRequest) -> Result<String> {
+        reverse_openai_compatible_chat(profile, request).await
+    }
+
     fn preset_models(&self) -> Vec<String> {
         Vec::new()
     }
@@ -82,6 +87,11 @@ pub async fn validate_model(
 pub async fn generate(profile: &ModelProfile, request: &GenerationRequest) -> Result<String> {
     let adapter = adapter_for(&profile.adapter)?;
     adapter.generate(profile, request).await
+}
+
+pub async fn reverse_prompt(profile: &ModelProfile, request: &GenerationRequest) -> Result<String> {
+    let adapter = adapter_for(&profile.adapter)?;
+    adapter.reverse_prompt(profile, request).await
 }
 
 pub async fn list_models(profile: &ModelProfile) -> Result<ModelListResult> {
@@ -218,23 +228,102 @@ struct ImageGenerationPayload<'a> {
 }
 
 #[derive(Serialize)]
-struct ImageEditPayload<'a> {
-    model: &'a str,
-    prompt: String,
-    images: &'a [String],
-    size: &'a str,
-    n: u8,
+struct ChatCompletionPayload {
+    model: String,
+    messages: Vec<ChatMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+}
+
+#[derive(Serialize)]
+struct ChatMessage {
+    role: String,
+    content: Vec<ChatContent>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ChatContent {
+    Text { text: String },
+    ImageUrl { image_url: ChatImageUrl },
+}
+
+#[derive(Serialize)]
+struct ChatImageUrl {
+    url: String,
 }
 
 #[derive(Deserialize)]
-struct ImageResponse {
-    data: Vec<ImageData>,
+struct ChatCompletionResponse {
+    choices: Vec<ChatChoice>,
 }
 
 #[derive(Deserialize)]
-struct ImageData {
-    b64_json: Option<String>,
-    url: Option<String>,
+struct ChatChoice {
+    message: ChatChoiceMessage,
+}
+
+#[derive(Deserialize)]
+struct ChatChoiceMessage {
+    content: Option<serde_json::Value>,
+}
+
+fn extract_chat_text(content: &serde_json::Value) -> Option<String> {
+    match content {
+        serde_json::Value::String(value) => Some(value.trim().to_string()),
+        serde_json::Value::Array(items) => {
+            let combined = items
+                .iter()
+                .filter_map(|item| item.get("text").and_then(|value| value.as_str()))
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if combined.is_empty() { None } else { Some(combined) }
+        }
+        _ => None,
+    }
+}
+
+fn extract_image_candidate(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(text) => normalize_image_string(text),
+        serde_json::Value::Array(items) => items.iter().find_map(extract_image_candidate),
+        serde_json::Value::Object(map) => {
+            if let Some(url) = map.get("url").and_then(|item| item.as_str()).and_then(normalize_image_string) {
+                return Some(url);
+            }
+            if let Some(url) = map.get("image_url").and_then(extract_image_candidate) {
+                return Some(url);
+            }
+            if let Some(b64) = map.get("b64_json").and_then(|item| item.as_str()) {
+                return Some(format!("data:image/png;base64,{}", b64.trim()));
+            }
+            if let Some(b64) = map.get("base64").and_then(|item| item.as_str()) {
+                return Some(format!("data:image/png;base64,{}", b64.trim()));
+            }
+            if let Some(data) = map.get("data").and_then(|item| item.as_str()) {
+                let mime = map
+                    .get("mime_type")
+                    .or_else(|| map.get("mimeType"))
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("image/png");
+                if mime.starts_with("image/") {
+                    return Some(format!("data:{mime};base64,{}", data.trim()));
+                }
+            }
+            map.values().find_map(extract_image_candidate)
+        }
+        _ => None,
+    }
+}
+
+fn normalize_image_string(text: &str) -> Option<String> {
+    let value = text.trim();
+    if value.starts_with("data:image/") || value.starts_with("http://") || value.starts_with("https://") {
+        return Some(value.to_string());
+    }
+    None
 }
 
 #[derive(Deserialize)]
@@ -267,13 +356,14 @@ async fn generate_openai_compatible_image(
         if request.reference_images.is_empty() {
             return Err(anyhow!("{} 模式需要至少一张参考图", request.mode.as_str()));
         }
-        http.json(&ImageEditPayload {
-            model: profile.model.trim(),
-            prompt,
-            images: &request.reference_images,
-            size: request.size.as_str(),
-            n: 1,
-        })
+        if matches!(request.mode, WorkMode::Blend) && request.reference_images.len() < 2 {
+            return Err(anyhow!("融合模式至少需要 2 张参考图"));
+        }
+        if matches!(profile.adapter, AdapterKind::OpenaiChat | AdapterKind::Gemini) {
+            http.json(&build_multimodal_chat_payload(profile, request, prompt))
+        } else {
+            return generate_openai_image_edit(profile, request, prompt).await;
+        }
     } else {
         http.json(&ImageGenerationPayload {
             model: profile.model.trim(),
@@ -284,6 +374,114 @@ async fn generate_openai_compatible_image(
     };
 
     let response = http.send().await?;
+    parse_image_response(response).await
+}
+
+async fn generate_openai_image_edit(
+    profile: &ModelProfile,
+    request: &GenerationRequest,
+    prompt: String,
+) -> Result<String> {
+    let endpoint = image_endpoint_for(profile, request);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(profile.timeout_sec))
+        .build()?;
+    let mut form = reqwest::multipart::Form::new()
+        .text("model", profile.model.trim().to_string())
+        .text("prompt", prompt)
+        .text("size", request.size.clone())
+        .text("n", "1");
+
+    for (index, source) in request.reference_images.iter().enumerate() {
+        let bytes = image_source_bytes(source).await?;
+        let part = reqwest::multipart::Part::bytes(bytes)
+            .file_name(format!("reference-{index}.png"))
+            .mime_str("image/png")?;
+        form = form.part("image[]", part);
+    }
+
+    let response = client
+        .post(endpoint)
+        .bearer_auth(first_api_key(&profile.api_key))
+        .multipart(form)
+        .send()
+        .await?;
+    parse_image_response(response).await
+}
+
+fn build_multimodal_chat_payload(
+    profile: &ModelProfile,
+    request: &GenerationRequest,
+    prompt: String,
+) -> ChatCompletionPayload {
+    let mut content = vec![ChatContent::Text { text: prompt }];
+    for image in &request.reference_images {
+        content.push(ChatContent::ImageUrl {
+            image_url: ChatImageUrl { url: image.clone() },
+        });
+    }
+    ChatCompletionPayload {
+        model: profile.model.trim().to_string(),
+        messages: vec![ChatMessage {
+            role: "user".to_string(),
+            content,
+        }],
+        temperature: Some(0.7),
+    }
+}
+
+async fn reverse_openai_compatible_chat(
+    profile: &ModelProfile,
+    request: &GenerationRequest,
+) -> Result<String> {
+    validate_common(profile)?;
+    if profile.api_key.trim().is_empty() {
+        return Err(anyhow!("缺少 API 密钥，无法调用反推接口"));
+    }
+    if request.reference_images.is_empty() {
+        return Err(anyhow!("反推模式至少需要 1 张参考图"));
+    }
+    let instruction = if request.prompt.trim().is_empty() {
+        "请分析参考图，输出一段可直接用于文生图模型的中文提示词。要求包含主体、场景、构图、光线、风格、材质和画面质量，不要解释过程。".to_string()
+    } else {
+        format!("{}\n\n请结合参考图，输出一段可直接用于文生图模型的中文提示词，不要解释过程。", request.prompt.trim())
+    };
+    let payload = build_multimodal_chat_payload(profile, request, instruction);
+    let base = profile.base_url.trim().trim_end_matches('/');
+    let endpoint = if profile.chat_endpoint.trim().is_empty() {
+        "/v1/chat/completions".to_string()
+    } else if profile.chat_endpoint.starts_with('/') {
+        profile.chat_endpoint.clone()
+    } else {
+        format!("/{}", profile.chat_endpoint)
+    };
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(profile.timeout_sec))
+        .build()?;
+    let response = client
+        .post(format!("{base}{endpoint}"))
+        .bearer_auth(first_api_key(&profile.api_key))
+        .json(&payload)
+        .send()
+        .await?;
+    let status = response.status();
+    let text = response.text().await?;
+    if !status.is_success() {
+        let message = serde_json::from_str::<ErrorResponse>(&text)
+            .ok()
+            .and_then(|body| body.error.and_then(|error| error.message))
+            .unwrap_or_else(|| text.chars().take(400).collect());
+        return Err(anyhow!("反推接口返回状态码 {status}: {message}"));
+    }
+    let body = serde_json::from_str::<ChatCompletionResponse>(&text)?;
+    body.choices
+        .into_iter()
+        .find_map(|choice| choice.message.content.and_then(|content| extract_chat_text(&content)))
+        .filter(|content| !content.is_empty())
+        .ok_or_else(|| anyhow!("反推接口没有返回提示词"))
+}
+
+async fn parse_image_response(response: reqwest::Response) -> Result<String> {
     let status = response.status();
     let text = response.text().await?;
     if !status.is_success() {
@@ -293,25 +491,47 @@ async fn generate_openai_compatible_image(
             .unwrap_or_else(|| text.chars().take(400).collect());
         return Err(anyhow!("图像生成接口返回状态码 {status}: {message}"));
     }
-
-    let body = serde_json::from_str::<ImageResponse>(&text)?;
-    let first = body
-        .data
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("图像生成接口没有返回图片数据"))?;
-    if let Some(b64) = first.b64_json {
-        return Ok(format!("data:image/png;base64,{b64}"));
+    if let Some(candidate) = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|value| extract_image_candidate(&value))
+    {
+        return Ok(candidate);
     }
-    if let Some(url) = first.url {
-        return Ok(url);
+    if let Ok(body) = serde_json::from_str::<ChatCompletionResponse>(&text) {
+        if let Some(value) = body
+            .choices
+            .into_iter()
+            .find_map(|choice| choice.message.content.and_then(|content| extract_chat_text(&content)))
+        {
+            return Err(anyhow!("多模态生成接口返回了文本而不是图片 URL 或 data URL: {}", value.chars().take(120).collect::<String>()));
+        }
     }
     Err(anyhow!("图像生成接口返回了未知图片格式"))
 }
 
+async fn image_source_bytes(source: &str) -> Result<Vec<u8>> {
+    if let Some((meta, data)) = source.split_once(',') {
+        if meta.starts_with("data:image/") {
+            return base64::engine::general_purpose::STANDARD
+                .decode(data.trim())
+                .map_err(|err| anyhow!("参考图 base64 解码失败: {err}"));
+        }
+    }
+    if source.starts_with("http://") || source.starts_with("https://") {
+        let response = reqwest::get(source).await?;
+        if !response.status().is_success() {
+            return Err(anyhow!("下载参考图失败: {}", response.status()));
+        }
+        return Ok(response.bytes().await?.to_vec());
+    }
+    Err(anyhow!("参考图只支持 data URL 或 http(s) URL"))
+}
+
 fn image_endpoint_for(profile: &ModelProfile, request: &GenerationRequest) -> String {
     let base = profile.base_url.trim().trim_end_matches('/');
-    let configured = if should_use_edit_endpoint(request) {
+    let configured = if matches!(profile.adapter, AdapterKind::OpenaiChat | AdapterKind::Gemini) {
+        profile.chat_endpoint.clone()
+    } else if should_use_edit_endpoint(request) {
         derive_edit_endpoint(&profile.image_endpoint)
     } else {
         profile.image_endpoint.clone()

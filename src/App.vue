@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import {
   Activity,
   AlertCircle,
@@ -39,6 +39,7 @@ import { UiButton, UiField, UiIconButton, UiSelect } from './components/ui';
 import type {
   AdapterInfo,
   Artifact,
+  ArtifactType,
   GenerationRequest,
   IconfontSearchItem,
   ModelListResult,
@@ -50,16 +51,23 @@ import type {
 import {
   buildDownloadName,
   buildIconFileName,
+  canvasFilterForGalleryFilters,
   clampOverlayBox,
   clampCropBox,
+  cssFilterForGalleryFilters,
+  defaultGalleryFilters,
   distributeOverlayCenters,
+  galleryFilterPresets,
+  hasActiveGalleryFilters,
   ICON_SIZES,
   type CropBox,
   type ExportFormat,
   type FontFamily,
+  type GalleryFilterAdjustments,
   type GalleryOverlay,
   type IconSize,
   type ImageOverlay,
+  normalizeGalleryFilters,
   normalizeIconSizes,
   normalizeTextOverlay,
   normalizeImageOverlay,
@@ -84,68 +92,6 @@ import {
 type PageKey = 'generate' | 'icons' | 'gallery' | 'history';
 
 const IMAGE_SIZE_MAX = 20480;
-const imageSizePresetGroups = [
-  {
-    label: '常用尺寸',
-    options: [
-      { value: '512x512', label: '512 × 512' },
-      { value: '768x768', label: '768 × 768' },
-      { value: '1024x1024', label: '1024 × 1024' },
-      { value: '1536x1536', label: '1536 × 1536' },
-      { value: '2048x2048', label: '2048 × 2048' },
-    ],
-  },
-  {
-    label: '微信公众号',
-    options: [
-      { value: '900x383', label: '大封面 900 × 383（2.35:1）' },
-      { value: '200x200', label: '小封面 200 × 200（1:1）' },
-    ],
-  },
-  {
-    label: '微信视频号',
-    options: [
-      { value: '1080x1260', label: '竖版 1080 × 1260（6:7）' },
-      { value: '1080x608', label: '横版 1080 × 608（16:9）' },
-    ],
-  },
-  {
-    label: '小红书图文',
-    options: [
-      { value: '1242x1660', label: '竖版 1242 × 1660（3:4）' },
-      { value: '1080x1080', label: '方版 1080 × 1080（1:1）' },
-      { value: '2560x1440', label: '横版 2560 × 1440（16:9）' },
-    ],
-  },
-  {
-    label: '小红书视频',
-    options: [
-      { value: '1080x1440', label: '竖版 1080 × 1440（3:4）' },
-      { value: '1920x1080', label: '横版 1920 × 1080（16:9）' },
-    ],
-  },
-  {
-    label: '抖音',
-    options: [
-      { value: '1125x633', label: '个人背景图 1125 × 633' },
-      { value: '1242x1660', label: '视频封面竖图 1242 × 1660（9:16 原始尺寸）' },
-      { value: '1080x608', label: '视频封面横图 1080 × 608' },
-    ],
-  },
-  {
-    label: '微博',
-    options: [
-      { value: '980x300', label: '主页封面 980 × 300' },
-      { value: '980x560', label: '头条封面 980 × 560' },
-      { value: '540x260', label: '焦点图片 540 × 260' },
-      { value: '800x2000', label: '长图 800 × 2000' },
-    ],
-  },
-  {
-    label: 'B站',
-    options: [{ value: '1146x717', label: '视频封面 1146 × 717' }],
-  },
-] as const;
 
 const appVersion = packageJson.version;
 const page = ref<PageKey>('generate');
@@ -157,17 +103,20 @@ const promptTemplates = ref<PromptTemplate[]>([]);
 const activeProfileId = ref('');
 const draft = reactive<ModelProfile>(defaultProfile());
 const prompt = ref('清晨的玻璃温室里，一台银色机器人正在修剪发光植物，电影感构图，高细节');
-const negativePrompt = ref('低清晰度，畸形，文字水印');
+const NEGATIVE_PROMPT_DEFAULT = '低清晰度，畸形，文字水印';
+const negativePrompt = ref(NEGATIVE_PROMPT_DEFAULT);
 const sizePreset = ref('1024x1024');
 const customSizeWidth = ref(1024);
 const customSizeHeight = ref(1024);
 const mode = ref<WorkMode>('txt2img');
-const seed = ref<number | undefined>(undefined);
+const seed = ref(1);
+const isStoryboardMode = ref(false);
+const storyboardCount = ref(0);
 const iconPrompt = ref('一个现代天气 App 图标，圆角方形图标，蓝色渐变背景，白色云朵和金色阳光，简洁、清晰、适合小尺寸');
 const iconNegativePrompt = ref('文字，水印，复杂背景，过多细节，模糊，低清晰度');
 const iconName = ref('weather-app');
 const iconStyle = ref('modern');
-const iconPrimaryColor = ref('#176bff');
+const iconPrimaryColor = ref('#7132f5');
 const iconBackground = ref<'transparent' | 'solid' | 'keep'>('keep');
 const selectedIconSizes = ref<number[]>([32, 64, 128, 256, 512]);
 const iconSourceArtifactId = ref('');
@@ -187,6 +136,10 @@ const modelSearch = ref('');
 const manualModelName = ref('');
 const galleryProfileFilter = ref('all');
 const galleryModeFilter = ref<'all' | WorkMode>('all');
+const galleryTypeFilter = ref<'all' | ArtifactType>('all');
+const gallerySearchQuery = ref('');
+const galleryVisualFilters = ref<GalleryFilterAdjustments>({ ...defaultGalleryFilters });
+const selectedGalleryFilterPreset = ref('原图');
 const selectedArtifactId = ref('');
 const isGalleryLeftCollapsed = ref(true);
 const isGalleryRightCollapsed = ref(true);
@@ -309,10 +262,65 @@ const modeOptions: Array<{ id: WorkMode; label: string; desc: string }> = [
   { id: 'reverse', label: '反推', desc: '图片理解与提示词' },
   { id: 'blend', label: '融合', desc: '多图参考混合' },
 ];
-const sizePresetOptions = [
-  ...imageSizePresetGroups.flatMap((group) => group.options.map((option) => ({ value: option.value, label: option.label, title: option.label }))),
-  { value: 'custom', label: '自定义尺寸', title: '自定义尺寸' },
-];
+const sizePresetOptions = computed(() => [
+  {
+    label: '常用尺寸',
+    options: [
+      { value: '512x512', label: '512 × 512', title: '512 × 512' },
+      { value: '768x768', label: '768 × 768', title: '768 × 768' },
+      { value: '1024x1024', label: '1024 × 1024', title: '1024 × 1024' },
+      { value: '1536x1536', label: '1536 × 1536', title: '1536 × 1536' },
+      { value: '2048x2048', label: '2048 × 2048', title: '2048 × 2048' },
+    ],
+  },
+  {
+    label: '微信 / 公众号',
+    options: [
+      { value: '900x383', label: '公众号大封面 900 × 383', title: '公众号大封面 900 × 383（2.35:1）' },
+      { value: '200x200', label: '公众号小封面 200 × 200', title: '公众号小封面 200 × 200（1:1）' },
+      { value: '1080x1260', label: '视频号竖版 1080 × 1260', title: '视频号竖版 1080 × 1260（6:7）' },
+      { value: '1080x608', label: '视频号横版 1080 × 608', title: '视频号横版 1080 × 608（16:9）' },
+    ],
+  },
+  {
+    label: '小红书',
+    options: [
+      { value: '1242x1660', label: '图文竖版 1242 × 1660', title: '小红书图文竖版 1242 × 1660（3:4）' },
+      { value: '1080x1080', label: '图文方版 1080 × 1080', title: '小红书图文方版 1080 × 1080（1:1）' },
+      { value: '2560x1440', label: '图文横版 2560 × 1440', title: '小红书图文横版 2560 × 1440（16:9）' },
+      { value: '1080x1440', label: '视频竖版 1080 × 1440', title: '小红书视频竖版 1080 × 1440（3:4）' },
+      { value: '1920x1080', label: '视频横版 1920 × 1080', title: '小红书视频横版 1920 × 1080（16:9）' },
+    ],
+  },
+  {
+    label: '抖音',
+    options: [
+      { value: '1125x633', label: '个人背景图 1125 × 633', title: '抖音个人背景图 1125 × 633' },
+      { value: '1242x1660', label: '视频封面竖图 1242 × 1660', title: '抖音视频封面竖图 1242 × 1660' },
+      { value: '1080x608', label: '视频封面横图 1080 × 608', title: '抖音视频封面横图 1080 × 608' },
+    ],
+  },
+  {
+    label: 'B站',
+    options: [
+      { value: '1146x717', label: '视频封面 1146 × 717', title: 'B站视频封面 1146 × 717' },
+      { value: '1920x1080', label: '高清横版 1920 × 1080', title: 'B站高清横版 1920 × 1080（16:9）' },
+    ],
+  },
+  {
+    label: '微博',
+    options: [
+      { value: '980x300', label: '主页封面 980 × 300', title: '微博主页封面 980 × 300' },
+      { value: '980x560', label: '头条封面 980 × 560', title: '微博头条封面 980 × 560' },
+      { value: '540x260', label: '焦点图片 540 × 260', title: '微博焦点图片 540 × 260' },
+      { value: '800x2000', label: '长图 800 × 2000', title: '微博长图 800 × 2000' },
+    ],
+  },
+  {
+    label: '自定义尺寸',
+    options: [{ value: 'custom', label: '自定义尺寸', title: '自定义尺寸' }],
+  },
+]);
 const iconStyleOptions = [
   { value: 'modern', label: '现代 App', title: '现代 App 风格' },
   { value: 'flat', label: '扁平矢量', title: '扁平矢量风格' },
@@ -334,6 +342,13 @@ const galleryProfileFilterOptions = computed(() => [
   { value: 'all', label: '全部作品集', title: '全部作品集' },
   ...profiles.value.map((profile) => ({ value: profile.id, label: profile.name, title: profileSummary(profile) })),
 ]);
+const galleryTypeFilterOptions = [
+  { value: 'all', label: '全部类型', title: '全部作品类型' },
+  { value: 'type_default', label: 'SamTo图', title: 'SamTo图作品' },
+  { value: 'type_icon', label: 'ICON', title: 'SamToICON作品' },
+  { value: 'type_movie', label: '分镜', title: '电影分镜作品' },
+];
+const galleryFilterPresetOptions = galleryFilterPresets.map((preset) => ({ value: preset.name, label: preset.name, title: preset.name }));
 const historyProfileFilterOptions = computed(() => [
   { value: 'all', label: '全部配置', title: '全部模型配置' },
   ...profiles.value.map((profile) => ({ value: profile.id, label: profile.name, title: profileSummary(profile) })),
@@ -403,22 +418,18 @@ const groupedModels = computed(() => {
   }
   return Array.from(groups.entries()).map(([name, models]) => ({ name, models }));
 });
-const galleryArtifacts = computed(() => {
+const galleryFilteredArtifacts = computed(() => {
+  const query = gallerySearchQuery.value.trim().toLowerCase();
   return artifacts.value.filter((artifact) => {
-    if (artifact.type === 'type_icon') return false;
     const profileMatches = galleryProfileFilter.value === 'all' || artifact.profileId === galleryProfileFilter.value;
     const modeMatches = galleryModeFilter.value === 'all' || artifact.mode === galleryModeFilter.value;
-    return profileMatches && modeMatches;
+    const typeMatches = galleryTypeFilter.value === 'all' || artifact.type === galleryTypeFilter.value;
+    const queryMatches = !query || artifact.prompt.toLowerCase().includes(query);
+    return profileMatches && modeMatches && typeMatches && queryMatches;
   });
 });
-const galleryIconArtifacts = computed(() => {
-  return artifacts.value.filter((artifact) => {
-    if (artifact.type !== 'type_icon') return false;
-    const profileMatches = galleryProfileFilter.value === 'all' || artifact.profileId === galleryProfileFilter.value;
-    const modeMatches = galleryModeFilter.value === 'all' || artifact.mode === galleryModeFilter.value;
-    return profileMatches && modeMatches;
-  });
-});
+const galleryArtifacts = computed(() => galleryFilteredArtifacts.value.filter((artifact) => artifact.type !== 'type_icon'));
+const galleryIconArtifacts = computed(() => galleryFilteredArtifacts.value.filter((artifact) => artifact.type === 'type_icon'));
 const galleryVisibleArtifacts = computed(() => [...galleryArtifacts.value, ...galleryIconArtifacts.value]);
 const selectedArtifact = computed(() => {
   const visible = galleryVisibleArtifacts.value;
@@ -450,6 +461,10 @@ const selectedProfileName = computed(() => {
 });
 const selectedOverlay = computed(() => galleryOverlays.value.find((overlay) => overlay.id === selectedOverlayId.value) ?? null);
 const selectedOverlays = computed(() => galleryOverlays.value.filter((overlay) => selectedOverlayIds.value.includes(overlay.id)));
+const galleryPreviewFilterStyle = computed(() => ({
+  filter: cssFilterForGalleryFilters(galleryVisualFilters.value),
+}));
+const galleryHasActiveFilters = computed(() => hasActiveGalleryFilters(galleryVisualFilters.value));
 const referenceSourceCount = computed(
   () => collectReferenceSources(referenceImageItems.value, referenceImageUrlDraft.value).length,
 );
@@ -459,8 +474,8 @@ const selectedOverlayKindLabel = computed(() => {
   if (selectedOverlay.value.kind === 'svg') return 'SVG';
   return '图片';
 });
-const defaultArtifacts = computed(() => artifacts.value.filter((a) => a.type === 'type_default'));
-const iconArtifacts = computed(() => artifacts.value.filter((a) => a.type === 'type_icon'));
+const defaultArtifacts = computed(() => galleryFilteredArtifacts.value.filter((a) => a.type === 'type_default'));
+const iconArtifacts = computed(() => galleryFilteredArtifacts.value.filter((a) => a.type === 'type_icon'));
 const historyArtifacts = computed(() => {
   return artifacts.value.filter((artifact) => {
     const profileMatches = historyProfileFilter.value === 'all' || artifact.profileId === historyProfileFilter.value;
@@ -484,6 +499,23 @@ function openGallery(artifactId?: string) {
   isGalleryLeftCollapsed.value = true;
   isGalleryRightCollapsed.value = true;
   page.value = 'gallery';
+}
+
+function clearGalleryFilters() {
+  galleryProfileFilter.value = 'all';
+  galleryModeFilter.value = 'all';
+  galleryTypeFilter.value = 'all';
+  gallerySearchQuery.value = '';
+}
+
+function applyGalleryFilterPreset(name: string) {
+  const preset = galleryFilterPresets.find((item) => item.name === name) ?? galleryFilterPresets[0];
+  selectedGalleryFilterPreset.value = preset.name;
+  galleryVisualFilters.value = normalizeGalleryFilters(preset.filters);
+}
+
+function resetGalleryVisualFilters() {
+  applyGalleryFilterPreset('原图');
 }
 
 function selectAdjacentGalleryArtifact(direction: 'previous' | 'next') {
@@ -1160,6 +1192,10 @@ async function polishPrompt() {
   }
 }
 
+function resetNegativePrompt() {
+  negativePrompt.value = NEGATIVE_PROMPT_DEFAULT;
+}
+
 async function polishIconPrompt() {
   if (isPolishingIcon.value || !iconPrompt.value.trim()) return;
   isPolishingIcon.value = true;
@@ -1542,7 +1578,7 @@ async function addReferenceFiles(files: File[], kind: 'file' | 'paste') {
   const rejected = files.filter((file) => !isImageMime(file.type));
 
   if (rejected.length > 0) {
-      referenceNotice.value = `已忽略 ${rejected.length} 个非图片文件：${rejected.map((file) => file.name || file.type || '未知文件').join('、')}`;
+    referenceNotice.value = `已忽略 ${rejected.length} 个非图片文件：${rejected.map((file) => file.name || file.type || '未知文件').join('、')}`;
   }
   if (imageFiles.length === 0) return;
 
@@ -1632,7 +1668,9 @@ async function renderArtifactBlob(imageUrl: string): Promise<Blob> {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
+  ctx.filter = canvasFilterForGalleryFilters(galleryVisualFilters.value);
   ctx.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+  ctx.filter = 'none';
   if (textOverlayEnabled.value) {
     await drawGalleryOverlays(ctx, canvas.width, canvas.height);
   }
@@ -1743,9 +1781,11 @@ onMounted(loadAll);
 
 <template>
   <main class="h-screen w-screen overflow-hidden text-[var(--ink)]">
-    <header class="fixed left-0 right-0 top-0 z-30 flex h-16 items-center border-b border-black/5 bg-white/75 px-6 backdrop-blur-2xl">
+    <header
+      class="fixed left-0 right-0 top-0 z-30 flex h-16 items-center border-b border-black/5 bg-white/75 px-6 backdrop-blur-2xl">
       <div class="flex items-center gap-3">
-        <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#176bff] text-white shadow-lg shadow-blue-500/25">
+        <div
+          class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7132f5] text-white shadow-lg shadow-purple-500/25">
           <Sparkles :size="18" />
         </div>
         <div>
@@ -1755,32 +1795,24 @@ onMounted(loadAll);
       </div>
 
       <nav class="ml-8 flex items-center gap-2 rounded-full border border-black/5 bg-white/60 p-1 text-xs">
-        <button
-          class="rounded-full px-4 py-2 transition"
+        <button class="rounded-full px-4 py-2 transition"
           :class="page === 'generate' ? 'bg-[#1e2428] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-white'"
-          @click="page = 'generate'"
-        >
+          @click="page = 'generate'">
           SamTo图
         </button>
-        <button
-          class="rounded-full px-4 py-2 transition"
+        <button class="rounded-full px-4 py-2 transition"
           :class="page === 'icons' ? 'bg-[#1e2428] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-white'"
-          @click="page = 'icons'"
-        >
+          @click="page = 'icons'">
           SamToICON
         </button>
-        <button
-          class="rounded-full px-4 py-2 transition"
+        <button class="rounded-full px-4 py-2 transition"
           :class="page === 'gallery' ? 'bg-[#1e2428] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-white'"
-          @click="openGallery()"
-        >
+          @click="openGallery()">
           我的作品集
         </button>
-        <button
-          class="rounded-full px-4 py-2 transition"
+        <button class="rounded-full px-4 py-2 transition"
           :class="page === 'history' ? 'bg-[#1e2428] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-white'"
-          @click="page = 'history'"
-        >
+          @click="page = 'history'">
           历史
         </button>
       </nav>
@@ -1788,11 +1820,12 @@ onMounted(loadAll);
       <div class="ml-auto flex items-center gap-3">
         <div class="relative">
           <button class="model-switcher-trigger" @click="isModelSwitcherOpen = !isModelSwitcherOpen">
-            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#176bff]/10 text-[#176bff]">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#7132f5]/10 text-[#7132f5]">
               <Star :size="15" />
             </div>
             <div class="hidden min-w-0 text-left md:block">
-              <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+              <div
+                class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
                 主模型
                 <span v-if="activeProfile" class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
               </div>
@@ -1807,7 +1840,8 @@ onMounted(loadAll);
             <div class="mb-3 flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <h2 class="text-sm font-bold text-slate-900">模型配置</h2>
-                <p class="mt-0.5 truncate text-[11px] text-[var(--muted)]">{{ profiles.length }} 个配置 · 当前 {{ activeProfile?.name || '未选择' }}</p>
+                <p class="mt-0.5 truncate text-[11px] text-[var(--muted)]">{{ profiles.length }} 个配置 · 当前 {{
+                  activeProfile?.name || '未选择' }}</p>
               </div>
               <div class="flex items-center gap-1">
                 <button class="icon-btn h-8 w-8" title="新建配置" @click="newProfile">
@@ -1820,33 +1854,27 @@ onMounted(loadAll);
             </div>
 
             <div v-if="profiles.length > 0" class="model-switcher-list">
-              <button
-                v-for="profile in profiles"
-                :key="profile.id"
-                class="model-switcher-item"
+              <button v-for="profile in profiles" :key="profile.id" class="model-switcher-item"
                 :class="profile.id === activeProfileId ? 'is-active' : ''"
                 @click="renamingProfileId ? null : selectProfileFromHeader(profile.id)"
-                @dblclick.prevent="startRenameProfile(profile, $event)"
-              >
+                @dblclick.prevent="startRenameProfile(profile, $event)">
                 <div class="min-w-0 flex-1">
                   <div v-if="renamingProfileId === profile.id" class="flex items-center gap-1" @click.stop>
-                    <input
-                      v-model="renamingProfileName"
-                      type="text"
-                      class="min-w-0 flex-1 rounded border border-[#176bff] bg-white px-2 py-1 text-xs font-bold outline-none"
-                      @keydown.enter="finishRenameProfile"
-                      @keydown.esc="cancelRenameProfile"
-                      @blur="finishRenameProfile"
-                    />
+                    <input v-model="renamingProfileName" type="text"
+                      class="min-w-0 flex-1 rounded border border-[#7132f5] bg-white px-2 py-1 text-xs font-bold outline-none"
+                      @keydown.enter="finishRenameProfile" @keydown.esc="cancelRenameProfile"
+                      @blur="finishRenameProfile" />
                   </div>
                   <div v-else class="truncate text-sm font-bold text-slate-900">{{ profile.name }}</div>
-                  <div class="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-[var(--muted)]">{{ profileSummary(profile) }}</div>
+                  <div class="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-[var(--muted)]">{{
+                    profileSummary(profile) }}</div>
                 </div>
-                <Star v-if="profile.id === activeProfileId" :size="14" class="shrink-0 text-[#176bff]" />
+                <Star v-if="profile.id === activeProfileId" :size="14" class="shrink-0 text-[#7132f5]" />
               </button>
             </div>
 
-            <div v-else class="rounded-xl border border-dashed border-black/10 bg-slate-50 px-4 py-6 text-center text-xs text-[var(--muted)]">
+            <div v-else
+              class="rounded-xl border border-dashed border-black/10 bg-slate-50 px-4 py-6 text-center text-xs text-[var(--muted)]">
               还没有模型配置。点击下方按钮新建。
             </div>
 
@@ -1864,10 +1892,8 @@ onMounted(loadAll);
             </div>
           </section>
         </div>
-        <div
-          class="flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs"
-          :class="apiOnline ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'"
-        >
+        <div class="flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs"
+          :class="apiOnline ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'">
           <span class="h-2 w-2 rounded-full" :class="apiOnline ? 'bg-emerald-500' : 'bg-red-500'"></span>
           {{ apiOnline ? '本地 API 在线' : '本地 API 离线' }}
         </div>
@@ -1883,12 +1909,9 @@ onMounted(loadAll);
     </header>
 
     <section v-if="page === 'generate'" class="grid h-full grid-cols-[1fr_360px] gap-4 px-5 pb-5 pt-20">
-      <section class="relative overflow-hidden rounded-[22px] border border-white/80 bg-[#f7f9fb]/70 shadow-[0_18px_70px_rgba(42,54,68,0.14)]">
+      <section
+        class="relative overflow-hidden rounded-[22px] border border-white/80 bg-[#f7f9fb]/70 shadow-[0_18px_70px_rgba(42,54,68,0.14)]">
         <div class="absolute inset-0 canvas-grid"></div>
-        <svg class="absolute inset-0 h-full w-full">
-          <path d="M 200 188 C 370 188, 330 310, 494 310" class="connection-path" />
-          <path d="M 680 310 C 780 310, 738 188, 872 188" class="connection-path ready" />
-        </svg>
 
         <div class="absolute left-6 top-5 z-10 rounded-2xl bg-white/75 px-4 py-3 backdrop-blur-xl">
           <div class="flex items-center gap-2 text-sm font-semibold">
@@ -1916,178 +1939,189 @@ onMounted(loadAll);
                   <SlidersHorizontal :size="14" />
                 </button>
               </div>
-              <label class="mb-3 flex items-start gap-2 rounded-xl border border-black/5 bg-white/70 p-2.5 text-xs leading-5 text-[var(--muted)]">
-                <input v-model="textOverlaySafeTemplateMode" type="checkbox" class="mt-0.5 h-3.5 w-3.5 accent-[#176bff]" />
+              <label
+                class="mb-3 flex items-start gap-2 rounded-xl border border-black/5 bg-white/70 p-2.5 text-xs leading-5 text-[var(--muted)]">
+                <input v-model="textOverlaySafeTemplateMode" type="checkbox"
+                  class="mt-0.5 h-3.5 w-3.5 accent-[#7132f5]" />
                 应用模板时追加“中文文字后期添加”的提示，减少模型直接生成中文时出现乱码。
               </label>
 
-              <div v-if="promptTemplates.length === 0" class="rounded-xl border border-dashed border-black/10 bg-white/70 px-3 py-3 text-center text-xs text-[var(--muted)]">
+              <div v-if="promptTemplates.length === 0"
+                class="rounded-xl border border-dashed border-black/10 bg-white/70 px-3 py-3 text-center text-xs text-[var(--muted)]">
                 暂无提示词模板
               </div>
               <div v-else class="thin-scrollbar grid max-h-[340px] gap-2 overflow-auto pr-1">
-                <button
-                  v-for="template in promptTemplates"
-                  :key="template.id"
-                  class="template-list-btn"
-                  :title="template.prompt"
-                  @click="applyPromptTemplate(template)"
-                >
+                <button v-for="template in promptTemplates" :key="template.id" class="template-list-btn"
+                  :title="template.prompt" @click="applyPromptTemplate(template)">
                   <span class="flex items-center justify-between gap-2">
                     <span class="truncate font-bold">{{ template.title }}</span>
                     <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-[var(--muted)]">
                       {{ template.isBuiltin ? '内置' : template.category }}
                     </span>
                   </span>
-                  <span class="mt-1 line-clamp-2 text-xs font-medium leading-5 text-[var(--muted)]">{{ template.prompt }}</span>
+                  <span class="mt-1 line-clamp-2 text-xs font-medium leading-5 text-[var(--muted)]">{{ template.prompt
+                  }}</span>
                 </button>
               </div>
             </section>
           </div>
         </div>
 
-        <div class="absolute left-10 top-[138px] z-10 w-[300px] rounded-2xl border border-white/80 bg-white/85 p-4 shadow-xl shadow-slate-900/10 backdrop-blur-xl">
-          <div class="mb-3 flex items-center justify-between">
-            <div class="creative-tools-grid">
-              <span class="h-3 w-3 rounded-full bg-[#176bff]"></span>
-               <span class="text-sm font-semibold">主模型</span>
-             </div>
-             <span class="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-[var(--muted)]">已激活</span>
-          </div>
-          <p class="line-clamp-3 break-all text-xs leading-5 text-[var(--muted)]">{{ activeSummary }}</p>
-          <button class="mt-3 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50" @click="openModelConfigPage">
-             切换或配置模型
-          </button>
-        </div>
-
-        <div class="absolute left-[380px] top-[250px] z-10 w-[330px] rounded-2xl border border-white/80 bg-white/85 p-4 shadow-xl shadow-slate-900/10 backdrop-blur-xl">
-          <div class="mb-3 flex items-center justify-between">
-            <div class="creative-tools-grid">
-              <span class="h-3 w-3 rounded-full bg-[#0f9f8f]"></span>
-              <span class="text-sm font-semibold">{{ modeLabel(mode) }}</span>
+        <div class="absolute left-6 right-6 top-[128px] z-10 flex flex-row items-center">
+          <!-- 主模型 -->
+          <div
+            class="w-[220px] shrink-0 rounded-2xl border border-[#dedee5] bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+            <div class="mb-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="h-3 w-3 rounded-full bg-[#7132f5]"></span>
+                <span class="text-sm font-semibold">主模型</span>
+              </div>
+              <span class="rounded-full bg-purple-50 px-2 py-1 text-[11px] font-semibold text-[#7132f5]">已激活</span>
             </div>
-            <span class="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-[var(--muted)]">任务</span>
+            <p class="line-clamp-2 break-all text-xs leading-5 text-[var(--muted)]">{{ activeSummary }}</p>
+            <button
+              class="mt-3 rounded-xl border border-[#dedee5] bg-white px-3 py-2 text-xs font-semibold hover:border-[#7132f5] hover:text-[#7132f5]"
+              @click="openModelConfigPage">
+              切换配置
+            </button>
           </div>
-          <p class="line-clamp-4 text-xs leading-5 text-[var(--muted)]">{{ prompt || '等待输入提示词' }}</p>
-        </div>
 
-        <div class="absolute right-14 top-[138px] z-10 w-[300px] rounded-2xl border border-white/80 bg-white/85 p-4 shadow-xl shadow-slate-900/10 backdrop-blur-xl">
-          <div class="mb-3 flex items-center justify-between">
-            <div class="creative-tools-grid">
-              <span class="h-3 w-3 rounded-full bg-[#c77911]"></span>
-              <span class="text-sm font-semibold">作品入库</span>
+          <!-- 箭头：主模型 → 生图模式 -->
+          <div class="flex items-center justify-center shrink-0 px-6">
+            <svg width="72" height="16" viewBox="0 0 72 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="0" y1="8" x2="58" y2="8" stroke="#9497a9" stroke-width="2" stroke-linecap="round" />
+              <path d="M50 2L58 8L50 14" stroke="#9497a9" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" />
+            </svg>
+          </div>
+
+          <!-- 生图模式（居中） -->
+          <div
+            class="w-[220px] shrink-0 rounded-2xl border border-[#dedee5] bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+            <div class="mb-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="h-3 w-3 rounded-full bg-[#0f9f8f]"></span>
+                <span class="text-sm font-semibold">{{ modeLabel(mode) }}</span>
+              </div>
+              <span class="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-[#0f9f8f]">任务</span>
             </div>
-            <span class="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-[var(--muted)]">{{ artifacts.length }} 张</span>
+            <p class="line-clamp-3 text-xs leading-5 text-[var(--muted)]">{{ prompt || '等待输入提示词' }}</p>
           </div>
-          <p class="text-xs leading-5 text-[var(--muted)]">生成结果会保存到本地 SQLite，右侧作品集会即时展示。</p>
+
+          <!-- 箭头：生图模式 → 作品入库 -->
+          <div class="flex items-center justify-center shrink-0 px-6">
+            <svg width="72" height="16" viewBox="0 0 72 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="0" y1="8" x2="58" y2="8" stroke="#9497a9" stroke-width="2" stroke-linecap="round" />
+              <path d="M50 2L58 8L50 14" stroke="#9497a9" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" />
+            </svg>
+          </div>
+
+          <!-- 作品入库 -->
+          <div
+            class="w-[220px] shrink-0 rounded-2xl border border-[#dedee5] bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+            <div class="mb-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="h-3 w-3 rounded-full bg-[#c77911]"></span>
+                <span class="text-sm font-semibold">作品入库</span>
+              </div>
+              <span class="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-[#c77911]">{{
+                artifacts.length }} 张</span>
+            </div>
+            <p class="text-xs leading-5 text-[var(--muted)]">生成结果会保存到本地 SQLite，右侧作品集会即时展示。</p>
+          </div>
         </div>
 
-        <div class="absolute bottom-5 left-5 right-5 z-20 grid grid-cols-[1.2fr_0.8fr] gap-4">
-          <section class="glass-panel rounded-2xl p-4">
+        <div class="absolute bottom-5 left-5 right-5 z-20 grid h-[54vh] grid-cols-[minmax(0,1fr)_360px] gap-4">
+          <div class="thin-scrollbar grid min-h-0 gap-4 overflow-auto pr-1">
+            <section class="glass-panel rounded-2xl p-4">
             <div class="mb-3 flex items-start justify-between gap-4">
               <div class="min-w-0">
                 <h1 class="text-sm font-semibold">生成参数</h1>
-                <p class="mt-1 truncate text-xs text-[var(--muted)]">{{ activeProfile ? `使用 ${activeProfile.name}` : '尚未保存模型配置' }}</p>
+                <p class="mt-1 truncate text-xs text-[var(--muted)]">{{ activeProfile ? `使用 ${activeProfile.name}` :
+                  '尚未保存模型配置' }}</p>
               </div>
-              <UiButton class="min-w-[118px] px-4" :disabled="isGenerating" @click="generateImage">
-                <Loader2 v-if="isGenerating" :size="16" class="animate-spin" />
-                <Play v-else :size="16" />
-                开始生成
-              </UiButton>
-              <UiButton variant="secondary" class="min-w-[100px] px-4" @click="isBatchOpen = !isBatchOpen">
-                <Images :size="16" />
-                批量
-              </UiButton>
+              <div class="flex shrink-0 items-center gap-2">
+                <UiButton class="min-w-[118px] px-4" :disabled="isGenerating" @click="generateImage">
+                  <Loader2 v-if="isGenerating" :size="16" class="animate-spin" />
+                  <Play v-else :size="16" />
+                  开始生成
+                </UiButton>
+                <UiButton variant="secondary" class="min-w-[100px] px-4" @click="isBatchOpen = !isBatchOpen">
+                  <Images :size="16" />
+                  批量生成
+                </UiButton>
+              </div>
             </div>
 
             <div class="mb-3 grid grid-cols-4 gap-2 rounded-2xl border border-black/5 bg-white/65 p-1.5 text-xs">
-              <button
-                v-for="item in modeOptions"
-                :key="item.id"
-                class="min-h-10 rounded-xl px-3 text-left transition"
+              <button v-for="item in modeOptions" :key="item.id" class="min-h-10 rounded-xl px-3 text-left transition"
                 :class="mode === item.id ? 'bg-[#1e2428] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-white'"
-                @click="mode = item.id"
-              >
+                @click="mode = item.id">
                 <span class="block text-[13px] font-semibold leading-4">{{ item.label }}</span>
                 <span class="mt-0.5 block truncate text-[11px] opacity-75">{{ item.desc }}</span>
               </button>
             </div>
 
-            <textarea
-              v-model="prompt"
-              class="h-24 w-full cursor-text resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
-              placeholder="描述你想生成的画面"
-              title="点击展开查看完整提示词"
-              @click="isPromptExpanded = true"
-            ></textarea>
-            <button class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isPolishing || !prompt.trim()" @click="polishPrompt">
-              <Loader2 v-if="isPolishing" :size="13" class="animate-spin" />
-              <Wand2 v-else :size="13" />
-              {{ isPolishing ? '润色中...' : '润色提示词' }}
-            </button>
-
-            <div class="mt-3 grid grid-cols-[1fr_auto_120px] gap-3">
-              <input v-model="negativePrompt" class="field-input" placeholder="负向提示词" />
-              <UiSelect v-model="sizePreset" :options="sizePresetOptions" layout="fit" title="生图尺寸预设" />
-              <input v-model.number="seed" class="field-input" type="number" placeholder="随机种子" />
-            </div>
-
-            <div v-if="sizePreset === 'custom'" class="mt-3 grid grid-cols-[1fr_1fr] gap-3">
-              <input v-model.number="customSizeWidth" class="field-input" type="number" min="1" :max="IMAGE_SIZE_MAX" placeholder="宽度" />
-              <input v-model.number="customSizeHeight" class="field-input" type="number" min="1" :max="IMAGE_SIZE_MAX" placeholder="高度" />
-            </div>
-            <div v-if="sizePreset === 'custom' && customSizeValidationError" class="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
-              {{ customSizeValidationError }}
-            </div>
-          </section>
-
-          <section class="glass-panel rounded-2xl p-4">
-            <div class="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <h2 class="text-sm font-semibold">参考图</h2>
-                <p class="mt-1 text-xs text-[var(--muted)]">
-                  支持上传本地图片、复制粘贴图片，或保留图片 URL。
-                </p>
-              </div>
-              <span class="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]">
-                {{ referenceSourceCount }}/{{ selectedProfile.referenceImageLimit }}
-              </span>
-            </div>
-
-            <label
-              class="flex h-[92px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#176bff]/50 hover:bg-white"
-              @paste="handleReferencePaste"
-            >
-              <Paperclip :size="20" class="mb-2 text-[#176bff]" />
-              <span class="text-xs font-semibold">点击上传，或在这里粘贴图片</span>
-              <span class="mt-1 text-[11px] text-[var(--muted)]">粘贴非图片文件时会给出提示</span>
-              <input type="file" accept="image/*" multiple class="hidden" @change="handleReferenceFileInput" />
-            </label>
-
-            <textarea
-              v-model="referenceImageUrlDraft"
-              class="mt-3 h-16 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-[#176bff]"
-              placeholder="也可以每行粘贴一个图片 URL"
-              @paste="handleReferencePaste"
-            ></textarea>
-
-            <div v-if="referenceNotice" class="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-2.5 text-xs leading-5 text-sky-800">
-              {{ referenceNotice }}
-            </div>
-
-            <div v-if="referenceImageItems.length" class="mt-3 grid grid-cols-3 gap-2">
-              <div v-for="item in referenceImageItems" :key="item.id" class="group relative overflow-hidden rounded-xl border border-black/5 bg-white">
-                <img :src="item.source" :alt="item.name" class="aspect-square w-full object-cover" />
+            <div class="rounded-2xl border border-black/5 bg-white/70 p-3">
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <span class="text-xs font-semibold text-[var(--muted)]">提示词</span>
                 <button
-                  class="absolute right-1.5 top-1.5 rounded-lg bg-white/90 p-1 text-slate-600 opacity-0 shadow-sm transition group-hover:opacity-100"
-                  title="移除参考图"
-                  @click="removeReferenceImage(item.id)"
-                >
-                  <Trash2 :size="13" />
+                  class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="isPolishing || !prompt.trim()" @click="polishPrompt">
+                  <Loader2 v-if="isPolishing" :size="13" class="animate-spin" />
+                  <Wand2 v-else :size="13" />
+                  {{ isPolishing ? '润色中...' : '润色提示词' }}
                 </button>
-                <div class="px-2 py-1.5">
-                  <div class="truncate text-[11px] font-semibold" :title="item.name">{{ item.name }}</div>
-                  <div class="text-[10px] text-[var(--muted)]">{{ item.kind === 'paste' ? '粘贴' : '上传' }}</div>
-                </div>
+              </div>
+              <textarea v-model="prompt"
+                class="h-24 w-full cursor-text resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+                placeholder="描述你想生成的画面" title="点击展开查看完整提示词" @click="isPromptExpanded = true"></textarea>
+            </div>
+
+            <div class="mt-3 rounded-2xl border border-black/5 bg-white/70 p-3">
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+                <label class="min-w-0">
+                  <span class="mb-1 block text-xs font-semibold text-[var(--muted)]">负向提示词</span>
+                  <input v-model="negativePrompt" class="field-input min-w-0" placeholder="负向提示词" />
+                </label>
+                <button class="secondary-btn text-xs px-3 py-2" @click="resetNegativePrompt">还原</button>
+              </div>
+
+              <div class="mt-3 grid grid-cols-[minmax(0,1fr)_80px] items-end gap-3">
+                <label class="min-w-0">
+                  <span class="mb-1 block text-xs font-semibold text-[var(--muted)]">尺寸预设</span>
+                  <UiSelect v-model="sizePreset" :options="sizePresetOptions" layout="fluid" title="生图尺寸预设" />
+                </label>
+                <label>
+                  <span class="mb-1 block text-xs font-semibold text-[var(--muted)]">种子</span>
+                  <input v-model.number="seed" class="field-input w-full" type="number" placeholder="1" />
+                </label>
+              </div>
+
+              <div v-if="sizePreset === 'custom'" class="mt-3 grid grid-cols-2 gap-3">
+                <input v-model.number="customSizeWidth" class="field-input" type="number" min="1" :max="IMAGE_SIZE_MAX"
+                  placeholder="宽度" />
+                <input v-model.number="customSizeHeight" class="field-input" type="number" min="1" :max="IMAGE_SIZE_MAX"
+                  placeholder="高度" />
+              </div>
+              <div v-if="sizePreset === 'custom' && customSizeValidationError"
+                class="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
+                {{ customSizeValidationError }}
+              </div>
+            </div>
+
+            <div class="mt-3 rounded-2xl border border-purple-100 bg-purple-50/70 p-3">
+              <button class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition"
+                :class="isStoryboardMode ? 'border-purple-500 bg-[#7132f5] text-white' : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-100'"
+                @click="isStoryboardMode = !isStoryboardMode">
+                <Film :size="13" />
+                电影分镜
+              </button>
+              <div v-if="isStoryboardMode" class="mt-3 flex items-center gap-3">
+                <input v-model.number="storyboardCount" type="number" min="0" max="12"
+                  class="field-input w-16 py-1 text-xs" title="镜头数量" />
+                <span class="text-xs text-[var(--muted)] shrink-0">个镜头</span>
               </div>
             </div>
           </section>
@@ -2103,29 +2137,26 @@ onMounted(loadAll);
               </button>
             </div>
 
-            <textarea
-              v-model="batchPrompts"
-              class="h-40 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
-              placeholder="每行输入一个提示词&#10;例如：&#10;一只橘猫在书架上晒太阳&#10;赛博朋克城市夜景&#10;水下的珊瑚礁花园"
-            ></textarea>
-            <button class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isPolishingBatch || !batchPrompts.trim()" @click="polishBatchPrompts">
+            <textarea v-model="batchPrompts"
+              class="h-40 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+              placeholder="每行输入一个提示词&#10;例如：&#10;一只橘猫在书架上晒太阳&#10;赛博朋克城市夜景&#10;水下的珊瑚礁花园"></textarea>
+            <button
+              class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="isPolishingBatch || !batchPrompts.trim()" @click="polishBatchPrompts">
               <Loader2 v-if="isPolishingBatch" :size="13" class="animate-spin" />
               <Wand2 v-else :size="13" />
               {{ isPolishingBatch ? '润色中...' : '批量润色' }}
             </button>
 
             <div v-if="batchResults.length > 0" class="mt-3 grid max-h-[200px] gap-1.5 overflow-auto">
-              <div
-                v-for="(result, index) in batchResults"
-                :key="index"
-                class="flex items-center justify-between gap-3 rounded-lg border border-black/5 bg-white/70 px-3 py-2 text-xs"
-              >
+              <div v-for="(result, index) in batchResults" :key="index"
+                class="flex items-center justify-between gap-3 rounded-lg border border-black/5 bg-white/70 px-3 py-2 text-xs">
                 <span class="min-w-0 flex-1 truncate">{{ result.prompt }}</span>
-                <span
-                  class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                  :class="result.status === 'done' ? 'bg-emerald-50 text-emerald-700' : result.status === 'error' ? 'bg-red-50 text-red-700' : result.status === 'running' ? 'bg-sky-50 text-sky-700' : 'bg-slate-50 text-slate-500'"
-                >
-                  {{ result.status === 'done' ? '完成' : result.status === 'error' ? '失败' : result.status === 'running' ? '生成中' : '等待中' }}
+                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                  :class="result.status === 'done' ? 'bg-emerald-50 text-emerald-700' : result.status === 'error' ? 'bg-red-50 text-red-700' : result.status === 'running' ? 'bg-sky-50 text-sky-700' : 'bg-slate-50 text-slate-500'">
+                  {{ result.status === 'done' ? '完成' : result.status === 'error' ? '失败' : result.status === 'running' ?
+                    '生成中' :
+                    '等待中' }}
                 </span>
               </div>
             </div>
@@ -2136,6 +2167,56 @@ onMounted(loadAll);
               {{ isBatchRunning ? '批量生成中...' : '开始批量生成' }}
             </UiButton>
           </section>
+          </div>
+
+          <section class="glass-panel thin-scrollbar row-span-2 min-h-0 overflow-auto rounded-2xl p-4">
+            <div class="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-sm font-semibold">参考图</h2>
+                <p class="mt-1 text-xs text-[var(--muted)]">
+                  支持上传本地图片、复制粘贴图片，或保留图片 URL。
+                </p>
+              </div>
+              <span class="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]">
+                {{ referenceSourceCount }}/{{ selectedProfile.referenceImageLimit }}
+              </span>
+            </div>
+
+            <label
+              class="flex h-[92px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#7132f5]/50 hover:bg-white"
+              @paste="handleReferencePaste">
+              <Paperclip :size="20" class="mb-2 text-[#7132f5]" />
+              <span class="text-xs font-semibold">点击上传，或在这里粘贴图片</span>
+              <span class="mt-1 text-[11px] text-[var(--muted)]">粘贴非图片文件时会给出提示</span>
+              <input type="file" accept="image/*" multiple class="hidden" @change="handleReferenceFileInput" />
+            </label>
+
+            <textarea v-model="referenceImageUrlDraft"
+              class="mt-3 h-16 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-[#7132f5]"
+              placeholder="也可以每行粘贴一个图片 URL" @paste="handleReferencePaste"></textarea>
+
+            <div v-if="referenceNotice"
+              class="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-2.5 text-xs leading-5 text-sky-800">
+              {{ referenceNotice }}
+            </div>
+
+            <div v-if="referenceImageItems.length" class="mt-3 grid grid-cols-3 gap-2">
+              <div v-for="item in referenceImageItems" :key="item.id"
+                class="group relative overflow-hidden rounded-xl border border-black/5 bg-white">
+                <img :src="item.source" :alt="item.name" class="aspect-square w-full object-cover" />
+                <button
+                  class="absolute right-1.5 top-1.5 rounded-lg bg-white/90 p-1 text-slate-600 opacity-0 shadow-sm transition group-hover:opacity-100"
+                  title="移除参考图" @click="removeReferenceImage(item.id)">
+                  <Trash2 :size="13" />
+                </button>
+                <div class="px-2 py-1.5">
+                  <div class="truncate text-[11px] font-semibold" :title="item.name">{{ item.name }}</div>
+                  <div class="text-[10px] text-[var(--muted)]">{{ item.kind === 'paste' ? '粘贴' : '上传' }}</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
         </div>
       </section>
 
@@ -2150,45 +2231,55 @@ onMounted(loadAll);
           </button>
         </div>
 
-        <div v-if="notice" class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+        <div v-if="notice"
+          class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
           {{ notice }}
         </div>
 
-        <div v-if="isLoading" class="rounded-xl border border-black/5 bg-white/60 p-5 text-center text-sm text-[var(--muted)]">
+        <div v-if="isLoading"
+          class="rounded-xl border border-black/5 bg-white/60 p-5 text-center text-sm text-[var(--muted)]">
           正在连接本地服务...
         </div>
 
-        <div v-else-if="artifacts.length === 0" class="rounded-2xl border border-dashed border-black/15 bg-white/50 p-8 text-center">
+        <div v-else-if="artifacts.length === 0"
+          class="rounded-2xl border border-dashed border-black/15 bg-white/50 p-8 text-center">
           <Sparkles :size="24" class="mx-auto mb-3 text-[var(--muted)]" />
           <div class="text-sm font-medium">还没有作品</div>
           <p class="mt-2 text-xs leading-5 text-[var(--muted)]">配置主模型后，点击“开始生成”就会创建第一张预览作品。</p>
         </div>
 
         <div v-else class="grid gap-3">
-          <article
-            v-for="artifact in defaultArtifacts"
-            :key="artifact.id"
-            class="overflow-hidden rounded-2xl border border-black/5 bg-white transition hover:-translate-y-0.5 hover:shadow-lg"
-          >
+          <div class="gallery-list-toolbar">
+            <input v-model="gallerySearchQuery" class="field-input text-xs" placeholder="搜索提示词" />
+            <div class="grid grid-cols-2 gap-2">
+              <UiSelect v-model="galleryTypeFilter" :options="galleryTypeFilterOptions" layout="fluid" title="作品类型筛选" />
+              <UiSelect v-model="galleryModeFilter" :options="galleryModeFilterOptions" layout="fluid" title="生成模式筛选" />
+            </div>
+            <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <UiSelect v-model="galleryProfileFilter" :options="galleryProfileFilterOptions" layout="fluid" title="作品集筛选" />
+              <button class="secondary-btn text-xs px-3 py-2" @click="clearGalleryFilters">清空筛选</button>
+            </div>
+          </div>
+          <article v-for="artifact in defaultArtifacts" :key="artifact.id"
+            class="overflow-hidden rounded-2xl border border-black/5 bg-white transition hover:-translate-y-0.5 hover:shadow-lg">
             <div class="relative">
               <img :src="artifact.imageUrl" :alt="artifact.prompt" class="gallery-list-thumb" />
-              <div class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity hover:opacity-100 cursor-pointer" @click="openGallery(artifact.id)">
+              <div
+                class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity hover:opacity-100 cursor-pointer"
+                @click="openGallery(artifact.id)">
                 <span class="rounded-full bg-white/90 px-4 py-2 text-sm font-bold text-slate-800 shadow-lg">查看作品</span>
               </div>
             </div>
             <div class="p-3">
               <div class="mb-1 flex items-center gap-1.5">
                 <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
-                <span class="ml-auto text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
+                <span class="ml-auto text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ')
+                }}</span>
               </div>
               <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
               <div class="mt-3 flex items-center justify-end">
-                <UiIconButton
-                  variant="danger"
-                  size="sm"
-                  title="删除作品"
-                  @click.stop="deleteArtifact(artifact.id, 'collection')"
-                >
+                <UiIconButton variant="danger" size="sm" title="删除作品"
+                  @click.stop="deleteArtifact(artifact.id, 'collection')">
                   <Trash2 :size="14" />
                 </UiIconButton>
               </div>
@@ -2207,7 +2298,8 @@ onMounted(loadAll);
             <p class="mt-1 text-xs leading-5 text-[var(--muted)]">从图标描述或参考图开始，生成高清母图后导出多尺寸 ICO。</p>
           </div>
 
-          <div v-if="iconNotice" class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-800">
+          <div v-if="iconNotice"
+            class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-800">
             {{ iconNotice }}
           </div>
 
@@ -2219,12 +2311,12 @@ onMounted(loadAll);
 
             <label>
               <span class="field-label">图标描述</span>
-              <textarea
-                v-model="iconPrompt"
-                class="h-24 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
-                placeholder="描述图标主体、用途、颜色和风格"
-              ></textarea>
-              <button class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isPolishingIcon || !iconPrompt.trim()" @click="polishIconPrompt">
+              <textarea v-model="iconPrompt"
+                class="h-24 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+                placeholder="描述图标主体、用途、颜色和风格"></textarea>
+              <button
+                class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="isPolishingIcon || !iconPrompt.trim()" @click="polishIconPrompt">
                 <Loader2 v-if="isPolishingIcon" :size="13" class="animate-spin" />
                 <Wand2 v-else :size="13" />
                 {{ isPolishingIcon ? '润色中...' : '润色提示词' }}
@@ -2263,38 +2355,35 @@ onMounted(loadAll);
               <div class="mb-2 flex items-center justify-between">
                 <span class="text-xs font-semibold text-slate-700">参考图（可选）</span>
                 <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
-                  {{ collectReferenceSources(iconReferenceImageItems, iconReferenceImageUrlDraft).length }}/{{ selectedProfile.referenceImageLimit }}
+                  {{ collectReferenceSources(iconReferenceImageItems, iconReferenceImageUrlDraft).length }}/{{
+                    selectedProfile.referenceImageLimit }}
                 </span>
               </div>
 
               <label
-                class="flex h-[56px] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#176bff]/50 hover:bg-white"
-                @paste="handleIconReferencePaste"
-              >
-                <Paperclip :size="14" class="mb-0.5 text-[#176bff]" />
+                class="flex h-[56px] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#7132f5]/50 hover:bg-white"
+                @paste="handleIconReferencePaste">
+                <Paperclip :size="14" class="mb-0.5 text-[#7132f5]" />
                 <span class="text-[11px] font-semibold">上传或粘贴参考图</span>
                 <input type="file" accept="image/*" multiple class="hidden" @change="handleIconReferenceFileInput" />
               </label>
 
-              <textarea
-                v-model="iconReferenceImageUrlDraft"
-                class="mt-2 h-10 w-full resize-none rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] leading-4 outline-none focus:border-[#176bff]"
-                placeholder="也可以每行粘贴一个图片 URL"
-                @paste="handleIconReferencePaste"
-              ></textarea>
+              <textarea v-model="iconReferenceImageUrlDraft"
+                class="mt-2 h-10 w-full resize-none rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] leading-4 outline-none focus:border-[#7132f5]"
+                placeholder="也可以每行粘贴一个图片 URL" @paste="handleIconReferencePaste"></textarea>
 
-              <div v-if="iconReferenceNotice" class="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-2 text-[11px] leading-4 text-sky-800">
+              <div v-if="iconReferenceNotice"
+                class="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-2 text-[11px] leading-4 text-sky-800">
                 {{ iconReferenceNotice }}
               </div>
 
               <div v-if="iconReferenceImageItems.length" class="mt-2 grid grid-cols-3 gap-1.5">
-                <div v-for="item in iconReferenceImageItems" :key="item.id" class="group relative overflow-hidden rounded-lg border border-black/5 bg-white">
+                <div v-for="item in iconReferenceImageItems" :key="item.id"
+                  class="group relative overflow-hidden rounded-lg border border-black/5 bg-white">
                   <img :src="item.source" :alt="item.name" class="aspect-square w-full object-cover" />
                   <button
                     class="absolute right-1 top-1 rounded-md bg-white/90 p-0.5 text-slate-500 opacity-0 shadow-sm transition group-hover:opacity-100"
-                    title="移除"
-                    @click="removeIconReferenceImage(item.id)"
-                  >
+                    title="移除" @click="removeIconReferenceImage(item.id)">
                     <X :size="11" />
                   </button>
                 </div>
@@ -2303,14 +2392,13 @@ onMounted(loadAll);
               <div v-if="iconArtifacts.length > 0" class="mt-2">
                 <div class="mb-1.5 text-[11px] font-semibold text-[var(--muted)]">从 ICON 作品选取</div>
                 <div class="grid max-h-[100px] gap-1.5 overflow-auto">
-                  <button
-                    v-for="artifact in iconArtifacts.slice(0, 6)"
-                    :key="artifact.id"
-                    class="flex items-center gap-2 rounded-lg border border-black/5 bg-white/70 px-2 py-1 text-left transition hover:border-[#176bff]/30 hover:bg-white"
-                    @click="useArtifactAsIconReference(artifact.id)"
-                  >
-                    <img :src="artifact.imageUrl" :alt="artifact.prompt" class="h-7 w-7 shrink-0 rounded object-cover" />
-                    <span class="min-w-0 flex-1 truncate text-[11px] text-slate-600">{{ artifact.prompt.slice(0, 24) }}</span>
+                  <button v-for="artifact in iconArtifacts.slice(0, 6)" :key="artifact.id"
+                    class="flex items-center gap-2 rounded-lg border border-black/5 bg-white/70 px-2 py-1 text-left transition hover:border-[#7132f5]/30 hover:bg-white"
+                    @click="useArtifactAsIconReference(artifact.id)">
+                    <img :src="artifact.imageUrl" :alt="artifact.prompt"
+                      class="h-7 w-7 shrink-0 rounded object-cover" />
+                    <span class="min-w-0 flex-1 truncate text-[11px] text-slate-600">{{ artifact.prompt.slice(0, 24)
+                    }}</span>
                   </button>
                 </div>
               </div>
@@ -2327,20 +2415,18 @@ onMounted(loadAll);
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[var(--muted)]">ICO</span>
-              <UiButton variant="secondary" class="w-auto px-3" :disabled="!iconSourceArtifact" @click="iconSourceArtifactId = ''">
+              <UiButton variant="secondary" class="w-auto px-3" :disabled="!iconSourceArtifact"
+                @click="iconSourceArtifactId = ''">
                 <X :size="14" />
                 重新生成
               </UiButton>
             </div>
           </div>
 
-          <div class="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-black/5 bg-[#eef2f5] p-6">
-            <img
-              v-if="iconSourceArtifact"
-              :src="iconSourceArtifact.imageUrl"
-              :alt="iconSourceArtifact.prompt"
-              class="aspect-square max-h-full max-w-full rounded-[22px] object-cover shadow-xl shadow-slate-900/15"
-            />
+          <div
+            class="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-black/5 bg-[#eef2f5] p-6">
+            <img v-if="iconSourceArtifact" :src="iconSourceArtifact.imageUrl" :alt="iconSourceArtifact.prompt"
+              class="aspect-square max-h-full max-w-full rounded-[22px] object-cover shadow-xl shadow-slate-900/15" />
             <div v-else class="text-center text-sm text-[var(--muted)]">
               <Images :size="28" class="mx-auto mb-3" />
               生成后会在这里显示 ICON 母图
@@ -2348,14 +2434,12 @@ onMounted(loadAll);
           </div>
 
           <div class="mt-4 grid grid-cols-5 gap-3">
-            <div v-for="item in ICON_SIZES" :key="item" class="rounded-xl border border-black/5 bg-white/70 p-3 text-center">
-              <div class="mx-auto flex aspect-square items-center justify-center rounded-lg bg-slate-100" :style="{ width: `${Math.min(item, 72)}px` }">
-                <img
-                  v-if="iconSourceArtifact"
-                  :src="iconSourceArtifact.imageUrl"
-                  :alt="`${item} icon preview`"
-                  class="h-full w-full rounded-md object-cover"
-                />
+            <div v-for="item in ICON_SIZES" :key="item"
+              class="rounded-xl border border-black/5 bg-white/70 p-3 text-center">
+              <div class="mx-auto flex aspect-square items-center justify-center rounded-lg bg-slate-100"
+                :style="{ width: `${Math.min(item, 72)}px` }">
+                <img v-if="iconSourceArtifact" :src="iconSourceArtifact.imageUrl" :alt="`${item} icon preview`"
+                  class="h-full w-full rounded-md object-cover" />
               </div>
               <div class="mt-2 text-xs font-semibold">{{ item }}x{{ item }}</div>
             </div>
@@ -2367,13 +2451,10 @@ onMounted(loadAll);
               <span class="text-xs text-[var(--muted)]">{{ normalizedSelectedIconSizes.length }} 个已选</span>
             </div>
             <div class="grid grid-cols-5 gap-2">
-              <button
-                v-for="item in ICON_SIZES"
-                :key="item"
+              <button v-for="item in ICON_SIZES" :key="item"
                 class="rounded-lg border px-2 py-2 text-center text-xs transition"
-                :class="normalizedSelectedIconSizes.includes(item) ? 'border-[#176bff] bg-[#176bff]/10 font-semibold text-[#176bff]' : 'border-black/5 bg-white/60 text-[var(--muted)] hover:bg-white'"
-                @click="toggleIconSize(item)"
-              >
+                :class="normalizedSelectedIconSizes.includes(item) ? 'border-[#7132f5] bg-[#7132f5]/10 font-semibold text-[#7132f5]' : 'border-black/5 bg-white/60 text-[var(--muted)] hover:bg-white'"
+                @click="toggleIconSize(item)">
                 {{ item }}
               </button>
             </div>
@@ -2393,15 +2474,12 @@ onMounted(loadAll);
     </section>
 
     <section v-else-if="page === 'gallery'" class="h-full overflow-hidden px-6 pb-6 pt-20">
-      <div
-        class="grid h-full gap-5"
-        :class="{
-          'grid-cols-[1fr]': isGalleryLeftCollapsed && isGalleryRightCollapsed,
-          'grid-cols-[320px_minmax(0,1fr)]': !isGalleryLeftCollapsed && isGalleryRightCollapsed,
-          'grid-cols-[minmax(0,1fr)_360px]': isGalleryLeftCollapsed && !isGalleryRightCollapsed,
-          'grid-cols-[320px_minmax(0,1fr)_360px]': !isGalleryLeftCollapsed && !isGalleryRightCollapsed,
-        }"
-      >
+      <div class="grid h-full gap-5" :class="{
+        'grid-cols-[1fr]': isGalleryLeftCollapsed && isGalleryRightCollapsed,
+        'grid-cols-[320px_minmax(0,1fr)]': !isGalleryLeftCollapsed && isGalleryRightCollapsed,
+        'grid-cols-[minmax(0,1fr)_360px]': isGalleryLeftCollapsed && !isGalleryRightCollapsed,
+        'grid-cols-[320px_minmax(0,1fr)_360px]': !isGalleryLeftCollapsed && !isGalleryRightCollapsed,
+      }">
         <aside v-if="!isGalleryLeftCollapsed" class="glass-panel thin-scrollbar overflow-auto rounded-[18px] p-4">
           <div class="mb-4 flex items-start justify-between gap-3">
             <div>
@@ -2414,36 +2492,44 @@ onMounted(loadAll);
           </div>
 
           <div class="gallery-list-toolbar">
-            <label>
-              <span class="field-label">作品集</span>
-              <UiSelect v-model="galleryProfileFilter" :options="galleryProfileFilterOptions" layout="fluid" title="作品集筛选" />
-            </label>
-            <label>
-              <span class="field-label">生成模式</span>
-              <UiSelect v-model="galleryModeFilter" :options="galleryModeFilterOptions" layout="fluid" title="生成模式筛选" />
-            </label>
+            <input v-model="gallerySearchQuery" class="field-input text-xs" placeholder="搜索提示词" />
+            <div class="grid grid-cols-2 gap-2">
+              <label>
+                <span class="field-label">作品类型</span>
+                <UiSelect v-model="galleryTypeFilter" :options="galleryTypeFilterOptions" layout="fluid" title="作品类型筛选" />
+              </label>
+              <label>
+                <span class="field-label">生成模式</span>
+                <UiSelect v-model="galleryModeFilter" :options="galleryModeFilterOptions" layout="fluid" title="生成模式筛选" />
+              </label>
+            </div>
+            <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <label>
+                <span class="field-label">作品集</span>
+                <UiSelect v-model="galleryProfileFilter" :options="galleryProfileFilterOptions" layout="fluid" title="作品集筛选" />
+              </label>
+              <button class="secondary-btn self-end text-xs px-3 py-2" @click="clearGalleryFilters">清空筛选</button>
+            </div>
           </div>
 
-          <div v-if="galleryArtifacts.length === 0 && galleryIconArtifacts.length === 0" class="rounded-2xl border border-dashed border-black/15 bg-white/50 p-8 text-center text-sm text-[var(--muted)]">
+          <div v-if="galleryArtifacts.length === 0 && galleryIconArtifacts.length === 0"
+            class="rounded-2xl border border-dashed border-black/15 bg-white/50 p-8 text-center text-sm text-[var(--muted)]">
             当前筛选下还没有作品。
           </div>
 
           <div v-if="galleryArtifacts.length > 0" class="mb-3">
             <div class="mb-2 text-xs font-semibold text-slate-700">默认作品</div>
             <div class="grid gap-2">
-              <button
-                v-for="artifact in galleryArtifacts"
-                :key="artifact.id"
-                class="gallery-list-item"
+              <button v-for="artifact in galleryArtifacts" :key="artifact.id" class="gallery-list-item"
                 :class="selectedArtifact?.id === artifact.id ? 'is-active' : ''"
-                @click="selectedArtifactId = artifact.id"
-              >
+                @click="selectedArtifactId = artifact.id">
                 <img :src="artifact.imageUrl" :alt="artifact.prompt" class="gallery-list-thumb" />
                 <div class="flex min-w-0 flex-col justify-between py-1">
                   <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
                   <div class="mt-auto flex items-center gap-1.5 pt-1">
                     <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
-                    <span class="text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
+                    <span class="text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ')
+                    }}</span>
                   </div>
                 </div>
               </button>
@@ -2453,20 +2539,17 @@ onMounted(loadAll);
           <div v-if="galleryIconArtifacts.length > 0" class="mb-3">
             <div class="mb-2 text-xs font-semibold text-slate-700">ICON 作品</div>
             <div class="grid gap-2">
-              <button
-                v-for="artifact in galleryIconArtifacts"
-                :key="artifact.id"
-                class="gallery-list-item"
+              <button v-for="artifact in galleryIconArtifacts" :key="artifact.id" class="gallery-list-item"
                 :class="selectedArtifact?.id === artifact.id ? 'is-active' : ''"
-                @click="selectedArtifactId = artifact.id"
-              >
+                @click="selectedArtifactId = artifact.id">
                 <img :src="artifact.imageUrl" :alt="artifact.prompt" class="gallery-list-thumb" />
                 <div class="flex min-w-0 flex-col justify-between py-1">
                   <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
                   <div class="mt-auto flex items-center gap-1.5 pt-1">
                     <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
                     <span class="gallery-mode-tag" style="background:#f5f0ff;color:#7c3aed;">ICON</span>
-                    <span class="text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
+                    <span class="text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ')
+                    }}</span>
                   </div>
                 </div>
               </button>
@@ -2483,18 +2566,16 @@ onMounted(loadAll);
               <p class="truncate text-xs text-[var(--muted)]">{{ selectedProfileName }}</p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-              <button class="icon-btn" :title="textOverlayEnabled ? '关闭再编辑' : '开启再编辑'" @click="textOverlayEnabled = !textOverlayEnabled">
+              <button class="icon-btn" :title="textOverlayEnabled ? '关闭再编辑' : '开启再编辑'"
+                @click="textOverlayEnabled = !textOverlayEnabled">
                 <Wand2 :size="16" />
               </button>
-              <UiIconButton
-                variant="danger"
-                :disabled="!selectedArtifact"
-                title="删除作品"
-                @click="selectedArtifact && deleteArtifact(selectedArtifact.id, 'gallery')"
-              >
+              <UiIconButton variant="danger" :disabled="!selectedArtifact" title="删除作品"
+                @click="selectedArtifact && deleteArtifact(selectedArtifact.id, 'gallery')">
                 <Trash2 :size="16" />
               </UiIconButton>
-              <UiButton class="gallery-download-btn" :disabled="!selectedArtifact || isDownloading" @click="downloadSelectedArtifact">
+              <UiButton class="gallery-download-btn" :disabled="!selectedArtifact || isDownloading"
+                @click="downloadSelectedArtifact">
                 <Loader2 v-if="isDownloading" :size="16" class="animate-spin" />
                 <Download v-else :size="16" />
                 {{ isDownloading ? '正在导出' : '下载到本地' }}
@@ -2502,63 +2583,42 @@ onMounted(loadAll);
             </div>
           </div>
 
-          <div class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-200 bg-[#eef2f5] shadow-inner">
-            <button
-              v-if="isGalleryLeftCollapsed"
+          <div
+            class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-200 bg-[#eef2f5] shadow-inner">
+            <button v-if="isGalleryLeftCollapsed"
               class="gallery-panel-float-btn gallery-panel-edge-btn gallery-panel-edge-btn-left absolute left-0 top-1/2 z-10 -translate-y-1/2"
-              title="展开作品列表"
-              @click="isGalleryLeftCollapsed = false"
-            >
+              title="展开作品列表" @click="isGalleryLeftCollapsed = false">
               <PanelLeftOpen :size="18" />
             </button>
-            <button
-              v-if="isGalleryRightCollapsed"
+            <button v-if="isGalleryRightCollapsed"
               class="gallery-panel-float-btn gallery-panel-edge-btn gallery-panel-edge-btn-right absolute right-0 top-1/2 z-10 -translate-y-1/2"
-              title="展开右侧信息"
-              @click="isGalleryRightCollapsed = false"
-            >
+              title="展开右侧信息" @click="isGalleryRightCollapsed = false">
               <PanelLeftClose :size="18" class="rotate-180" />
             </button>
             <template v-if="selectedArtifact">
-              <img
-                :src="selectedArtifact.imageUrl"
-                :alt="selectedArtifact.prompt"
-                class="max-h-full max-w-full cursor-zoom-in object-contain"
-                @load="syncGalleryPreviewAspectRatio"
-                @dblclick="openLightbox"
-              />
-              <div
-                v-if="textOverlayEnabled"
-                id="gallery-overlay-stage"
+              <img :src="selectedArtifact.imageUrl" :alt="selectedArtifact.prompt"
+                class="max-h-full max-w-full cursor-zoom-in object-contain" :style="galleryPreviewFilterStyle"
+                @load="syncGalleryPreviewAspectRatio" @dblclick="openLightbox" />
+              <div v-if="textOverlayEnabled" id="gallery-overlay-stage"
                 class="pointer-events-none absolute inset-0 mx-auto my-auto max-h-full max-w-full"
-                :style="{ aspectRatio: galleryPreviewAspectRatio }"
-              >
-                <button
-                  v-for="overlay in galleryOverlays"
-                  :key="overlay.id"
+                :style="{ aspectRatio: galleryPreviewAspectRatio }">
+                <button v-for="overlay in galleryOverlays" :key="overlay.id"
                   class="pointer-events-auto absolute overflow-hidden rounded-lg border text-left shadow-sm"
-                  :class="selectedOverlayIds.includes(overlay.id) ? 'border-[#176bff] ring-2 ring-[#176bff]/20' : 'border-white/70'"
-                  :style="overlayStyle(overlay)"
-                  @click.stop="setSelectedOverlay(overlay.id, $event.shiftKey)"
-                  @pointerdown.stop="startOverlayDrag($event, overlay)"
-                  @pointermove.stop="dragOverlay($event)"
-                  @pointerup.stop="endOverlayDrag"
-                  @pointercancel.stop="endOverlayDrag"
-                >
+                  :class="selectedOverlayIds.includes(overlay.id) ? 'border-[#7132f5] ring-2 ring-[#7132f5]/20' : 'border-white/70'"
+                  :style="overlayStyle(overlay)" @click.stop="setSelectedOverlay(overlay.id, $event.shiftKey)"
+                  @pointerdown.stop="startOverlayDrag($event, overlay)" @pointermove.stop="dragOverlay($event)"
+                  @pointerup.stop="endOverlayDrag" @pointercancel.stop="endOverlayDrag">
                   <template v-if="overlay.kind === 'text'">
-                    <div class="flex h-full w-full items-center justify-center px-3 py-2 text-center font-bold leading-tight">
+                    <div
+                      class="flex h-full w-full items-center justify-center px-3 py-2 text-center font-bold leading-tight">
                       {{ overlay.text || '文字' }}
                     </div>
                   </template>
                   <template v-else>
-                    <img
-                      v-if="overlay.kind === 'image'"
-                      :src="overlay.imageUrl"
-                      :alt="overlay.name"
-                      class="h-full w-full object-contain"
-                      :style="{ opacity: overlay.opacity }"
-                    />
-                    <div v-else class="flex h-full w-full items-center justify-center bg-white/70 text-[11px] font-semibold text-[var(--muted)]">
+                    <img v-if="overlay.kind === 'image'" :src="overlay.imageUrl" :alt="overlay.name"
+                      class="h-full w-full object-contain" :style="{ opacity: overlay.opacity }" />
+                    <div v-else
+                      class="flex h-full w-full items-center justify-center bg-white/70 text-[11px] font-semibold text-[var(--muted)]">
                       SVG
                     </div>
                   </template>
@@ -2584,21 +2644,13 @@ onMounted(loadAll);
               <p class="mt-2 text-sm leading-6 text-slate-700">{{ selectedArtifact.prompt }}</p>
             </div>
             <div v-if="galleryVisibleArtifacts.length > 1" class="flex items-center justify-center gap-4">
-              <button
-                class="gallery-artifact-nav-btn gallery-artifact-nav-prev"
-                :disabled="!hasPreviousGalleryArtifact"
-                title="上一个作品"
-                @click="selectAdjacentGalleryArtifact('previous')"
-              >
+              <button class="gallery-artifact-nav-btn gallery-artifact-nav-prev" :disabled="!hasPreviousGalleryArtifact"
+                title="上一个作品" @click="selectAdjacentGalleryArtifact('previous')">
                 <ChevronLeft :size="22" />
                 <span>上一个</span>
               </button>
-              <button
-                class="gallery-artifact-nav-btn gallery-artifact-nav-next"
-                :disabled="!hasNextGalleryArtifact"
-                title="下一个作品"
-                @click="selectAdjacentGalleryArtifact('next')"
-              >
+              <button class="gallery-artifact-nav-btn gallery-artifact-nav-next" :disabled="!hasNextGalleryArtifact"
+                title="下一个作品" @click="selectAdjacentGalleryArtifact('next')">
                 <span>下一个</span>
                 <ChevronRight :size="22" />
               </button>
@@ -2623,8 +2675,10 @@ onMounted(loadAll);
 
             <div class="mb-4 rounded-2xl border border-black/5 bg-white/70 p-3">
               <div class="mb-2 flex items-center gap-2">
-                <span class="gallery-mode-tag" :class="`tag-${selectedArtifact.mode}`">{{ modeLabel(selectedArtifact.mode) }}</span>
-                <span v-if="selectedArtifact.source === 'icon'" class="gallery-mode-tag" style="background:#f5f0ff;color:#7c3aed;">ICON</span>
+                <span class="gallery-mode-tag" :class="`tag-${selectedArtifact.mode}`">{{
+                  modeLabel(selectedArtifact.mode) }}</span>
+                <span v-if="selectedArtifact.source === 'icon'" class="gallery-mode-tag"
+                  style="background:#f5f0ff;color:#7c3aed;">ICON</span>
               </div>
               <div class="flex items-center justify-between text-[11px] text-slate-400">
                 <span>{{ selectedProfileName }}</span>
@@ -2637,7 +2691,8 @@ onMounted(loadAll);
                 <Download :size="14" />
                 下载原图
               </UiButton>
-              <UiButton variant="danger" size="sm" @click="selectedArtifact && deleteArtifact(selectedArtifact.id, 'gallery')">
+              <UiButton variant="danger" size="sm"
+                @click="selectedArtifact && deleteArtifact(selectedArtifact.id, 'gallery')">
                 <Trash2 :size="14" />
                 删除作品
               </UiButton>
@@ -2651,20 +2706,53 @@ onMounted(loadAll);
               </label>
               <label v-if="exportFormat === 'jpg'" class="block">
                 <span class="field-label">质量：{{ exportQuality }}%</span>
-                <input v-model.number="exportQuality" type="range" min="60" max="100" class="w-full accent-[#176bff]" />
+                <input v-model.number="exportQuality" type="range" min="60" max="100" class="w-full accent-[#7132f5]" />
               </label>
+            </section>
+
+            <section class="mb-4 rounded-xl border border-black/5 bg-white/70 p-3">
+              <div class="mb-3 flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-slate-900">视觉滤镜</h3>
+                <button class="secondary-btn text-xs px-3 py-2" :disabled="!galleryHasActiveFilters" @click="resetGalleryVisualFilters">
+                  还原
+                </button>
+              </div>
+              <label class="mb-3 block">
+                <span class="field-label">滤镜预设</span>
+                <UiSelect v-model="selectedGalleryFilterPreset" :options="galleryFilterPresetOptions" layout="fluid"
+                  title="滤镜预设" @change="applyGalleryFilterPreset(selectedGalleryFilterPreset)" />
+              </label>
+              <div class="grid gap-2">
+                <label>
+                  <span class="field-label">亮度：{{ galleryVisualFilters.brightness }}%</span>
+                  <input v-model.number="galleryVisualFilters.brightness" type="range" min="50" max="150" class="w-full accent-[#7132f5]" />
+                </label>
+                <label>
+                  <span class="field-label">对比度：{{ galleryVisualFilters.contrast }}%</span>
+                  <input v-model.number="galleryVisualFilters.contrast" type="range" min="50" max="150" class="w-full accent-[#7132f5]" />
+                </label>
+                <label>
+                  <span class="field-label">饱和度：{{ galleryVisualFilters.saturation }}%</span>
+                  <input v-model.number="galleryVisualFilters.saturation" type="range" min="0" max="200" class="w-full accent-[#7132f5]" />
+                </label>
+                <label>
+                  <span class="field-label">色相：{{ galleryVisualFilters.hue }}°</span>
+                  <input v-model.number="galleryVisualFilters.hue" type="range" min="-180" max="180" class="w-full accent-[#7132f5]" />
+                </label>
+              </div>
             </section>
 
             <section class="rounded-xl border border-black/5 bg-white/70 p-3">
               <div class="mb-3 flex items-center justify-between">
                 <h3 class="text-sm font-semibold text-slate-900">图层编辑</h3>
                 <label class="flex items-center gap-2">
-                  <input v-model="textOverlayEnabled" type="checkbox" class="h-4 w-4 accent-[#176bff]" />
+                  <input v-model="textOverlayEnabled" type="checkbox" class="h-4 w-4 accent-[#7132f5]" />
                   <span class="text-xs text-slate-600">启用</span>
                 </label>
               </div>
 
-              <div v-if="!textOverlayEnabled" class="rounded-lg bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+              <div v-if="!textOverlayEnabled"
+                class="rounded-lg bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
                 开启后可添加文字、图标、水印等图层
               </div>
 
@@ -2675,7 +2763,8 @@ onMounted(loadAll);
                     <span>文字</span>
                   </button>
                   <label class="tool-btn">
-                    <input type="file" accept="image/*" class="hidden" @change="handleImageOverlayUpload($event, 'sticker')" />
+                    <input type="file" accept="image/*" class="hidden"
+                      @change="handleImageOverlayUpload($event, 'sticker')" />
                     <ImagePlus :size="14" />
                     <span>图片</span>
                   </label>
@@ -2690,27 +2779,30 @@ onMounted(loadAll);
                     <span class="text-slate-400">{{ galleryOverlays.length }} 个</span>
                   </div>
                   <div class="grid gap-1.5">
-                    <button
-                      v-for="overlay in galleryOverlays"
-                      :key="overlay.id"
-                      class="layer-item"
+                    <div v-for="overlay in galleryOverlays" :key="overlay.id" class="layer-item"
                       :class="[selectedOverlayIds.includes(overlay.id) ? 'layer-item-active' : '', overlay.locked ? 'layer-item-locked' : '']"
-                      @click="setSelectedOverlay(overlay.id, $event.shiftKey)"
-                    >
-                      <span class="truncate text-xs font-medium">{{ overlay.kind === 'text' ? (overlay.text || '文字') : overlay.name }}</span>
+                      @click="setSelectedOverlay(overlay.id, $event.shiftKey)">
+                      <span class="truncate text-xs font-medium">{{ overlay.kind === 'text' ? (overlay.text || '文字') :
+                        overlay.name }}</span>
                       <div class="flex items-center gap-1.5">
                         <span v-if="overlay.locked" class="text-slate-400" title="已锁定">🔒</span>
-                        <span class="layer-tag">{{ overlay.kind === 'text' ? '文字' : overlay.kind === 'svg' ? 'SVG' : '图片' }}</span>
+                        <span class="layer-tag">{{ overlay.kind === 'text' ? '文字' : overlay.kind === 'svg' ? 'SVG' :
+                          '图片' }}</span>
+                        <button class="layer-delete-btn" title="删除图层" @click.stop="removeOverlay(overlay.id)">
+                          <Trash2 :size="12" />
+                        </button>
                       </div>
-                    </button>
+                    </div>
                   </div>
                 </div>
 
                 <div v-if="selectedOverlay" class="mb-3 grid grid-cols-3 gap-2">
-                  <button class="control-btn" :disabled="selectedOverlay.locked" @click="moveOverlayLayer(selectedOverlay.id, 'forward')">
+                  <button class="control-btn" :disabled="selectedOverlay.locked"
+                    @click="moveOverlayLayer(selectedOverlay.id, 'forward')">
                     <span>上移</span>
                   </button>
-                  <button class="control-btn" :disabled="selectedOverlay.locked" @click="moveOverlayLayer(selectedOverlay.id, 'backward')">
+                  <button class="control-btn" :disabled="selectedOverlay.locked"
+                    @click="moveOverlayLayer(selectedOverlay.id, 'backward')">
                     <span>下移</span>
                   </button>
                   <button class="control-btn" @click="duplicateOverlay(selectedOverlay.id)">
@@ -2722,14 +2814,11 @@ onMounted(loadAll);
                   <div class="mb-3 flex items-center justify-between">
                     <span class="text-xs font-semibold text-slate-700">图层属性</span>
                     <div class="flex items-center gap-1">
-                      <button
-                        class="icon-btn h-7 w-7"
-                        :title="selectedOverlay.locked ? '解锁' : '锁定'"
-                        @click="updateOverlay(selectedOverlay.id, { locked: !selectedOverlay.locked } as Partial<GalleryOverlay>)"
-                      >
+                      <button class="icon-btn h-7 w-7" :title="selectedOverlay.locked ? '解锁' : '锁定'"
+                        @click="updateOverlay(selectedOverlay.id, { locked: !selectedOverlay.locked } as Partial<GalleryOverlay>)">
                         <span class="text-sm">{{ selectedOverlay.locked ? '🔒' : '🔓' }}</span>
                       </button>
-                      <button class="icon-danger-btn h-7 w-7" title="删除" @click="removeOverlay(selectedOverlay.id)">
+                      <button class="icon-btn layer-property-delete-btn h-7 w-7" title="删除" @click="removeOverlay(selectedOverlay.id)">
                         <Trash2 :size="12" />
                       </button>
                     </div>
@@ -2738,25 +2827,15 @@ onMounted(loadAll);
                   <div class="mb-3 space-y-2">
                     <label class="block">
                       <span class="field-label">透明度：{{ Math.round((selectedOverlay.opacity ?? 1) * 100) }}%</span>
-                      <input
-                        :value="selectedOverlay.opacity ?? 1"
-                        type="range"
-                        min="0.1"
-                        max="1"
-                        step="0.05"
-                        class="w-full accent-[#176bff]"
-                        :disabled="selectedOverlay.locked"
-                        @input="updateOverlay(selectedOverlay.id, { opacity: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)"
-                      />
+                      <input :value="selectedOverlay.opacity ?? 1" type="range" min="0.1" max="1" step="0.05"
+                        class="w-full accent-[#7132f5]" :disabled="selectedOverlay.locked"
+                        @input="updateOverlay(selectedOverlay.id, { opacity: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)" />
                     </label>
                     <label class="block">
                       <span class="field-label">混合模式</span>
-                      <select
-                        :value="selectedOverlay.blendMode ?? 'normal'"
-                        class="field-input text-xs"
+                      <select :value="selectedOverlay.blendMode ?? 'normal'" class="field-input text-xs"
                         :disabled="selectedOverlay.locked"
-                        @change="updateOverlay(selectedOverlay.id, { blendMode: ($event.target as HTMLSelectElement).value } as Partial<GalleryOverlay>)"
-                      >
+                        @change="updateOverlay(selectedOverlay.id, { blendMode: ($event.target as HTMLSelectElement).value } as Partial<GalleryOverlay>)">
                         <option value="normal">正常</option>
                         <option value="multiply">正片叠底</option>
                         <option value="screen">滤色</option>
@@ -2774,72 +2853,45 @@ onMounted(loadAll);
                   </div>
 
                   <template v-if="selectedOverlay.kind === 'text'">
-                    <textarea
-                      :value="selectedOverlay.text"
-                      class="mb-2 h-16 w-full resize-none rounded-lg border border-black/10 bg-white px-2.5 py-2 text-xs outline-none focus:border-[#176bff]"
-                      placeholder="输入文字内容"
-                      :disabled="selectedOverlay.locked"
-                      @input="updateOverlay(selectedOverlay.id, { text: ($event.target as HTMLTextAreaElement).value } as Partial<TextOverlay>)"
-                    ></textarea>
+                    <textarea :value="selectedOverlay.text"
+                      class="mb-2 h-16 w-full resize-none rounded-lg border border-black/10 bg-white px-2.5 py-2 text-xs outline-none focus:border-[#7132f5]"
+                      placeholder="输入文字内容" :disabled="selectedOverlay.locked"
+                      @input="updateOverlay(selectedOverlay.id, { text: ($event.target as HTMLTextAreaElement).value } as Partial<TextOverlay>)"></textarea>
                     <div class="mb-2 grid grid-cols-2 gap-2">
-                      <select
-                        :value="selectedOverlay.fontFamily"
-                        class="field-input text-xs"
+                      <select :value="selectedOverlay.fontFamily" class="field-input text-xs"
                         :disabled="selectedOverlay.locked"
-                        @change="updateOverlay(selectedOverlay.id, { fontFamily: ($event.target as HTMLSelectElement).value as FontFamily } as Partial<TextOverlay>)"
-                      >
-                        <option v-for="font in fontFamilyOptions" :key="font.id" :value="font.id">{{ font.label }}</option>
+                        @change="updateOverlay(selectedOverlay.id, { fontFamily: ($event.target as HTMLSelectElement).value as FontFamily } as Partial<TextOverlay>)">
+                        <option v-for="font in fontFamilyOptions" :key="font.id" :value="font.id">{{ font.label }}
+                        </option>
                       </select>
-                      <input
-                        :value="selectedOverlay.fontSize"
-                        class="field-input text-xs"
-                        type="number"
-                        min="12"
-                        max="120"
-                        placeholder="字号"
-                        :disabled="selectedOverlay.locked"
-                        @input="updateOverlay(selectedOverlay.id, { fontSize: Number(($event.target as HTMLInputElement).value) } as Partial<TextOverlay>)"
-                      />
+                      <input :value="selectedOverlay.fontSize" class="field-input text-xs" type="number" min="12"
+                        max="120" placeholder="字号" :disabled="selectedOverlay.locked"
+                        @input="updateOverlay(selectedOverlay.id, { fontSize: Number(($event.target as HTMLInputElement).value) } as Partial<TextOverlay>)" />
                     </div>
                     <div class="mb-2 grid grid-cols-2 gap-2">
                       <label class="field-input flex items-center gap-2 px-2">
                         <span class="text-xs text-slate-600">颜色</span>
-                        <input
-                          :value="selectedOverlay.color"
-                          class="h-6 w-full"
-                          type="color"
+                        <input :value="selectedOverlay.color" class="h-6 w-full" type="color"
                           :disabled="selectedOverlay.locked"
-                          @input="updateOverlay(selectedOverlay.id, { color: ($event.target as HTMLInputElement).value } as Partial<TextOverlay>)"
-                        />
+                          @input="updateOverlay(selectedOverlay.id, { color: ($event.target as HTMLInputElement).value } as Partial<TextOverlay>)" />
                       </label>
                       <label class="flex items-center gap-2 text-xs">
-                        <input
-                          :checked="selectedOverlay.background"
-                          type="checkbox"
-                          class="h-3.5 w-3.5 accent-[#176bff]"
-                          :disabled="selectedOverlay.locked"
-                          @change="updateOverlay(selectedOverlay.id, { background: ($event.target as HTMLInputElement).checked } as Partial<TextOverlay>)"
-                        />
+                        <input :checked="selectedOverlay.background" type="checkbox"
+                          class="h-3.5 w-3.5 accent-[#7132f5]" :disabled="selectedOverlay.locked"
+                          @change="updateOverlay(selectedOverlay.id, { background: ($event.target as HTMLInputElement).checked } as Partial<TextOverlay>)" />
                         <span class="text-slate-600">背景</span>
                       </label>
                     </div>
                   </template>
 
                   <template v-else>
-                    <input
-                      :value="selectedOverlay.name"
-                      class="field-input mb-2 text-xs"
-                      placeholder="图层名称"
+                    <input :value="selectedOverlay.name" class="field-input mb-2 text-xs" placeholder="图层名称"
                       :disabled="selectedOverlay.locked"
-                      @input="updateOverlay(selectedOverlay.id, { name: ($event.target as HTMLInputElement).value } as Partial<SvgOverlay | ImageOverlay>)"
-                    />
+                      @input="updateOverlay(selectedOverlay.id, { name: ($event.target as HTMLInputElement).value } as Partial<SvgOverlay | ImageOverlay>)" />
                     <div v-if="selectedOverlay.kind === 'image'" class="mb-2">
-                      <select
-                        :value="selectedOverlay.shape"
-                        class="field-input text-xs"
+                      <select :value="selectedOverlay.shape" class="field-input text-xs"
                         :disabled="selectedOverlay.locked"
-                        @change="updateOverlay(selectedOverlay.id, { shape: ($event.target as HTMLSelectElement).value as ImageOverlay['shape'] } as Partial<ImageOverlay>)"
-                      >
+                        @change="updateOverlay(selectedOverlay.id, { shape: ($event.target as HTMLSelectElement).value as ImageOverlay['shape'] } as Partial<ImageOverlay>)">
                         <option value="sticker">贴纸</option>
                         <option value="badge">徽章</option>
                         <option value="watermark">水印</option>
@@ -2852,69 +2904,35 @@ onMounted(loadAll);
                     <div class="grid grid-cols-2 gap-2">
                       <label>
                         <span class="field-label">X 位置</span>
-                        <input
-                          :value="selectedOverlay.x"
-                          class="field-input text-xs"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="1"
-                          :disabled="selectedOverlay.locked"
-                          @input="updateOverlay(selectedOverlay.id, { x: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)"
-                        />
+                        <input :value="selectedOverlay.x" class="field-input text-xs" type="number" step="0.01" min="0"
+                          max="1" :disabled="selectedOverlay.locked"
+                          @input="updateOverlay(selectedOverlay.id, { x: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)" />
                       </label>
                       <label>
                         <span class="field-label">Y 位置</span>
-                        <input
-                          :value="selectedOverlay.y"
-                          class="field-input text-xs"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="1"
-                          :disabled="selectedOverlay.locked"
-                          @input="updateOverlay(selectedOverlay.id, { y: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)"
-                        />
+                        <input :value="selectedOverlay.y" class="field-input text-xs" type="number" step="0.01" min="0"
+                          max="1" :disabled="selectedOverlay.locked"
+                          @input="updateOverlay(selectedOverlay.id, { y: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)" />
                       </label>
                     </div>
                     <div class="grid grid-cols-3 gap-2">
                       <label>
                         <span class="field-label">宽度</span>
-                        <input
-                          :value="selectedOverlay.width"
-                          class="field-input text-xs"
-                          type="number"
-                          step="0.05"
-                          min="0.05"
-                          max="1"
-                          :disabled="selectedOverlay.locked"
-                          @input="updateOverlay(selectedOverlay.id, { width: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)"
-                        />
+                        <input :value="selectedOverlay.width" class="field-input text-xs" type="number" step="0.05"
+                          min="0.05" max="1" :disabled="selectedOverlay.locked"
+                          @input="updateOverlay(selectedOverlay.id, { width: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)" />
                       </label>
                       <label>
                         <span class="field-label">高度</span>
-                        <input
-                          :value="selectedOverlay.height"
-                          class="field-input text-xs"
-                          type="number"
-                          step="0.05"
-                          min="0.05"
-                          max="1"
-                          :disabled="selectedOverlay.locked"
-                          @input="updateOverlay(selectedOverlay.id, { height: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)"
-                        />
+                        <input :value="selectedOverlay.height" class="field-input text-xs" type="number" step="0.05"
+                          min="0.05" max="1" :disabled="selectedOverlay.locked"
+                          @input="updateOverlay(selectedOverlay.id, { height: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)" />
                       </label>
                       <label>
                         <span class="field-label">旋转</span>
-                        <input
-                          :value="selectedOverlay.rotation"
-                          class="field-input text-xs"
-                          type="number"
-                          min="-180"
-                          max="180"
-                          :disabled="selectedOverlay.locked"
-                          @input="updateOverlay(selectedOverlay.id, { rotation: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)"
-                        />
+                        <input :value="selectedOverlay.rotation" class="field-input text-xs" type="number" min="-180"
+                          max="180" :disabled="selectedOverlay.locked"
+                          @input="updateOverlay(selectedOverlay.id, { rotation: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)" />
                       </label>
                     </div>
                   </div>
@@ -2940,20 +2958,19 @@ onMounted(loadAll);
             </button>
           </div>
 
-          <div v-if="opLogs.length === 0" class="rounded-2xl border border-dashed border-black/15 bg-white/55 p-12 text-center">
+          <div v-if="opLogs.length === 0"
+            class="rounded-2xl border border-dashed border-black/15 bg-white/55 p-12 text-center">
             <Activity :size="32" class="mx-auto mb-3 text-[var(--muted)]" />
             <div class="text-sm font-semibold">暂无操作日志</div>
             <p class="mt-2 text-xs text-[var(--muted)]">执行生图、ICON、批量生成或模型检测后，日志会显示在这里。</p>
           </div>
 
           <div v-else class="thin-scrollbar max-h-[calc(100vh-190px)] overflow-auto pr-1">
-            <article
-              v-for="log in opLogs"
-              :key="log.id"
-              class="mb-3 rounded-2xl border border-black/5 bg-white/75 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            >
+            <article v-for="log in opLogs" :key="log.id"
+              class="mb-3 rounded-2xl border border-black/5 bg-white/75 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
               <div class="flex items-start gap-3">
-                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#176bff]/10 text-[#176bff]">
+                <div
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#7132f5]/10 text-[#7132f5]">
                   <Activity v-if="log.type === 'validate'" :size="16" />
                   <ImagePlus v-else-if="log.type === 'generate' || log.type === 'icon'" :size="16" />
                   <RefreshCw v-else-if="log.type === 'batch'" :size="16" />
@@ -2963,11 +2980,16 @@ onMounted(loadAll);
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{{ log.type }}</span>
+                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{{
+                      log.type
+                    }}</span>
                     <span class="text-sm font-bold text-slate-900">{{ log.message }}</span>
-                    <span class="ml-auto text-[11px] text-slate-400">{{ log.time.slice(0, 19).replace('T', ' ') }}</span>
+                    <span class="ml-auto text-[11px] text-slate-400">{{ log.time.slice(0, 19).replace('T', ' ')
+                    }}</span>
                   </div>
-                  <p v-if="log.detail" class="mt-2 break-words rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-[var(--muted)]">{{ log.detail }}</p>
+                  <p v-if="log.detail"
+                    class="mt-2 break-words rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-[var(--muted)]">{{
+                      log.detail }}</p>
                 </div>
               </div>
             </article>
@@ -2981,30 +3003,38 @@ onMounted(loadAll);
                 <h2 class="text-base font-bold">大模型请求记录</h2>
                 <p class="mt-1 text-xs text-[var(--muted)]">按配置、模式和来源筛选已入库的生成结果。</p>
               </div>
-              <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-[var(--muted)]">{{ historyArtifacts.length }}</span>
+              <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-[var(--muted)]">{{
+                historyArtifacts.length }}</span>
             </div>
 
             <div class="mb-4 flex flex-wrap gap-2">
-              <UiSelect v-model="historyProfileFilter" :options="historyProfileFilterOptions" layout="fit" title="历史配置筛选" />
+              <UiSelect v-model="historyProfileFilter" :options="historyProfileFilterOptions" layout="fit"
+                title="历史配置筛选" />
               <UiSelect v-model="historyModeFilter" :options="historyModeFilterOptions" layout="fit" title="历史模式筛选" />
-              <UiSelect v-model="historySourceFilter" :options="historySourceFilterOptions" layout="fit" title="历史来源筛选" />
+              <UiSelect v-model="historySourceFilter" :options="historySourceFilterOptions" layout="fit"
+                title="历史来源筛选" />
             </div>
 
-            <div v-if="historyArtifacts.length === 0" class="rounded-2xl border border-dashed border-black/10 bg-white/55 px-4 py-8 text-center text-xs text-[var(--muted)]">
+            <div v-if="historyArtifacts.length === 0"
+              class="rounded-2xl border border-dashed border-black/10 bg-white/55 px-4 py-8 text-center text-xs text-[var(--muted)]">
               暂无匹配的请求记录
             </div>
             <div v-else class="thin-scrollbar grid max-h-[440px] gap-3 overflow-auto pr-1">
-              <article v-for="artifact in historyArtifacts" :key="artifact.id" class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-2xl border border-black/5 bg-white/75 p-2.5">
-                <img :src="artifact.imageUrl" :alt="artifact.prompt" class="h-[72px] w-[72px] rounded-xl object-cover" />
+              <article v-for="artifact in historyArtifacts" :key="artifact.id"
+                class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-2xl border border-black/5 bg-white/75 p-2.5">
+                <img :src="artifact.imageUrl" :alt="artifact.prompt"
+                  class="h-[72px] w-[72px] rounded-xl object-cover" />
                 <div class="min-w-0">
                   <div class="mb-1 flex items-center gap-1.5">
                     <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
-                    <span v-if="artifact.source === 'icon'" class="gallery-mode-tag" style="background:#f5f0ff;color:#7c3aed;">ICON</span>
+                    <span v-if="artifact.source === 'icon'" class="gallery-mode-tag"
+                      style="background:#f5f0ff;color:#7c3aed;">ICON</span>
                   </div>
                   <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
                   <div class="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
                     <span>{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
-                    <button class="font-semibold text-[#176bff] hover:underline" @click="openGallery(artifact.id)">查看</button>
+                    <button class="font-semibold text-[#7132f5] hover:underline"
+                      @click="openGallery(artifact.id)">查看</button>
                   </div>
                 </div>
               </article>
@@ -3023,12 +3053,13 @@ onMounted(loadAll);
             </div>
             <div class="rounded-2xl border border-black/5 bg-white/70 p-4">
               <div class="flex items-center gap-3">
-                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#176bff] text-white">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#7132f5] text-white">
                   <Star :size="17" />
                 </div>
                 <div class="min-w-0">
                   <div class="truncate text-sm font-bold text-slate-900">{{ activeProfile?.name || '尚未选择模型' }}</div>
-                  <div class="mt-1 truncate text-xs text-[var(--muted)]" :title="activeSummary">{{ activeSummary }}</div>
+                  <div class="mt-1 truncate text-xs text-[var(--muted)]" :title="activeSummary">{{ activeSummary }}
+                  </div>
                 </div>
               </div>
               <button class="primary-btn mt-4 h-10 w-full text-xs" @click="openModelConfigPage">
@@ -3041,8 +3072,11 @@ onMounted(loadAll);
       </div>
     </section>
 
-    <div v-if="isTemplateManagerOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-6 backdrop-blur-sm" @click.self="isTemplateManagerOpen = false">
-      <section class="grid max-h-[86vh] w-full max-w-5xl grid-cols-[360px_1fr] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
+    <div v-if="isTemplateManagerOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-6 backdrop-blur-sm"
+      @click.self="isTemplateManagerOpen = false">
+      <section
+        class="grid max-h-[86vh] w-full max-w-5xl grid-cols-[360px_1fr] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
         <aside class="thin-scrollbar overflow-auto border-r border-black/5 bg-slate-50 p-4">
           <div class="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -3054,17 +3088,15 @@ onMounted(loadAll);
             </button>
           </div>
 
-          <div v-if="promptTemplates.length === 0" class="rounded-xl border border-dashed border-black/10 bg-white p-5 text-center text-xs text-[var(--muted)]">
+          <div v-if="promptTemplates.length === 0"
+            class="rounded-xl border border-dashed border-black/10 bg-white p-5 text-center text-xs text-[var(--muted)]">
             暂无模板
           </div>
           <div v-else class="grid gap-2">
-            <button
-              v-for="template in promptTemplates"
-              :key="template.id"
-              class="rounded-xl border bg-white p-3 text-left transition hover:border-[#176bff]/40"
-              :class="templateDraft.id === template.id ? 'border-[#176bff] shadow-sm' : 'border-black/5'"
-              @click="editTemplate(template)"
-            >
+            <button v-for="template in promptTemplates" :key="template.id"
+              class="rounded-xl border bg-white p-3 text-left transition hover:border-[#7132f5]/40"
+              :class="templateDraft.id === template.id ? 'border-[#7132f5] shadow-sm' : 'border-black/5'"
+              @click="editTemplate(template)">
               <div class="mb-1 flex items-center justify-between gap-2">
                 <span class="truncate text-sm font-bold">{{ template.title }}</span>
                 <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-[var(--muted)]">
@@ -3087,7 +3119,8 @@ onMounted(loadAll);
             </button>
           </header>
 
-          <div v-if="templateNotice" class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-800">
+          <div v-if="templateNotice"
+            class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-800">
             {{ templateNotice }}
           </div>
 
@@ -3105,11 +3138,9 @@ onMounted(loadAll);
 
             <label>
               <span class="field-label">提示词内容</span>
-              <textarea
-                v-model="templateDraft.prompt"
-                class="h-56 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
-                placeholder="写下完整提示词模板"
-              ></textarea>
+              <textarea v-model="templateDraft.prompt"
+                class="h-56 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+                placeholder="写下完整提示词模板"></textarea>
             </label>
 
             <div class="template-form-actions">
@@ -3118,7 +3149,8 @@ onMounted(loadAll);
                 应用到当前提示词
               </UiButton>
               <div class="template-action-group">
-                <UiIconButton v-if="templateDraft.id" variant="danger" title="删除模板" @click="deleteTemplate(templateDraft)">
+                <UiIconButton v-if="templateDraft.id" variant="danger" title="删除模板"
+                  @click="deleteTemplate(templateDraft)">
                   <Trash2 :size="15" />
                 </UiIconButton>
                 <UiButton class="template-action-btn" @click="saveTemplate">
@@ -3132,8 +3164,11 @@ onMounted(loadAll);
       </section>
     </div>
 
-    <div v-if="isIconfontSearchOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-6 backdrop-blur-sm" @click.self="isIconfontSearchOpen = false">
-      <section class="grid max-h-[86vh] w-full max-w-4xl grid-cols-[1.15fr_0.85fr] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
+    <div v-if="isIconfontSearchOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-6 backdrop-blur-sm"
+      @click.self="isIconfontSearchOpen = false">
+      <section
+        class="grid max-h-[86vh] w-full max-w-4xl grid-cols-[1.15fr_0.85fr] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
         <section class="thin-scrollbar overflow-auto p-5">
           <header class="mb-4 flex items-start justify-between gap-4">
             <div>
@@ -3149,8 +3184,10 @@ onMounted(loadAll);
             <label>
               <span class="field-label">关键词</span>
               <div class="flex gap-2">
-                <input v-model="iconfontKeyword" class="field-input" placeholder="例如：搜索、home、arrow" @keyup.enter="searchIconfontIcons" />
-                <UiButton variant="secondary" class="w-auto px-4" :disabled="isSearchingIconfont" @click="searchIconfontIcons">
+                <input v-model="iconfontKeyword" class="field-input" placeholder="例如：搜索、home、arrow"
+                  @keyup.enter="searchIconfontIcons" />
+                <UiButton variant="secondary" class="w-auto px-4" :disabled="isSearchingIconfont"
+                  @click="searchIconfontIcons">
                   <Loader2 v-if="isSearchingIconfont" :size="14" class="animate-spin" />
                   <Search v-else :size="14" />
                   搜索
@@ -3161,22 +3198,27 @@ onMounted(loadAll);
             <div class="rounded-xl border border-black/5 bg-slate-50 p-3">
               <div class="mb-2 flex items-center justify-between">
                 <div class="text-sm font-semibold">搜索结果</div>
-                <div class="flex flex-wrap items-center gap-3 text-xs font-semibold text-[#176bff]">
-                  <a :href="`https://icon-sets.iconify.design/search/?query=${encodeURIComponent(iconfontKeyword || 'icon')}`" target="_blank" rel="noreferrer">打开 Iconify</a>
-                  <a :href="`https://www.iconfont.cn/search/index?searchType=icon&q=${encodeURIComponent(iconfontKeyword || 'icon')}`" target="_blank" rel="noreferrer">打开 iconfont</a>
+                <div class="flex flex-wrap items-center gap-3 text-xs font-semibold text-[#7132f5]">
+                  <a :href="`https://icon-sets.iconify.design/search/?query=${encodeURIComponent(iconfontKeyword || 'icon')}`"
+                    target="_blank" rel="noreferrer">打开 Iconify</a>
+                  <a :href="`https://www.iconfont.cn/search/index?searchType=icon&q=${encodeURIComponent(iconfontKeyword || 'icon')}`"
+                    target="_blank" rel="noreferrer">打开 iconfont</a>
                   <a href="https://iconstore.co" target="_blank" rel="noreferrer">iconstore</a>
                   <a href="https://www.flaticon.com" target="_blank" rel="noreferrer">flaticon</a>
                 </div>
               </div>
-              <div v-if="iconfontResults.length === 0" class="rounded-xl border border-dashed border-black/10 bg-white px-4 py-6 text-center text-xs text-[var(--muted)]">
+              <div v-if="iconfontResults.length === 0"
+                class="rounded-xl border border-dashed border-black/10 bg-white px-4 py-6 text-center text-xs text-[var(--muted)]">
                 先输入关键词搜索；如果当前结果不合适，也可以直接粘贴 SVG 链接或 SVG 源码导入。
               </div>
               <div v-else class="grid gap-2">
-                <button v-for="item in iconfontResults" :key="item.id" class="iconfont-result-item" @click="useIconfontResult(item)">
+                <button v-for="item in iconfontResults" :key="item.id" class="iconfont-result-item"
+                  @click="useIconfontResult(item)">
                   <div class="min-w-0">
                     <div class="truncate text-sm font-semibold text-slate-800">{{ item.name }}</div>
                     <div class="mt-1 flex items-center gap-2 text-[11px] text-[var(--muted)]">
-                      <span class="rounded-full bg-slate-100 px-2 py-0.5">{{ item.source === 'iconify' ? 'Iconify' : item.source === 'iconfont' ? 'iconfont' : '手动' }}</span>
+                      <span class="rounded-full bg-slate-100 px-2 py-0.5">{{ item.source === 'iconify' ? 'Iconify' :
+                        item.source === 'iconfont' ? 'iconfont' : '手动' }}</span>
                       <span v-if="item.author">{{ item.author }}</span>
                     </div>
                   </div>
@@ -3192,7 +3234,8 @@ onMounted(loadAll);
             <label>
               <span class="field-label">SVG 链接</span>
               <div class="flex gap-2">
-                <input v-model="iconfontUrlDraft" class="field-input" placeholder="https://api.iconify.design/mdi-light/home.svg" />
+                <input v-model="iconfontUrlDraft" class="field-input"
+                  placeholder="https://api.iconify.design/mdi-light/home.svg" />
                 <UiButton variant="secondary" class="w-auto px-4" @click="importIconfontSvg">
                   <Import :size="14" />
                   导入
@@ -3202,11 +3245,9 @@ onMounted(loadAll);
 
             <label>
               <span class="field-label">SVG 源码</span>
-              <textarea
-                v-model="iconfontSvgDraft"
-                class="h-64 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-[#176bff]"
-                placeholder="<svg>...</svg>"
-              ></textarea>
+              <textarea v-model="iconfontSvgDraft"
+                class="h-64 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-[#7132f5]"
+                placeholder="<svg>...</svg>"></textarea>
             </label>
 
             <UiButton @click="importSvgMarkupDraft">
@@ -3218,8 +3259,10 @@ onMounted(loadAll);
       </section>
     </div>
 
-    <div v-if="isModelConfigOpen" class="fixed inset-0 z-50 overflow-auto bg-slate-950/35 p-6 backdrop-blur-sm" @click.self="isModelConfigOpen = false">
-      <section class="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-[1180px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
+    <div v-if="isModelConfigOpen" class="fixed inset-0 z-50 overflow-auto bg-slate-950/35 p-6 backdrop-blur-sm"
+      @click.self="isModelConfigOpen = false">
+      <section
+        class="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-[1180px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
         <aside class="thin-scrollbar overflow-auto border-r border-black/5 bg-slate-50 p-5">
           <div class="mb-4 flex items-start justify-between gap-3">
             <div>
@@ -3232,25 +3275,23 @@ onMounted(loadAll);
           </div>
 
           <div v-if="configListProfiles.length > 0" class="grid gap-2">
-            <button
-              v-for="profile in configListProfiles"
-              :key="profile.id"
-              class="model-config-profile"
-              :class="profile.id === selectedConfigId ? 'is-active' : ''"
-              @click="selectProfile(profile.id)"
-            >
+            <button v-for="profile in configListProfiles" :key="profile.id" class="model-config-profile"
+              :class="profile.id === selectedConfigId ? 'is-active' : ''" @click="selectProfile(profile.id)">
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
                   <div class="truncate text-sm font-bold text-slate-900">{{ profile.name }}</div>
-                  <span v-if="profile.id === draftProfileId" class="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">未保存</span>
+                  <span v-if="profile.id === draftProfileId"
+                    class="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">未保存</span>
                 </div>
-                <div class="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-[var(--muted)]">{{ profileSummary(profile) }}</div>
+                <div class="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-[var(--muted)]">{{
+                  profileSummary(profile) }}</div>
               </div>
-              <Star v-if="profile.id === selectedConfigId" :size="14" class="shrink-0 text-[#176bff]" />
+              <Star v-if="profile.id === selectedConfigId" :size="14" class="shrink-0 text-[#7132f5]" />
             </button>
           </div>
 
-          <div v-else class="rounded-xl border border-dashed border-black/10 bg-white px-4 py-8 text-center text-sm text-[var(--muted)]">
+          <div v-else
+            class="rounded-xl border border-dashed border-black/10 bg-white px-4 py-8 text-center text-sm text-[var(--muted)]">
             暂无配置，先创建一个模型服务。
           </div>
 
@@ -3264,11 +3305,13 @@ onMounted(loadAll);
           <header class="mb-5 flex items-start justify-between gap-4 border-b border-black/5 pb-4">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#176bff] text-white">
+                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7132f5] text-white">
                   <Star :size="16" />
                 </div>
                 <div class="min-w-0">
-                  <h2 class="truncate text-lg font-bold">{{ draftProfileId ? draft.name : activeProfile?.name || draft.name || '模型配置' }}</h2>
+                  <h2 class="truncate text-lg font-bold">{{ draftProfileId ? draft.name : activeProfile?.name ||
+                    draft.name
+                    || '模型配置' }}</h2>
                   <p class="mt-0.5 truncate text-xs text-[var(--muted)]">{{ activeSummary }}</p>
                 </div>
               </div>
@@ -3284,7 +3327,9 @@ onMounted(loadAll);
               <div class="grid grid-cols-2 gap-3">
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">配置名称</span>
-                  <input v-model="draft.name" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="模型配置名称" />
+                  <input v-model="draft.name"
+                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    placeholder="模型配置名称" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">适配器</span>
@@ -3292,11 +3337,15 @@ onMounted(loadAll);
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">服务地址</span>
-                  <input v-model="draft.baseUrl" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="https://api.openai.com" />
+                  <input v-model="draft.baseUrl"
+                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    placeholder="https://api.openai.com" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">API 密钥</span>
-                  <input v-model="draft.apiKey" type="password" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="sk-..." />
+                  <input v-model="draft.apiKey" type="password"
+                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    placeholder="sk-..." />
                 </label>
               </div>
             </section>
@@ -3306,19 +3355,25 @@ onMounted(loadAll);
               <div class="grid grid-cols-2 gap-3">
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">对话接口路径</span>
-                  <input v-model="draft.chatEndpoint" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="/v1/chat/completions" />
+                  <input v-model="draft.chatEndpoint"
+                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    placeholder="/v1/chat/completions" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">图像接口路径</span>
-                  <input v-model="draft.imageEndpoint" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" placeholder="/v1/images/generations" />
+                  <input v-model="draft.imageEndpoint"
+                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    placeholder="/v1/images/generations" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">超时时间（秒）</span>
-                  <input v-model.number="draft.timeoutSec" type="number" min="10" max="1800" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" />
+                  <input v-model.number="draft.timeoutSec" type="number" min="10" max="1800"
+                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">参考图上限</span>
-                  <input v-model.number="draft.referenceImageLimit" type="number" min="1" max="16" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]" />
+                  <input v-model.number="draft.referenceImageLimit" type="number" min="1" max="16"
+                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]" />
                 </label>
               </div>
             </section>
@@ -3326,20 +3381,25 @@ onMounted(loadAll);
             <section class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/5 bg-slate-50 p-3">
               <div class="relative min-w-[200px] flex-1">
                 <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
-                <input v-model="modelSearch" class="h-9 w-full rounded-lg border border-black/10 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#176bff]" placeholder="搜索模型" />
+                <input v-model="modelSearch"
+                  class="h-9 w-full rounded-lg border border-black/10 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#7132f5]"
+                  placeholder="搜索模型" />
               </div>
               <div class="flex items-center gap-2">
-                <UiButton variant="secondary" size="sm" class="w-auto px-3" :disabled="isValidating || draftErrors.length > 0" @click="validateModel">
+                <UiButton variant="secondary" size="sm" class="w-auto px-3"
+                  :disabled="isValidating || draftErrors.length > 0" @click="validateModel">
                   <Loader2 v-if="isValidating" :size="14" class="animate-spin" />
                   <Activity v-else :size="14" />
                   检测
                 </UiButton>
-                <UiButton variant="secondary" size="sm" class="w-auto px-3" :disabled="isFetchingModels || modelListErrors.length > 0" @click="fetchModelList">
+                <UiButton variant="secondary" size="sm" class="w-auto px-3"
+                  :disabled="isFetchingModels || modelListErrors.length > 0" @click="fetchModelList">
                   <Loader2 v-if="isFetchingModels" :size="14" class="animate-spin" />
                   <RefreshCw v-else :size="14" />
                   获取模型
                 </UiButton>
-                <UiButton size="sm" class="w-auto px-4" :disabled="isSaving || draftErrors.length > 0" @click="saveProfile">
+                <UiButton size="sm" class="w-auto px-4" :disabled="isSaving || draftErrors.length > 0"
+                  @click="saveProfile">
                   <Loader2 v-if="isSaving" :size="14" class="animate-spin" />
                   <Save v-else :size="14" />
                   保存配置
@@ -3348,26 +3408,27 @@ onMounted(loadAll);
             </section>
 
             <section class="flex overflow-hidden rounded-xl border border-black/10 bg-white">
-              <input v-model="manualModelName" class="h-10 min-w-0 flex-1 px-3 text-sm outline-none" placeholder="手动添加模型名称" @keyup.enter="addManualModel" />
-              <button class="border-l border-black/10 px-3 text-[#176bff]" title="添加模型" @click="addManualModel">
+              <input v-model="manualModelName" class="h-10 min-w-0 flex-1 px-3 text-sm outline-none"
+                placeholder="手动添加模型名称" @keyup.enter="addManualModel" />
+              <button class="border-l border-black/10 px-3 text-[#7132f5]" title="添加模型" @click="addManualModel">
                 <Plus :size="18" />
               </button>
             </section>
 
             <div v-if="modelListResult" class="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
               <div>{{ modelListResult.message }}</div>
-              <div v-if="modelListResult.models.length" class="mt-1 text-sky-700">已获取 {{ modelListResult.models.length }} 个模型，列表如下。</div>
+              <div v-if="modelListResult.models.length" class="mt-1 text-sky-700">已获取 {{ modelListResult.models.length
+              }}
+                个模型，列表如下。</div>
             </div>
 
-            <div v-if="draftErrors.length" class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-700">
+            <div v-if="draftErrors.length"
+              class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-700">
               <div v-for="error in draftErrors" :key="error">{{ error }}</div>
             </div>
 
-            <div
-              v-if="validationResult"
-              class="rounded-xl border p-3 text-xs leading-5"
-              :class="validationResult.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'"
-            >
+            <div v-if="validationResult" class="rounded-xl border p-3 text-xs leading-5"
+              :class="validationResult.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'">
               <CheckCircle2 v-if="validationResult.ok" :size="15" class="mr-1 inline" />
               <AlertCircle v-else :size="15" class="mr-1 inline" />
               {{ validationResult.message }} · {{ validationResult.latencyMs }}ms
@@ -3376,7 +3437,7 @@ onMounted(loadAll);
             <section class="rounded-2xl border border-black/10 bg-white">
               <div class="flex items-center justify-between gap-3 border-b border-black/5 bg-slate-50 px-4 py-3">
                 <div class="flex min-w-0 items-center gap-3">
-                  <Sparkles :size="15" class="shrink-0 text-[#176bff]" />
+                  <Sparkles :size="15" class="shrink-0 text-[#7132f5]" />
                   <div class="min-w-0">
                     <h3 class="text-sm font-bold text-slate-800">模型列表</h3>
                     <p class="mt-0.5 text-xs text-[var(--muted)]">{{ filteredModels.length }} 个模型可用</p>
@@ -3391,19 +3452,25 @@ onMounted(loadAll);
               <div v-else class="max-h-[48vh] overflow-auto thin-scrollbar">
                 <div v-for="group in groupedModels" :key="group.name" class="border-b border-black/5 last:border-b-0">
                   <div class="sticky top-0 z-10 flex items-center gap-3 bg-slate-50 px-4 py-3">
-                    <Sparkles :size="15" class="text-[#176bff]" />
+                    <Sparkles :size="15" class="text-[#7132f5]" />
                     <span class="font-semibold">{{ group.name }}</span>
-                    <span class="rounded-full bg-white px-2 py-0.5 text-xs text-[var(--muted)]">{{ group.models.length }}</span>
+                    <span class="rounded-full bg-white px-2 py-0.5 text-xs text-[var(--muted)]">{{ group.models.length
+                    }}</span>
                   </div>
 
-                  <div v-for="model in group.models" :key="model" class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-3">
-                    <button class="min-w-0 break-all text-left text-sm font-medium leading-5 line-clamp-2" :title="model" @click="setMainModel(model)">
+                  <div v-for="model in group.models" :key="model"
+                    class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-3">
+                    <button class="min-w-0 break-all text-left text-sm font-medium leading-5 line-clamp-2"
+                      :title="model" @click="setMainModel(model)">
                       {{ model }}
                     </button>
-                    <span v-if="draft.model === model" class="shrink-0 whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                    <span v-if="draft.model === model"
+                      class="shrink-0 whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                       主模型
                     </span>
-                    <button v-else class="shrink-0 whitespace-nowrap rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold hover:bg-slate-200" @click="setMainModel(model)">
+                    <button v-else
+                      class="shrink-0 whitespace-nowrap rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold hover:bg-slate-200"
+                      @click="setMainModel(model)">
                       设为主模型
                     </button>
                   </div>
@@ -3416,12 +3483,15 @@ onMounted(loadAll);
     </div>
 
 
-    <div v-if="isHelpOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-6 backdrop-blur-sm" @click.self="isHelpOpen = false">
-      <section class="w-full max-w-[560px] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
+    <div v-if="isHelpOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-6 backdrop-blur-sm"
+      @click.self="isHelpOpen = false">
+      <section
+        class="w-full max-w-[560px] overflow-hidden rounded-2xl border border-white/80 bg-white shadow-2xl shadow-slate-900/20">
         <header class="flex items-start justify-between gap-4 border-b border-black/5 bg-slate-50 px-5 py-4">
           <div>
             <div class="flex items-center gap-2">
-              <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#176bff] text-white">
+              <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7132f5] text-white">
                 <Sparkles :size="17" />
               </div>
               <div>
@@ -3465,15 +3535,15 @@ onMounted(loadAll);
             <h3 class="text-sm font-bold">开源与联系</h3>
             <div class="mt-3 grid gap-3 text-sm">
               <button
-                class="flex w-full items-center justify-between gap-3 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5 text-left font-semibold text-[#176bff] hover:bg-slate-100"
-                @click="openExternalUrl('https://github.com/SamuelYooo/sam-image-app')"
-              >
+                class="flex w-full items-center justify-between gap-3 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5 text-left font-semibold text-[#7132f5] hover:bg-slate-100"
+                @click="openExternalUrl('https://github.com/SamuelYooo/sam-image-app')">
                 <span class="flex min-w-0 items-center gap-2">
                   <Github :size="16" class="shrink-0" />
                   <span class="truncate">https://github.com/SamuelYooo/sam-image-app</span>
                 </span>
               </button>
-              <div class="flex items-center justify-between gap-4 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5">
+              <div
+                class="flex items-center justify-between gap-4 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5">
                 <span class="text-[var(--muted)]">微信</span>
                 <span class="font-semibold">malovoz</span>
               </div>
@@ -3483,35 +3553,28 @@ onMounted(loadAll);
       </section>
     </div>
 
-    <div class="pointer-events-none fixed bottom-3 right-4 z-20 rounded-full border border-black/5 bg-white/70 px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)] shadow-sm backdrop-blur-xl">
+    <div
+      class="pointer-events-none fixed bottom-3 right-4 z-20 rounded-full border border-black/5 bg-white/70 px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)] shadow-sm backdrop-blur-xl">
       v{{ appVersion }}
     </div>
 
     <Teleport to="body">
-      <div
-        v-if="isLightboxOpen && selectedArtifact"
+      <div v-if="isLightboxOpen && selectedArtifact"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-        @click.self="isLightboxOpen = false"
-        @keydown.escape.window="isLightboxOpen = false"
-      >
-        <button class="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" @click="isLightboxOpen = false">
+        @click.self="isLightboxOpen = false" @keydown.escape.window="isLightboxOpen = false">
+        <button class="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
+          @click="isLightboxOpen = false">
           <X :size="20" />
         </button>
-        <img
-          :src="selectedArtifact.imageUrl"
-          :alt="selectedArtifact.prompt"
-          class="max-h-[92vh] max-w-[92vw] object-contain"
-        />
+        <img :src="selectedArtifact.imageUrl" :alt="selectedArtifact.prompt"
+          class="max-h-[92vh] max-w-[92vw] object-contain" />
       </div>
     </Teleport>
 
     <Teleport to="body">
-      <div
-        v-if="isPromptExpanded"
+      <div v-if="isPromptExpanded"
         class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
-        @click.self="isPromptExpanded = false"
-        @keydown.escape.window="isPromptExpanded = false"
-      >
+        @click.self="isPromptExpanded = false" @keydown.escape.window="isPromptExpanded = false">
         <div class="mx-4 w-full max-w-2xl rounded-2xl border border-white/80 bg-white p-5 shadow-2xl">
           <div class="mb-3 flex items-center justify-between gap-3">
             <h2 class="text-base font-bold">完整提示词</h2>
@@ -3519,11 +3582,9 @@ onMounted(loadAll);
               <X :size="16" />
             </button>
           </div>
-          <textarea
-            v-model="prompt"
-            class="h-64 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#176bff]"
-            placeholder="描述你想生成的画面"
-          ></textarea>
+          <textarea v-model="prompt"
+            class="h-64 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+            placeholder="描述你想生成的画面"></textarea>
           <div class="mt-3 flex items-center justify-end gap-2">
             <button class="secondary-btn" @click="isPromptExpanded = false">关闭</button>
           </div>
@@ -3562,18 +3623,18 @@ onMounted(loadAll);
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid rgba(23, 107, 255, 0.22);
-  background: linear-gradient(135deg, rgba(23, 107, 255, 0.14), rgba(255, 255, 255, 0.96));
-  color: #176bff;
-  box-shadow: 0 18px 38px rgba(23, 107, 255, 0.18);
+  border: 1px solid rgba(113, 50, 245, 0.22);
+  background: linear-gradient(135deg, rgba(113, 50, 245, 0.14), rgba(255, 255, 255, 0.96));
+  color: #7132f5;
+  box-shadow: 0 18px 38px rgba(113, 50, 245, 0.18);
   backdrop-filter: blur(18px);
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
 .gallery-panel-float-btn:hover {
   transform: translateY(-1px) scale(1.03);
-  border-color: rgba(23, 107, 255, 0.34);
-  box-shadow: 0 22px 44px rgba(23, 107, 255, 0.24);
+  border-color: rgba(113, 50, 245, 0.34);
+  box-shadow: 0 22px 44px rgba(113, 50, 245, 0.24);
 }
 
 .gallery-panel-edge-btn {
@@ -3583,7 +3644,7 @@ onMounted(loadAll);
 
 .gallery-panel-edge-btn-right {
   border-radius: 999px 0 0 999px;
-  border-left: 1px solid rgba(23, 107, 255, 0.22);
+  border-left: 1px solid rgba(113, 50, 245, 0.22);
   border-right: 0;
 }
 
@@ -3599,6 +3660,7 @@ onMounted(loadAll);
   color: #1e293b;
   transition: background 0.16s ease;
 }
+
 .prompt-expand-btn:hover {
   background: white;
 }
@@ -3653,7 +3715,7 @@ onMounted(loadAll);
   align-items: center;
   gap: 0.65rem;
   border-radius: 999px;
-  border: 1px solid rgba(23, 107, 255, 0.16);
+  border: 1px solid rgba(113, 50, 245, 0.16);
   background: rgba(255, 255, 255, 0.88);
   padding: 0.35rem 0.75rem 0.35rem 0.45rem;
   box-shadow: 0 14px 40px rgba(42, 54, 68, 0.1);
@@ -3662,7 +3724,7 @@ onMounted(loadAll);
 }
 
 .model-switcher-trigger:hover {
-  border-color: rgba(23, 107, 255, 0.32);
+  border-color: rgba(113, 50, 245, 0.32);
   background: white;
   transform: translateY(-1px);
 }
@@ -3706,16 +3768,16 @@ onMounted(loadAll);
 
 .model-switcher-item:hover,
 .model-config-profile:hover {
-  border-color: rgba(23, 107, 255, 0.28);
+  border-color: rgba(113, 50, 245, 0.28);
   background: white;
   transform: translateY(-1px);
 }
 
 .model-switcher-item.is-active,
 .model-config-profile.is-active {
-  border-color: rgba(23, 107, 255, 0.38);
-  background: rgba(23, 107, 255, 0.08);
-  box-shadow: 0 12px 30px rgba(23, 107, 255, 0.1);
+  border-color: rgba(113, 50, 245, 0.38);
+  background: rgba(113, 50, 245, 0.08);
+  box-shadow: 0 12px 30px rgba(113, 50, 245, 0.1);
 }
 
 .setting-title {
@@ -3779,7 +3841,7 @@ onMounted(loadAll);
 }
 
 .prompt-template-trigger:hover {
-  border-color: rgba(23, 107, 255, 0.28);
+  border-color: rgba(113, 50, 245, 0.28);
   background: rgba(255, 255, 255, 0.96);
   transform: translateY(-1px);
 }
@@ -3808,7 +3870,7 @@ onMounted(loadAll);
 }
 
 .template-list-btn:hover {
-  border-color: rgba(23, 107, 255, 0.32);
+  border-color: rgba(113, 50, 245, 0.32);
   background: white;
   transform: translateY(-1px);
 }
@@ -3834,14 +3896,14 @@ onMounted(loadAll);
 
 .gallery-list-item:hover {
   transform: translateY(-1px);
-  border-color: rgba(23, 107, 255, 0.2);
+  border-color: rgba(113, 50, 245, 0.2);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 .gallery-list-item.is-active {
-  border-color: rgba(23, 107, 255, 0.45);
-  box-shadow: 0 6px 20px rgba(23, 107, 255, 0.14);
-  background: linear-gradient(135deg, rgba(23, 107, 255, 0.03) 0%, white 100%);
+  border-color: rgba(113, 50, 245, 0.45);
+  box-shadow: 0 6px 20px rgba(113, 50, 245, 0.14);
+  background: linear-gradient(135deg, rgba(113, 50, 245, 0.03) 0%, white 100%);
 }
 
 .gallery-list-thumb {
@@ -3895,14 +3957,14 @@ onMounted(loadAll);
 }
 
 .action-btn-primary {
-  background: #176bff;
+  background: #7132f5;
   color: white;
 }
 
 .action-btn-primary:hover {
   background: #1557cc;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(23, 107, 255, 0.25);
+  box-shadow: 0 4px 12px rgba(113, 50, 245, 0.25);
 }
 
 .action-btn-danger {
@@ -3934,9 +3996,9 @@ onMounted(loadAll);
 }
 
 .tool-btn:hover {
-  border-color: rgba(23, 107, 255, 0.3);
-  background: rgba(23, 107, 255, 0.04);
-  color: #176bff;
+  border-color: rgba(113, 50, 245, 0.3);
+  background: rgba(113, 50, 245, 0.04);
+  color: #7132f5;
   transform: translateY(-1px);
 }
 
@@ -3955,14 +4017,14 @@ onMounted(loadAll);
 }
 
 .layer-item:hover {
-  border-color: rgba(23, 107, 255, 0.2);
-  background: rgba(23, 107, 255, 0.02);
+  border-color: rgba(113, 50, 245, 0.2);
+  background: rgba(113, 50, 245, 0.02);
 }
 
 .layer-item-active {
-  border-color: #176bff !important;
-  background: rgba(23, 107, 255, 0.06) !important;
-  box-shadow: 0 0 0 3px rgba(23, 107, 255, 0.1);
+  border-color: #7132f5 !important;
+  background: rgba(113, 50, 245, 0.06) !important;
+  box-shadow: 0 0 0 3px rgba(113, 50, 245, 0.1);
 }
 
 .layer-item-locked {
@@ -3980,6 +4042,33 @@ onMounted(loadAll);
   color: #64748b;
 }
 
+.layer-delete-btn {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #9497a9;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.layer-delete-btn:hover {
+  background: var(--red-subtle);
+  color: var(--red);
+}
+
+.layer-property-delete-btn {
+  color: #9497a9;
+}
+
+.layer-property-delete-btn:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.24);
+  background: var(--red-subtle);
+  color: var(--red);
+  box-shadow: none;
+}
+
 .control-btn {
   padding: 8px 12px;
   border-radius: 8px;
@@ -3992,9 +4081,9 @@ onMounted(loadAll);
 }
 
 .control-btn:hover {
-  border-color: rgba(23, 107, 255, 0.3);
-  background: rgba(23, 107, 255, 0.04);
-  color: #176bff;
+  border-color: rgba(113, 50, 245, 0.3);
+  background: rgba(113, 50, 245, 0.04);
+  color: #7132f5;
 }
 
 .creative-tools-grid {
@@ -4049,7 +4138,7 @@ onMounted(loadAll);
 
 .iconfont-result-item:hover {
   transform: translateY(-1px);
-  border-color: rgba(23, 107, 255, 0.28);
+  border-color: rgba(113, 50, 245, 0.28);
   box-shadow: 0 10px 26px rgba(42, 54, 68, 0.08);
 }
 
@@ -4070,15 +4159,15 @@ onMounted(loadAll);
 .gallery-download-btn {
   min-width: 7rem;
   padding: 0 1rem;
-  background: #176bff;
+  background: #7132f5;
   color: white;
 }
 
 .gallery-danger-btn {
   width: 2.5rem;
-  border: 1px solid rgba(214, 69, 69, 0.22);
-  background: rgba(214, 69, 69, 0.08);
-  color: #d64545;
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
 }
 
 .gallery-download-btn:hover,
@@ -4103,7 +4192,7 @@ onMounted(loadAll);
 
 .connection-path {
   fill: none;
-  stroke: rgba(23, 107, 255, 0.42);
+  stroke: rgba(113, 50, 245, 0.42);
   stroke-width: 3;
   stroke-linecap: round;
   stroke-dasharray: 10 10;

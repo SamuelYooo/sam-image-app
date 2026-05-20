@@ -67,7 +67,7 @@ export interface GenerationRequest {
 }
 
 export type ArtifactSource = 'generate' | 'icon';
-export type ArtifactType = 'type_default' | 'type_icon';
+export type ArtifactType = 'type_default' | 'type_icon' | 'type_movie';
 
 export interface Artifact {
   id: string;
