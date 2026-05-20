@@ -35,6 +35,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import packageJson from '../package.json';
 import { api } from './api/client';
+import { UiButton, UiField, UiIconButton, UiSelect } from './components/ui';
 import type {
   AdapterInfo,
   Artifact,
@@ -308,6 +309,47 @@ const modeOptions: Array<{ id: WorkMode; label: string; desc: string }> = [
   { id: 'reverse', label: '反推', desc: '图片理解与提示词' },
   { id: 'blend', label: '融合', desc: '多图参考混合' },
 ];
+const sizePresetOptions = [
+  ...imageSizePresetGroups.flatMap((group) => group.options.map((option) => ({ value: option.value, label: option.label, title: option.label }))),
+  { value: 'custom', label: '自定义尺寸', title: '自定义尺寸' },
+];
+const iconStyleOptions = [
+  { value: 'modern', label: '现代 App', title: '现代 App 风格' },
+  { value: 'flat', label: '扁平矢量', title: '扁平矢量风格' },
+  { value: 'threeD', label: '3D 质感', title: '3D 质感风格' },
+  { value: 'line', label: '线性极简', title: '线性极简风格' },
+  { value: 'glass', label: '毛玻璃', title: '毛玻璃风格' },
+];
+const iconBackgroundOptions = [
+  { value: 'keep', label: '跟随生成结果', title: '导出时保持生成结果背景' },
+  { value: 'transparent', label: '提示透明背景', title: '提示模型输出透明背景' },
+  { value: 'solid', label: '导出时铺主色底', title: '导出时使用主色作为背景' },
+];
+const galleryModeFilterOptions = computed(() => [
+  { value: 'all', label: '全部模式', title: '全部生成模式' },
+  ...modeOptions.map((item) => ({ value: item.id, label: item.label, title: item.desc })),
+]);
+const historyModeFilterOptions = computed(() => galleryModeFilterOptions.value);
+const galleryProfileFilterOptions = computed(() => [
+  { value: 'all', label: '全部作品集', title: '全部作品集' },
+  ...profiles.value.map((profile) => ({ value: profile.id, label: profile.name, title: profileSummary(profile) })),
+]);
+const historyProfileFilterOptions = computed(() => [
+  { value: 'all', label: '全部配置', title: '全部模型配置' },
+  ...profiles.value.map((profile) => ({ value: profile.id, label: profile.name, title: profileSummary(profile) })),
+]);
+const historySourceFilterOptions = [
+  { value: 'all', label: '全部来源', title: '全部来源' },
+  { value: 'generate', label: '生图', title: 'SamTo图 生成来源' },
+  { value: 'icon', label: 'ICON', title: 'SamToICON 生成来源' },
+];
+const exportFormatOptions = [
+  { value: 'png', label: 'PNG（无损）', title: 'PNG（无损）' },
+  { value: 'jpg', label: 'JPG（压缩）', title: 'JPG（压缩）' },
+];
+const adapterSelectOptions = computed(() =>
+  adapters.value.map((adapter) => ({ value: adapter.id, label: adapter.name, title: adapter.name })),
+);
 const fontFamilyOptions: Array<{ id: FontFamily; label: string; css: string }> = [
   { id: 'sans', label: '无衬线', css: '"Microsoft YaHei", "PingFang SC", sans-serif' },
   { id: 'serif', label: '衬线', css: '"Noto Serif SC", "Songti SC", serif' },
@@ -1946,15 +1988,15 @@ onMounted(loadAll);
                 <h1 class="text-sm font-semibold">生成参数</h1>
                 <p class="mt-1 truncate text-xs text-[var(--muted)]">{{ activeProfile ? `使用 ${activeProfile.name}` : '尚未保存模型配置' }}</p>
               </div>
-              <button class="primary-btn min-w-[118px] px-4" :disabled="isGenerating" @click="generateImage">
+              <UiButton class="min-w-[118px] px-4" :disabled="isGenerating" @click="generateImage">
                 <Loader2 v-if="isGenerating" :size="16" class="animate-spin" />
                 <Play v-else :size="16" />
                 开始生成
-              </button>
-              <button class="secondary-btn min-w-[100px] px-4" @click="isBatchOpen = !isBatchOpen">
+              </UiButton>
+              <UiButton variant="secondary" class="min-w-[100px] px-4" @click="isBatchOpen = !isBatchOpen">
                 <Images :size="16" />
                 批量
-              </button>
+              </UiButton>
             </div>
 
             <div class="mb-3 grid grid-cols-4 gap-2 rounded-2xl border border-black/5 bg-white/65 p-1.5 text-xs">
@@ -1983,16 +2025,9 @@ onMounted(loadAll);
               {{ isPolishing ? '润色中...' : '润色提示词' }}
             </button>
 
-            <div class="mt-3 grid grid-cols-[1fr_160px_120px] gap-3">
+            <div class="mt-3 grid grid-cols-[1fr_auto_120px] gap-3">
               <input v-model="negativePrompt" class="field-input" placeholder="负向提示词" />
-              <select v-model="sizePreset" class="field-input">
-                <optgroup v-for="group in imageSizePresetGroups" :key="group.label" :label="group.label">
-                  <option v-for="option in group.options" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                  </option>
-                </optgroup>
-                <option value="custom">自定义尺寸</option>
-              </select>
+              <UiSelect v-model="sizePreset" :options="sizePresetOptions" layout="fit" title="生图尺寸预设" />
               <input v-model.number="seed" class="field-input" type="number" placeholder="随机种子" />
             </div>
 
@@ -2095,11 +2130,11 @@ onMounted(loadAll);
               </div>
             </div>
 
-            <button class="primary-btn mt-3" :disabled="isBatchRunning || !batchPrompts.trim()" @click="runBatchGeneration">
+            <UiButton class="mt-3" :disabled="isBatchRunning || !batchPrompts.trim()" @click="runBatchGeneration">
               <Loader2 v-if="isBatchRunning" :size="16" class="animate-spin" />
               <Images v-else :size="16" />
               {{ isBatchRunning ? '批量生成中...' : '开始批量生成' }}
-            </button>
+            </UiButton>
           </section>
         </div>
       </section>
@@ -2135,24 +2170,27 @@ onMounted(loadAll);
             :key="artifact.id"
             class="overflow-hidden rounded-2xl border border-black/5 bg-white transition hover:-translate-y-0.5 hover:shadow-lg"
           >
-            <img :src="artifact.imageUrl" :alt="artifact.prompt" class="gallery-list-thumb" />
+            <div class="relative">
+              <img :src="artifact.imageUrl" :alt="artifact.prompt" class="gallery-list-thumb" />
+              <div class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity hover:opacity-100 cursor-pointer" @click="openGallery(artifact.id)">
+                <span class="rounded-full bg-white/90 px-4 py-2 text-sm font-bold text-slate-800 shadow-lg">查看作品</span>
+              </div>
+            </div>
             <div class="p-3">
               <div class="mb-1 flex items-center gap-1.5">
                 <span class="gallery-mode-tag" :class="`tag-${artifact.mode}`">{{ modeLabel(artifact.mode) }}</span>
                 <span class="ml-auto text-[10px] text-slate-400">{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
               </div>
               <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
-              <div class="mt-3 grid grid-cols-[1fr_auto] gap-2">
-                <button class="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold hover:bg-slate-200" @click="openGallery(artifact.id)">
-                  查看作品
-                </button>
-                <button
-                  class="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-100"
+              <div class="mt-3 flex items-center justify-end">
+                <UiIconButton
+                  variant="danger"
+                  size="sm"
                   title="删除作品"
                   @click.stop="deleteArtifact(artifact.id, 'collection')"
                 >
                   <Trash2 :size="14" />
-                </button>
+                </UiIconButton>
               </div>
             </div>
           </article>
@@ -2176,7 +2214,7 @@ onMounted(loadAll);
           <div class="grid gap-4">
             <label>
               <span class="field-label">图标名称</span>
-              <input v-model="iconName" class="field-input" placeholder="weather-app" />
+              <UiField v-model="iconName" placeholder="weather-app" title="图标名称" />
             </label>
 
             <label>
@@ -2196,13 +2234,7 @@ onMounted(loadAll);
             <div class="grid grid-cols-2 gap-3">
               <label>
                 <span class="field-label">风格</span>
-                <select v-model="iconStyle" class="field-input">
-                  <option value="modern">现代 App</option>
-                  <option value="flat">扁平矢量</option>
-                  <option value="threeD">3D 质感</option>
-                  <option value="line">线性极简</option>
-                  <option value="glass">毛玻璃</option>
-                </select>
+                <UiSelect v-model="iconStyle" :options="iconStyleOptions" layout="fluid" title="图标风格" />
               </label>
               <label>
                 <span class="field-label">主色</span>
@@ -2213,11 +2245,7 @@ onMounted(loadAll);
             <div class="grid grid-cols-2 gap-3">
               <label>
                 <span class="field-label">背景</span>
-                <select v-model="iconBackground" class="field-input">
-                  <option value="keep">跟随生成结果</option>
-                  <option value="transparent">提示透明背景</option>
-                  <option value="solid">导出时铺主色底</option>
-                </select>
+                <UiSelect v-model="iconBackground" :options="iconBackgroundOptions" layout="fluid" title="图标背景" />
               </label>
               <label>
                 <span class="field-label">负向提示词</span>
@@ -2225,11 +2253,11 @@ onMounted(loadAll);
               </label>
             </div>
 
-            <button class="primary-btn" :disabled="isIconGenerating" @click="generateIconImage">
+            <UiButton :disabled="isIconGenerating" @click="generateIconImage">
               <Loader2 v-if="isIconGenerating" :size="16" class="animate-spin" />
               <Play v-else :size="16" />
               {{ isIconGenerating ? '正在生成' : '生成 ICON 母图' }}
-            </button>
+            </UiButton>
 
             <section class="rounded-xl border border-black/5 bg-white/65 p-3">
               <div class="mb-2 flex items-center justify-between">
@@ -2299,10 +2327,10 @@ onMounted(loadAll);
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[var(--muted)]">ICO</span>
-              <button v-if="iconSourceArtifact" class="secondary-btn w-auto px-3" @click="iconSourceArtifactId = ''">
+              <UiButton variant="secondary" class="w-auto px-3" :disabled="!iconSourceArtifact" @click="iconSourceArtifactId = ''">
                 <X :size="14" />
                 重新生成
-              </button>
+              </UiButton>
             </div>
           </div>
 
@@ -2350,11 +2378,11 @@ onMounted(loadAll);
               </button>
             </div>
 
-            <button class="primary-btn mt-3" :disabled="isIconExporting || !iconSourceArtifact" @click="exportIconSizes">
+            <UiButton class="mt-3" :disabled="isIconExporting || !iconSourceArtifact" @click="exportIconSizes">
               <Loader2 v-if="isIconExporting" :size="16" class="animate-spin" />
               <Download v-else :size="16" />
               {{ isIconExporting ? '正在导出' : '导出选中尺寸' }}
-            </button>
+            </UiButton>
 
             <div class="mt-3 rounded-xl border border-black/5 bg-white/65 p-3 text-xs leading-5 text-[var(--muted)]">
               母图会自动裁切为正方形再缩放为多尺寸 ICO。小尺寸建议使用简洁主体、少细节、强轮廓。
@@ -2388,17 +2416,11 @@ onMounted(loadAll);
           <div class="gallery-list-toolbar">
             <label>
               <span class="field-label">作品集</span>
-              <select v-model="galleryProfileFilter" class="field-input">
-                <option value="all">全部作品集</option>
-                <option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
-              </select>
+              <UiSelect v-model="galleryProfileFilter" :options="galleryProfileFilterOptions" layout="fluid" title="作品集筛选" />
             </label>
             <label>
               <span class="field-label">生成模式</span>
-              <select v-model="galleryModeFilter" class="field-input">
-                <option value="all">全部模式</option>
-                <option v-for="item in modeOptions" :key="item.id" :value="item.id">{{ item.label }}</option>
-              </select>
+              <UiSelect v-model="galleryModeFilter" :options="galleryModeFilterOptions" layout="fluid" title="生成模式筛选" />
             </label>
           </div>
 
@@ -2464,19 +2486,19 @@ onMounted(loadAll);
               <button class="icon-btn" :title="textOverlayEnabled ? '关闭再编辑' : '开启再编辑'" @click="textOverlayEnabled = !textOverlayEnabled">
                 <Wand2 :size="16" />
               </button>
-              <button
-                class="gallery-danger-btn"
+              <UiIconButton
+                variant="danger"
                 :disabled="!selectedArtifact"
                 title="删除作品"
                 @click="selectedArtifact && deleteArtifact(selectedArtifact.id, 'gallery')"
               >
                 <Trash2 :size="16" />
-              </button>
-              <button class="gallery-download-btn" :disabled="!selectedArtifact || isDownloading" @click="downloadSelectedArtifact">
+              </UiIconButton>
+              <UiButton class="gallery-download-btn" :disabled="!selectedArtifact || isDownloading" @click="downloadSelectedArtifact">
                 <Loader2 v-if="isDownloading" :size="16" class="animate-spin" />
                 <Download v-else :size="16" />
                 {{ isDownloading ? '正在导出' : '下载到本地' }}
-              </button>
+              </UiButton>
             </div>
           </div>
 
@@ -2611,24 +2633,21 @@ onMounted(loadAll);
             </div>
 
             <div class="mb-4 grid grid-cols-2 gap-2">
-              <button class="action-btn action-btn-primary" @click="downloadSelectedArtifact">
+              <UiButton variant="secondary" size="sm" @click="downloadSelectedArtifact">
                 <Download :size="14" />
                 下载原图
-              </button>
-              <button class="action-btn action-btn-danger" @click="selectedArtifact && deleteArtifact(selectedArtifact.id, 'gallery')">
+              </UiButton>
+              <UiButton variant="danger" size="sm" @click="selectedArtifact && deleteArtifact(selectedArtifact.id, 'gallery')">
                 <Trash2 :size="14" />
                 删除作品
-              </button>
+              </UiButton>
             </div>
 
             <section class="mb-4 rounded-xl border border-black/5 bg-white/70 p-3">
               <h3 class="mb-3 text-sm font-semibold text-slate-900">导出设置</h3>
               <label class="mb-3 block">
                 <span class="field-label">格式</span>
-                <select v-model="exportFormat" class="field-input">
-                  <option value="png">PNG（无损）</option>
-                  <option value="jpg">JPG（压缩）</option>
-                </select>
+                <UiSelect v-model="exportFormat" :options="exportFormatOptions" layout="fluid" title="导出格式" />
               </label>
               <label v-if="exportFormat === 'jpg'" class="block">
                 <span class="field-label">质量：{{ exportQuality }}%</span>
@@ -2966,19 +2985,9 @@ onMounted(loadAll);
             </div>
 
             <div class="mb-4 flex flex-wrap gap-2">
-              <select v-model="historyProfileFilter" class="field-input h-9 min-w-0 flex-1 text-xs">
-                <option value="all">全部配置</option>
-                <option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
-              </select>
-              <select v-model="historyModeFilter" class="field-input h-9 min-w-0 flex-1 text-xs">
-                <option value="all">全部模式</option>
-                <option v-for="item in modeOptions" :key="item.id" :value="item.id">{{ item.label }}</option>
-              </select>
-              <select v-model="historySourceFilter" class="field-input h-9 min-w-0 flex-1 text-xs">
-                <option value="all">全部来源</option>
-                <option value="generate">生图</option>
-                <option value="icon">ICON</option>
-              </select>
+              <UiSelect v-model="historyProfileFilter" :options="historyProfileFilterOptions" layout="fit" title="历史配置筛选" />
+              <UiSelect v-model="historyModeFilter" :options="historyModeFilterOptions" layout="fit" title="历史模式筛选" />
+              <UiSelect v-model="historySourceFilter" :options="historySourceFilterOptions" layout="fit" title="历史来源筛选" />
             </div>
 
             <div v-if="historyArtifacts.length === 0" class="rounded-2xl border border-dashed border-black/10 bg-white/55 px-4 py-8 text-center text-xs text-[var(--muted)]">
@@ -3104,18 +3113,18 @@ onMounted(loadAll);
             </label>
 
             <div class="template-form-actions">
-              <button class="secondary-btn template-action-btn" @click="applyPromptTemplate(templateDraft)">
+              <UiButton variant="secondary" class="template-action-btn" @click="applyPromptTemplate(templateDraft)">
                 <Star :size="15" />
                 应用到当前提示词
-              </button>
+              </UiButton>
               <div class="template-action-group">
-                <button v-if="templateDraft.id" class="icon-danger-btn" title="删除模板" @click="deleteTemplate(templateDraft)">
+                <UiIconButton v-if="templateDraft.id" variant="danger" title="删除模板" @click="deleteTemplate(templateDraft)">
                   <Trash2 :size="15" />
-                </button>
-                <button class="primary-btn template-action-btn" @click="saveTemplate">
+                </UiIconButton>
+                <UiButton class="template-action-btn" @click="saveTemplate">
                   <Save :size="15" />
                   保存模板
-                </button>
+                </UiButton>
               </div>
             </div>
           </div>
@@ -3141,11 +3150,11 @@ onMounted(loadAll);
               <span class="field-label">关键词</span>
               <div class="flex gap-2">
                 <input v-model="iconfontKeyword" class="field-input" placeholder="例如：搜索、home、arrow" @keyup.enter="searchIconfontIcons" />
-                <button class="secondary-btn w-auto px-4" :disabled="isSearchingIconfont" @click="searchIconfontIcons">
+                <UiButton variant="secondary" class="w-auto px-4" :disabled="isSearchingIconfont" @click="searchIconfontIcons">
                   <Loader2 v-if="isSearchingIconfont" :size="14" class="animate-spin" />
                   <Search v-else :size="14" />
                   搜索
-                </button>
+                </UiButton>
               </div>
             </label>
 
@@ -3184,10 +3193,10 @@ onMounted(loadAll);
               <span class="field-label">SVG 链接</span>
               <div class="flex gap-2">
                 <input v-model="iconfontUrlDraft" class="field-input" placeholder="https://api.iconify.design/mdi-light/home.svg" />
-                <button class="secondary-btn w-auto px-4" @click="importIconfontSvg">
+                <UiButton variant="secondary" class="w-auto px-4" @click="importIconfontSvg">
                   <Import :size="14" />
                   导入
-                </button>
+                </UiButton>
               </div>
             </label>
 
@@ -3200,10 +3209,10 @@ onMounted(loadAll);
               ></textarea>
             </label>
 
-            <button class="primary-btn" @click="importSvgMarkupDraft">
+            <UiButton @click="importSvgMarkupDraft">
               <Plus :size="15" />
               导入为本地图层
-            </button>
+            </UiButton>
           </div>
         </aside>
       </section>
@@ -3279,9 +3288,7 @@ onMounted(loadAll);
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">适配器</span>
-                  <select v-model="draft.adapter" class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#176bff]">
-                    <option v-for="adapter in adapters" :key="adapter.id" :value="adapter.id">{{ adapter.name }}</option>
-                  </select>
+                  <UiSelect v-model="draft.adapter" :options="adapterSelectOptions" layout="fluid" title="模型协议适配器" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">服务地址</span>
@@ -3322,21 +3329,21 @@ onMounted(loadAll);
                 <input v-model="modelSearch" class="h-9 w-full rounded-lg border border-black/10 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#176bff]" placeholder="搜索模型" />
               </div>
               <div class="flex items-center gap-2">
-                <button class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[#176bff38] bg-[#176bff14] px-3 text-xs font-bold text-[#176bff] transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none" :disabled="isValidating || draftErrors.length > 0" @click="validateModel">
+                <UiButton variant="secondary" size="sm" class="w-auto px-3" :disabled="isValidating || draftErrors.length > 0" @click="validateModel">
                   <Loader2 v-if="isValidating" :size="14" class="animate-spin" />
                   <Activity v-else :size="14" />
                   检测
-                </button>
-                <button class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[#176bff38] bg-[#176bff14] px-3 text-xs font-bold text-[#176bff] transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none" :disabled="isFetchingModels || modelListErrors.length > 0" @click="fetchModelList">
+                </UiButton>
+                <UiButton variant="secondary" size="sm" class="w-auto px-3" :disabled="isFetchingModels || modelListErrors.length > 0" @click="fetchModelList">
                   <Loader2 v-if="isFetchingModels" :size="14" class="animate-spin" />
                   <RefreshCw v-else :size="14" />
                   获取模型
-                </button>
-                <button class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-[#176bff] px-4 text-xs font-bold text-white transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none" :disabled="isSaving || draftErrors.length > 0" @click="saveProfile">
+                </UiButton>
+                <UiButton size="sm" class="w-auto px-4" :disabled="isSaving || draftErrors.length > 0" @click="saveProfile">
                   <Loader2 v-if="isSaving" :size="14" class="animate-spin" />
                   <Save v-else :size="14" />
                   保存配置
-                </button>
+                </UiButton>
               </div>
             </section>
 
@@ -3536,9 +3543,16 @@ onMounted(loadAll);
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   background: white;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.875rem;
   font-weight: 600;
+}
+
+.icon-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border-radius: 12px;
 }
 
 .gallery-panel-float-btn {
@@ -3720,79 +3734,6 @@ onMounted(loadAll);
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
-}
-
-.field-input {
-  width: 100%;
-  border-radius: 0.75rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.92);
-  padding: 0.625rem 0.75rem;
-  font-size: 0.875rem;
-  outline: none;
-}
-
-.field-input:focus {
-  border-color: #176bff;
-}
-
-select.field-input {
-  padding-right: 1.75rem;
-  -webkit-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.5rem center;
-}
-
-.primary-btn,
-.secondary-btn,
-.icon-danger-btn {
-  display: inline-flex;
-  min-height: 2.5rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  border-radius: 0.8rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  transition: transform 0.16s ease, background 0.16s ease, opacity 0.16s ease;
-}
-
-.primary-btn {
-  width: 100%;
-  background: #176bff;
-  color: white;
-}
-
-.secondary-btn {
-  width: 100%;
-  border: 1px solid rgba(23, 107, 255, 0.22);
-  background: rgba(23, 107, 255, 0.08);
-  color: #176bff;
-}
-
-.icon-danger-btn {
-  width: 2.5rem;
-  border: 1px solid rgba(214, 69, 69, 0.25);
-  background: rgba(214, 69, 69, 0.08);
-  color: #d64545;
-}
-
-.primary-btn:hover,
-.secondary-btn:hover,
-.icon-danger-btn:hover,
-.toolbar-btn:hover,
-.icon-btn:hover {
-  transform: translateY(-1px);
-}
-
-.primary-btn:disabled,
-.secondary-btn:disabled,
-.icon-danger-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.52;
-  transform: none;
 }
 
 .template-form-actions {
