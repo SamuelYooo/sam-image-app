@@ -128,4 +128,25 @@ describe('ui component contracts', () => {
     expect(source).toContain('layer-delete-btn');
     expect(source).toContain('@click.stop="removeOverlay(overlay.id)"');
   });
+
+  it('downloads originals through Rust and renders exports from local image bytes', () => {
+    const appSource = readSource('App.vue');
+    const libSource = readSource('../src-tauri/src/lib.rs');
+
+    expect(appSource).toContain('downloadOriginalArtifact');
+    expect(appSource).toContain('canSaveSelectedArtifactSourceDirectly');
+    expect(appSource).toContain('hasActiveGalleryExportEdits');
+    expect(appSource).toContain("invoke<ImageDataUrlResult>('load_image_data_url'");
+    expect(appSource).toContain("invoke<{ path: string | null }>('save_image_data_url_with_dialog'");
+    expect(appSource).toContain("invoke<{ path: string | null }>('save_image_url_with_dialog'");
+    expect(appSource).toContain('@click="downloadOriginalArtifact"');
+    expect(appSource).toContain('return { src: result.dataUrl }');
+    expect(appSource).toContain('blobToDataUrl');
+    expect(libSource).toContain('async fn load_image_data_url');
+    expect(libSource).toContain('async fn save_image_data_url_with_dialog');
+    expect(libSource).toContain('async fn save_image_url_with_dialog');
+    expect(libSource).toContain('decode_image_data_url');
+    expect(libSource).toContain('pick_save_image_path');
+    expect(libSource).toContain('download_image_bytes');
+  });
 });

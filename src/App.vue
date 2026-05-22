@@ -1497,27 +1497,32 @@ async function exportIconSizes() {
 }
 
 async function renderSquareIconBlob(imageUrl: string, targetSize: IconSize): Promise<Blob> {
-  const image = await loadImage(imageUrl);
-  const sourceWidth = image.naturalWidth || image.width;
-  const sourceHeight = image.naturalHeight || image.height;
-  const cropSize = Math.min(sourceWidth, sourceHeight);
-  const sourceX = Math.round((sourceWidth - cropSize) / 2);
-  const sourceY = Math.round((sourceHeight - cropSize) / 2);
-  const canvas = document.createElement('canvas');
-  canvas.width = targetSize;
-  canvas.height = targetSize;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('无法创建图标导出画布');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  if (iconBackground.value === 'solid') {
-    ctx.fillStyle = iconPrimaryColor.value;
-    ctx.fillRect(0, 0, targetSize, targetSize);
+  const renderSource = await resolveRenderableImageSource(imageUrl);
+  try {
+    const image = await loadImage(renderSource.src);
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    const cropSize = Math.min(sourceWidth, sourceHeight);
+    const sourceX = Math.round((sourceWidth - cropSize) / 2);
+    const sourceY = Math.round((sourceHeight - cropSize) / 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = targetSize;
+    canvas.height = targetSize;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('无法创建图标导出画布');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    if (iconBackground.value === 'solid') {
+      ctx.fillStyle = iconPrimaryColor.value;
+      ctx.fillRect(0, 0, targetSize, targetSize);
+    }
+    ctx.drawImage(image, sourceX, sourceY, cropSize, cropSize, 0, 0, targetSize, targetSize);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('图标导出失败');
+    return blob;
+  } finally {
+    renderSource.revoke?.();
   }
-  ctx.drawImage(image, sourceX, sourceY, cropSize, cropSize, 0, 0, targetSize, targetSize);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) throw new Error('图标导出失败');
-  return blob;
 }
 
 void referenceUploadIcon;
@@ -1612,6 +1617,10 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+type ImageDataUrlResult = {
+  dataUrl: string;
+};
+
 async function downloadSelectedArtifact() {
   const artifact = selectedArtifact.value;
   if (!artifact) {
@@ -1622,16 +1631,57 @@ async function downloadSelectedArtifact() {
   isDownloading.value = true;
   galleryNotice.value = '';
   try {
-    const blob = await renderArtifactBlob(artifact.imageUrl);
     const fileName = buildDownloadName(artifact.mode, exportFormat.value, artifact.createdAt);
-    const result = await invoke<{ path: string | null }>('save_image_with_dialog', {
-      fileName,
-      extension: exportFormat.value,
-      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
-    });
+    const result = canSaveSelectedArtifactSourceDirectly(artifact)
+      ? await invoke<{ path: string | null }>('save_image_url_with_dialog', {
+          fileName,
+          extension: exportFormat.value,
+          imageUrl: artifact.imageUrl,
+        })
+      : await (async () => {
+          const dataUrl = await renderArtifactDataUrl(artifact.imageUrl);
+          return invoke<{ path: string | null }>('save_image_data_url_with_dialog', {
+            fileName,
+            extension: exportFormat.value,
+            dataUrl,
+          });
+        })();
     galleryNotice.value = result.path ? `图片已保存至 ${result.path}` : '已取消下载';
   } catch (error) {
     galleryNotice.value = error instanceof Error ? error.message : '导出图片失败';
+  } finally {
+    isDownloading.value = false;
+  }
+}
+
+function canSaveSelectedArtifactSourceDirectly(artifact: Artifact) {
+  return !hasActiveGalleryExportEdits() && originalExtensionForImageUrl(artifact.imageUrl) === exportFormat.value;
+}
+
+function hasActiveGalleryExportEdits() {
+  return cropEnabled.value || textOverlayEnabled.value || hasActiveGalleryFilters(galleryVisualFilters.value);
+}
+
+async function downloadOriginalArtifact() {
+  const artifact = selectedArtifact.value;
+  if (!artifact) {
+    galleryNotice.value = '请先选择一张作品';
+    return;
+  }
+  if (isDownloading.value) return;
+  isDownloading.value = true;
+  galleryNotice.value = '';
+  try {
+    const extension = originalExtensionForImageUrl(artifact.imageUrl);
+    const fileName = buildDownloadName(artifact.mode, extension, artifact.createdAt);
+    const result = await invoke<{ path: string | null }>('save_image_url_with_dialog', {
+      fileName,
+      extension,
+      imageUrl: artifact.imageUrl,
+    });
+    galleryNotice.value = result.path ? `原图已保存至 ${result.path}` : '已取消下载';
+  } catch (error) {
+    galleryNotice.value = error instanceof Error ? error.message : '下载原图失败';
   } finally {
     isDownloading.value = false;
   }
@@ -1655,30 +1705,49 @@ async function deleteArtifact(artifactId: string, location: 'collection' | 'gall
 }
 
 async function renderArtifactBlob(imageUrl: string): Promise<Blob> {
-  const image = await loadImage(imageUrl);
-  const crop = cropEnabled.value
-    ? clampCropBox(cropBox, image.naturalWidth || image.width, image.naturalHeight || image.height)
-    : { x: 0, y: 0, width: image.naturalWidth || image.width, height: image.naturalHeight || image.height };
-  const canvas = document.createElement('canvas');
-  canvas.width = crop.width;
-  canvas.height = crop.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('无法创建图片处理画布');
-  if (exportFormat.value === 'jpg') {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const renderSource = await resolveRenderableImageSource(imageUrl);
+  try {
+    const image = await loadImage(renderSource.src);
+    const crop = cropEnabled.value
+      ? clampCropBox(cropBox, image.naturalWidth || image.width, image.naturalHeight || image.height)
+      : { x: 0, y: 0, width: image.naturalWidth || image.width, height: image.naturalHeight || image.height };
+    const canvas = document.createElement('canvas');
+    canvas.width = crop.width;
+    canvas.height = crop.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('无法创建图片处理画布');
+    if (exportFormat.value === 'jpg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.filter = canvasFilterForGalleryFilters(galleryVisualFilters.value);
+    ctx.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    ctx.filter = 'none';
+    if (textOverlayEnabled.value) {
+      await drawGalleryOverlays(ctx, canvas.width, canvas.height);
+    }
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, mimeForFormat(exportFormat.value), qualityForFormat(exportFormat.value, exportQuality.value));
+    });
+    if (!blob) throw new Error('图片压缩失败');
+    return blob;
+  } finally {
+    renderSource.revoke?.();
   }
-  ctx.filter = canvasFilterForGalleryFilters(galleryVisualFilters.value);
-  ctx.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
-  ctx.filter = 'none';
-  if (textOverlayEnabled.value) {
-    await drawGalleryOverlays(ctx, canvas.width, canvas.height);
-  }
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, mimeForFormat(exportFormat.value), qualityForFormat(exportFormat.value, exportQuality.value));
+}
+
+async function renderArtifactDataUrl(imageUrl: string): Promise<string> {
+  const blob = await renderArtifactBlob(imageUrl);
+  return blobToDataUrl(blob);
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('读取导出图片失败'));
+    reader.readAsDataURL(blob);
   });
-  if (!blob) throw new Error('图片压缩失败');
-  return blob;
 }
 
 async function drawGalleryOverlays(ctx: CanvasRenderingContext2D, width: number, height: number) {
@@ -1746,24 +1815,46 @@ async function drawSvgOverlayBox(ctx: CanvasRenderingContext2D, overlay: SvgOver
 
 async function drawImageOverlayBox(ctx: CanvasRenderingContext2D, overlay: ImageOverlay, width: number, height: number) {
   if (!overlay.imageUrl) return;
-  const image = await loadImage(overlay.imageUrl);
-  const drawWidth = overlay.width * width;
-  const drawHeight = overlay.height * height;
-  const centerX = overlay.x * width;
-  const centerY = overlay.y * height;
+  const renderSource = await resolveRenderableImageSource(overlay.imageUrl);
+  try {
+    const image = await loadImage(renderSource.src);
+    const drawWidth = overlay.width * width;
+    const drawHeight = overlay.height * height;
+    const centerX = overlay.x * width;
+    const centerY = overlay.y * height;
 
-  ctx.save();
-  ctx.translate(centerX, centerY);
-  ctx.rotate((overlay.rotation * Math.PI) / 180);
-  ctx.globalAlpha = overlay.opacity;
-  ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate((overlay.rotation * Math.PI) / 180);
+    ctx.globalAlpha = overlay.opacity;
+    ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
 
-  if (overlay.shape === 'badge') {
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = Math.max(2, drawWidth * 0.02);
-    ctx.strokeRect(-drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    if (overlay.shape === 'badge') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = Math.max(2, drawWidth * 0.02);
+      ctx.strokeRect(-drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    }
+    ctx.restore();
+  } finally {
+    renderSource.revoke?.();
   }
-  ctx.restore();
+}
+
+async function resolveRenderableImageSource(src: string): Promise<{ src: string; revoke?: () => void }> {
+  const trimmed = src.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return { src };
+  }
+  const result = await invoke<ImageDataUrlResult>('load_image_data_url', { imageUrl: trimmed });
+  return { src: result.dataUrl };
+}
+
+function originalExtensionForImageUrl(imageUrl: string): ExportFormat {
+  const lower = imageUrl.split('?')[0].toLowerCase();
+  if (lower.startsWith('data:image/jpeg') || lower.startsWith('data:image/jpg') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return 'jpg';
+  }
+  return 'png';
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -2687,9 +2778,10 @@ onMounted(loadAll);
             </div>
 
             <div class="mb-4 grid grid-cols-2 gap-2">
-              <UiButton variant="secondary" size="sm" @click="downloadSelectedArtifact">
-                <Download :size="14" />
-                下载原图
+              <UiButton variant="secondary" size="sm" :disabled="!selectedArtifact || isDownloading" @click="downloadOriginalArtifact">
+                <Loader2 v-if="isDownloading" :size="14" class="animate-spin" />
+                <Download v-else :size="14" />
+                {{ isDownloading ? '正在下载' : '下载原图' }}
               </UiButton>
               <UiButton variant="danger" size="sm"
                 @click="selectedArtifact && deleteArtifact(selectedArtifact.id, 'gallery')">

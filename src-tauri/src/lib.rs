@@ -17,6 +17,43 @@ struct SaveImagesResult {
     paths: Vec<String>,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImageDataUrlResult {
+    data_url: String,
+}
+
+#[tauri::command]
+async fn save_image_url_with_dialog(
+    file_name: String,
+    extension: String,
+    image_url: String,
+) -> Result<SaveImageResult, String> {
+    let extension = normalize_image_extension(&extension)?;
+    let file_name = ensure_image_extension(&file_name, &extension);
+    let Some(path) = pick_save_image_path(file_name, extension).await? else {
+        return Ok(SaveImageResult { path: None });
+    };
+    let bytes = download_image_bytes(&image_url).await?;
+    write_image_bytes(path, bytes).await
+}
+
+#[tauri::command]
+async fn load_image_data_url(image_url: String) -> Result<ImageDataUrlResult, String> {
+    let trimmed = image_url.trim();
+    if trimmed.starts_with("data:image/") {
+        return Ok(ImageDataUrlResult {
+            data_url: trimmed.to_string(),
+        });
+    }
+    let (bytes, mime) = fetch_image_bytes(trimmed).await?;
+    use base64::Engine;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(ImageDataUrlResult {
+        data_url: format!("data:{mime};base64,{encoded}"),
+    })
+}
+
 #[tauri::command]
 async fn save_image_with_dialog(
     file_name: String,
@@ -29,24 +66,60 @@ async fn save_image_with_dialog(
 
     let extension = normalize_image_extension(&extension)?;
     let file_name = ensure_image_extension(&file_name, &extension);
+    save_image_bytes_with_dialog(file_name, extension, bytes).await
+}
 
+#[tauri::command]
+async fn save_image_data_url_with_dialog(
+    file_name: String,
+    extension: String,
+    data_url: String,
+) -> Result<SaveImageResult, String> {
+    let bytes = decode_image_data_url(&data_url)?;
+    if bytes.is_empty() {
+        return Err("没有可保存的图片数据".to_string());
+    }
+
+    let extension = normalize_image_extension(&extension)?;
+    let file_name = ensure_image_extension(&file_name, &extension);
+    save_image_bytes_with_dialog(file_name, extension, bytes).await
+}
+
+async fn save_image_bytes_with_dialog(
+    file_name: String,
+    extension: String,
+    bytes: Vec<u8>,
+) -> Result<SaveImageResult, String> {
+    let Some(path) = pick_save_image_path(file_name, extension).await? else {
+        return Ok(SaveImageResult { path: None });
+    };
+    write_image_bytes(path, bytes).await
+}
+
+async fn pick_save_image_path(
+    file_name: String,
+    extension: String,
+) -> Result<Option<std::path::PathBuf>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let dialog = rfd::FileDialog::new()
+        Ok(rfd::FileDialog::new()
             .set_title("保存图片")
             .set_file_name(&file_name)
-            .add_filter("图片文件", &[extension.as_str()]);
+            .add_filter("图片文件", &[extension.as_str()])
+            .save_file())
+    })
+    .await
+    .map_err(|err| format!("打开保存窗口失败: {err}"))?
+}
 
-        let Some(path) = dialog.save_file() else {
-            return Ok(SaveImageResult { path: None });
-        };
-
+async fn write_image_bytes(path: std::path::PathBuf, bytes: Vec<u8>) -> Result<SaveImageResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
         std::fs::write(&path, bytes).map_err(|err| format!("保存图片失败: {err}"))?;
         Ok(SaveImageResult {
             path: Some(path.to_string_lossy().to_string()),
         })
     })
     .await
-    .map_err(|err| format!("打开保存窗口失败: {err}"))?
+    .map_err(|err| format!("保存图片失败: {err}"))?
 }
 
 #[tauri::command]
@@ -135,6 +208,101 @@ fn read_png_dimension(data: &[u8], offset: usize) -> Option<u32> {
         return None;
     }
     Some(u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]))
+}
+
+async fn download_image_bytes(image_url: &str) -> Result<Vec<u8>, String> {
+    fetch_image_bytes(image_url).await.map(|(bytes, _mime)| bytes)
+}
+
+async fn fetch_image_bytes(image_url: &str) -> Result<(Vec<u8>, String), String> {
+    let trimmed = image_url.trim();
+    if trimmed.is_empty() {
+        return Err("图片地址为空".to_string());
+    }
+
+    if let Some((meta, data)) = trimmed.split_once(',') {
+        if meta.starts_with("data:image/") {
+            use base64::Engine;
+            let mime = meta
+                .trim_start_matches("data:")
+                .split(';')
+                .next()
+                .filter(|value| value.starts_with("image/"))
+                .unwrap_or("image/png")
+                .to_string();
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(|err| format!("解析图片数据失败: {err}"))?;
+            return Ok((bytes, mime));
+        }
+    }
+
+    if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+        return Err("不支持的图片地址".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|err| format!("创建下载客户端失败: {err}"))?;
+    let response = client
+        .get(trimmed)
+        .send()
+        .await
+        .map_err(|err| format!("下载图片失败: {err}"))?;
+    if !response.status().is_success() {
+        return Err(format!("下载图片失败: HTTP {}", response.status()));
+    }
+    let mime = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .filter(|value| value.starts_with("image/"))
+        .map(ToString::to_string)
+        .unwrap_or_else(|| mime_from_image_url(trimmed));
+
+    let bytes = response
+        .bytes()
+        .await
+        .map(|bytes| bytes.to_vec())
+        .map_err(|err| format!("读取图片数据失败: {err}"))?;
+
+    if bytes.is_empty() {
+        return Err("没有可保存的图片数据".to_string());
+    }
+
+    Ok((bytes, mime))
+}
+
+fn mime_from_image_url(image_url: &str) -> String {
+    let lower = image_url.split('?').next().unwrap_or(image_url).to_ascii_lowercase();
+    if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg".to_string()
+    } else if lower.ends_with(".webp") {
+        "image/webp".to_string()
+    } else if lower.ends_with(".gif") {
+        "image/gif".to_string()
+    } else if lower.ends_with(".ico") {
+        "image/x-icon".to_string()
+    } else {
+        "image/png".to_string()
+    }
+}
+
+fn decode_image_data_url(data_url: &str) -> Result<Vec<u8>, String> {
+    let trimmed = data_url.trim();
+    let Some((meta, data)) = trimmed.split_once(',') else {
+        return Err("图片数据格式无效".to_string());
+    };
+    if !meta.starts_with("data:image/") || !meta.contains(";base64") {
+        return Err("图片数据格式无效".to_string());
+    }
+
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|err| format!("解析图片数据失败: {err}"))
 }
 
 fn normalize_image_extension(extension: &str) -> Result<String, String> {
@@ -251,6 +419,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            load_image_data_url,
+            save_image_data_url_with_dialog,
+            save_image_url_with_dialog,
             save_image_with_dialog,
             save_images_to_directory,
             save_images_as_zip
