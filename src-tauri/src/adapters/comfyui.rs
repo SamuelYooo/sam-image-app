@@ -16,12 +16,4 @@ impl ImageAdapter for ComfyUiAdapter {
             supports_reverse_prompt: false,
         }
     }
-
-    fn preset_models(&self) -> Vec<String> {
-        vec![
-            "comfyui-workflow-default".to_string(),
-            "comfyui-sdxl".to_string(),
-            "comfyui-flux".to_string(),
-        ]
-    }
 }

@@ -16,12 +16,4 @@ impl ImageAdapter for GeminiAdapter {
             supports_reverse_prompt: true,
         }
     }
-
-    fn preset_models(&self) -> Vec<String> {
-        vec![
-            "gemini-2.5-flash-image".to_string(),
-            "gemini-2.5-pro".to_string(),
-            "gemini-2.0-flash".to_string(),
-        ]
-    }
 }

@@ -25,14 +25,7 @@ const emit = defineEmits<{
 
 const classes = computed(() => [
   'ui-icon-button',
-  'ui-icon-button--default',
-  'ui-icon-button--primary',
-  'ui-icon-button--danger',
-  'ui-icon-button--ghost',
   `ui-icon-button--${props.variant}`,
-  'ui-icon-button--sm',
-  'ui-icon-button--md',
-  'ui-icon-button--lg',
   `ui-icon-button--${props.size}`,
 ]);
 </script>

@@ -6,8 +6,8 @@ export const defaultProfile = (): ModelProfile => ({
   adapter: 'openai_images',
   baseUrl: 'https://api.openai.com',
   apiKey: '',
-  model: 'gpt-image-1',
-  availableModels: ['gpt-image-1', 'gpt-image-2'],
+  model: '',
+  availableModels: [],
   chatEndpoint: '/v1/chat/completions',
   imageEndpoint: '/v1/images/generations',
   timeoutSec: 300,
@@ -37,19 +37,24 @@ export function mergeModelList(current: string[], incoming: string[]): string[] 
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 }
 
-export function validateProfileDraft(profile: ModelProfile): string[] {
+export function validateProfileConnectionDraft(profile: ModelProfile): string[] {
   const errors: string[] = [];
   if (!profile.name.trim()) errors.push('配置名称不能为空');
   if (!profile.baseUrl.trim()) errors.push('服务地址不能为空');
   if (profile.baseUrl && !/^https?:\/\//.test(profile.baseUrl)) {
     errors.push('服务地址必须以 http:// 或 https:// 开头');
   }
-  if (!profile.model.trim()) errors.push('模型名称不能为空');
   if (profile.timeoutSec < 10 || profile.timeoutSec > 1800) {
     errors.push('超时时间必须在 10 到 1800 秒之间');
   }
   if (profile.referenceImageLimit < 1 || profile.referenceImageLimit > 16) {
     errors.push('参考图数量必须在 1 到 16 之间');
   }
+  return errors;
+}
+
+export function validateProfileDraft(profile: ModelProfile): string[] {
+  const errors = validateProfileConnectionDraft(profile);
+  if (!profile.model.trim()) errors.push('模型名称不能为空');
   return errors;
 }

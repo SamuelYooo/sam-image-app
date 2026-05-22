@@ -80,7 +80,13 @@ import {
   type TextOverlay,
 } from './utils/gallery';
 import { applyMainModel } from './utils/model-selection';
-import { defaultProfile, mergeModelList, profileSummary, validateProfileDraft } from './utils/profile';
+import {
+  defaultProfile,
+  mergeModelList,
+  profileSummary,
+  validateProfileConnectionDraft,
+  validateProfileDraft,
+} from './utils/profile';
 import {
   collectReferenceSources,
   isImageMime,
@@ -116,7 +122,7 @@ const iconPrompt = ref('一个现代天气 App 图标，圆角方形图标，蓝
 const iconNegativePrompt = ref('文字，水印，复杂背景，过多细节，模糊，低清晰度');
 const iconName = ref('weather-app');
 const iconStyle = ref('modern');
-const iconPrimaryColor = ref('#7132f5');
+const iconPrimaryColor = ref('#0075de');
 const iconBackground = ref<'transparent' | 'solid' | 'keep'>('keep');
 const selectedIconSizes = ref<number[]>([32, 64, 128, 256, 512]);
 const iconSourceArtifactId = ref('');
@@ -197,6 +203,7 @@ const dragOverlayState = ref<{ id: string; startX: number; startY: number; origi
 const isSaving = ref(false);
 const isValidating = ref(false);
 const isFetchingModels = ref(false);
+const isDeletingProfile = ref(false);
 const isGenerating = ref(false);
 const isLoading = ref(true);
 const isDownloading = ref(false);
@@ -372,9 +379,13 @@ const fontFamilyOptions: Array<{ id: FontFamily; label: string; css: string }> =
   { id: 'display', label: '展示', css: '"STXihei", "Microsoft YaHei", sans-serif' },
 ];
 
+const connectionErrors = computed(() => validateProfileConnectionDraft(draft));
 const draftErrors = computed(() => validateProfileDraft(draft));
-const modelListErrors = computed(() => validateProfileDraft({ ...draft, model: draft.model || 'placeholder' }));
 const activeProfile = computed(() => profiles.value.find((item) => item.id === activeProfileId.value));
+const canDeleteProfile = computed(() => Boolean(activeProfile.value && !draftProfileId.value));
+const modelSelectionError = computed(() =>
+  draft.model.trim() ? '' : '请先获取真实模型列表并选择图像模型，或手动添加模型名称',
+);
 const size = computed(() => {
   if (sizePreset.value !== 'custom') return sizePreset.value;
   return `${Math.trunc(Number(customSizeWidth.value))}x${Math.trunc(Number(customSizeHeight.value))}`;
@@ -398,15 +409,9 @@ const isImageModelAdapter = computed(() => {
   const adapter = currentAdapter.value;
   return adapter ? (adapter.supportsTextToImage || adapter.supportsImageToImage) : false;
 });
-const endpointPreview = computed(() => {
-  const base = draft.baseUrl.trim().replace(/\/$/, '');
-  const endpoint = draft.chatEndpoint.startsWith('/') ? draft.chatEndpoint : `/${draft.chatEndpoint}`;
-  return base ? `${base}${endpoint}` : '';
-});
-void endpointPreview;
 const filteredModels = computed(() => {
   const query = modelSearch.value.trim().toLowerCase();
-  const models = mergeModelList(draft.availableModels, draft.model ? [draft.model] : []);
+  const models = draft.availableModels;
   if (!query) return models;
   return models.filter((item) => item.toLowerCase().includes(query));
 });
@@ -1076,7 +1081,6 @@ async function saveProfile() {
   isSaving.value = true;
   notice.value = '';
   try {
-    draft.availableModels = mergeModelList(draft.availableModels, draft.model ? [draft.model] : []);
     const saved = await api.saveProfile({ ...draft });
     const index = profiles.value.findIndex((item) => item.id === saved.id);
     if (index >= 0) profiles.value.splice(index, 1, saved);
@@ -1094,8 +1098,11 @@ async function saveProfile() {
 }
 
 async function removeProfile() {
-  if (!activeProfileId.value) return;
+  if (!canDeleteProfile.value || isDeletingProfile.value) return;
+  const confirmed = window.confirm(`确认删除模型配置“${draft.name}”？删除后不可恢复。`);
+  if (!confirmed) return;
   const removing = activeProfileId.value;
+  isDeletingProfile.value = true;
   try {
     await api.deleteProfile(removing);
     profiles.value = profiles.value.filter((item) => item.id !== removing);
@@ -1105,13 +1112,31 @@ async function removeProfile() {
     addOpLog('delete', '删除模型配置');
   } catch (error) {
     notice.value = error instanceof Error ? error.message : '删除配置失败';
+  } finally {
+    isDeletingProfile.value = false;
   }
 }
-void removeProfile;
 
 async function validateModel() {
   validationResult.value = null;
-  if (draftErrors.value.length > 0) return;
+  if (connectionErrors.value.length > 0) {
+    validationResult.value = {
+      ok: false,
+      adapter: draft.adapter,
+      message: connectionErrors.value.join('；'),
+      latencyMs: 0,
+    };
+    return;
+  }
+  if (!draft.model.trim()) {
+    validationResult.value = {
+      ok: false,
+      adapter: draft.adapter,
+      message: modelSelectionError.value,
+      latencyMs: 0,
+    };
+    return;
+  }
   isValidating.value = true;
   notice.value = '';
   try {
@@ -1135,18 +1160,22 @@ async function validateModel() {
 
 async function fetchModelList() {
   modelListResult.value = null;
-  if (modelListErrors.value.length > 0) return;
+  if (connectionErrors.value.length > 0) return;
   isFetchingModels.value = true;
   notice.value = '';
   try {
     const result = await api.fetchModels({ profile: { ...draft } });
-    draft.availableModels = mergeModelList(draft.availableModels, result.models);
-    if (!draft.model && draft.availableModels[0]) draft.model = draft.availableModels[0];
+    draft.availableModels = [...result.models];
+    if (draft.availableModels.length === 0) {
+      draft.model = '';
+    } else if (!draft.availableModels.includes(draft.model)) {
+      draft.model = draft.availableModels[0];
+    }
     modelListResult.value = result;
   } catch (error) {
     modelListResult.value = {
       models: [],
-      source: 'preset',
+      source: 'remote',
       message: error instanceof Error ? error.message : '获取模型列表失败',
     };
   } finally {
@@ -1871,12 +1900,12 @@ onMounted(loadAll);
 </script>
 
 <template>
-  <main class="h-screen w-screen overflow-hidden text-[var(--ink)]">
+  <main class="h-screen w-screen overflow-hidden bg-[var(--warm-white)] text-[var(--ink)]">
     <header
       class="fixed left-0 right-0 top-0 z-30 flex h-16 items-center border-b border-black/5 bg-white/75 px-6 backdrop-blur-2xl">
       <div class="flex items-center gap-3">
         <div
-          class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7132f5] text-white shadow-lg shadow-purple-500/25">
+          class="flex h-9 w-9 items-center justify-center rounded-md bg-[#0075de] text-white shadow-[0_8px_20px_rgba(0,117,222,0.18)]">
           <Sparkles :size="18" />
         </div>
         <div>
@@ -1911,7 +1940,7 @@ onMounted(loadAll);
       <div class="ml-auto flex items-center gap-3">
         <div class="relative">
           <button class="model-switcher-trigger" @click="isModelSwitcherOpen = !isModelSwitcherOpen">
-            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#7132f5]/10 text-[#7132f5]">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sky-50 text-[#0075de]">
               <Star :size="15" />
             </div>
             <div class="hidden min-w-0 text-left md:block">
@@ -1952,7 +1981,7 @@ onMounted(loadAll);
                 <div class="min-w-0 flex-1">
                   <div v-if="renamingProfileId === profile.id" class="flex items-center gap-1" @click.stop>
                     <input v-model="renamingProfileName" type="text"
-                      class="min-w-0 flex-1 rounded border border-[#7132f5] bg-white px-2 py-1 text-xs font-bold outline-none"
+                      class="min-w-0 flex-1 rounded border border-[#0075de] bg-white px-2 py-1 text-xs font-bold outline-none"
                       @keydown.enter="finishRenameProfile" @keydown.esc="cancelRenameProfile"
                       @blur="finishRenameProfile" />
                   </div>
@@ -1960,7 +1989,7 @@ onMounted(loadAll);
                   <div class="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-[var(--muted)]">{{
                     profileSummary(profile) }}</div>
                 </div>
-                <Star v-if="profile.id === activeProfileId" :size="14" class="shrink-0 text-[#7132f5]" />
+                <Star v-if="profile.id === activeProfileId" :size="14" class="shrink-0 text-[#0075de]" />
               </button>
             </div>
 
@@ -1999,12 +2028,12 @@ onMounted(loadAll);
       </div>
     </header>
 
-    <section v-if="page === 'generate'" class="grid h-full grid-cols-[1fr_360px] gap-4 px-5 pb-5 pt-20">
+    <section v-if="page === 'generate'" class="samimage-generate-page grid h-full min-h-0 grid-cols-[1fr_360px] gap-4 px-5 pb-5 pt-20">
       <section
-        class="relative overflow-hidden rounded-[22px] border border-white/80 bg-[#f7f9fb]/70 shadow-[0_18px_70px_rgba(42,54,68,0.14)]">
+        class="samimage-stage relative min-h-0 overflow-hidden rounded-[12px] border border-black/10 bg-[#fbfaf9] shadow-[0_4px_18px_rgba(15,15,15,0.06)]">
         <div class="absolute inset-0 canvas-grid"></div>
 
-        <div class="absolute left-6 top-5 z-10 rounded-2xl bg-white/75 px-4 py-3 backdrop-blur-xl">
+        <div class="absolute left-6 top-5 z-10 rounded-lg border border-black/10 bg-white/85 px-4 py-3 backdrop-blur-xl">
           <div class="flex items-center gap-2 text-sm font-semibold">
             <Wand2 :size="17" />
             生图画布
@@ -2012,7 +2041,7 @@ onMounted(loadAll);
           <p class="mt-1 text-xs text-[var(--muted)]">主界面只保留创作流程；模型、密钥和服务地址统一在右上角配置中管理。</p>
         </div>
 
-        <div class="absolute right-6 top-5 z-20">
+        <div class="absolute right-6 top-5 z-40">
           <div class="relative">
             <button class="prompt-template-trigger" @click="isTemplatePickerOpen = !isTemplatePickerOpen">
               <Sparkles :size="15" />
@@ -2033,7 +2062,7 @@ onMounted(loadAll);
               <label
                 class="mb-3 flex items-start gap-2 rounded-xl border border-black/5 bg-white/70 p-2.5 text-xs leading-5 text-[var(--muted)]">
                 <input v-model="textOverlaySafeTemplateMode" type="checkbox"
-                  class="mt-0.5 h-3.5 w-3.5 accent-[#7132f5]" />
+                  class="mt-0.5 h-3.5 w-3.5 accent-[#0075de]" />
                 应用模板时追加“中文文字后期添加”的提示，减少模型直接生成中文时出现乱码。
               </label>
 
@@ -2058,20 +2087,20 @@ onMounted(loadAll);
           </div>
         </div>
 
-        <div class="absolute left-6 right-6 top-[128px] z-10 flex flex-row items-center">
+        <div class="samimage-flow-row absolute left-6 right-6 top-[128px] z-10 flex flex-row items-center">
           <!-- 主模型 -->
           <div
-            class="w-[220px] shrink-0 rounded-2xl border border-[#dedee5] bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+            class="samimage-flow-card w-[220px] shrink-0 rounded-lg border border-black/10 bg-white p-4 shadow-[0_4px_18px_rgba(15,15,15,0.06)]">
             <div class="mb-3 flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <span class="h-3 w-3 rounded-full bg-[#7132f5]"></span>
+                <span class="h-3 w-3 rounded-full bg-[#0075de]"></span>
                 <span class="text-sm font-semibold">主模型</span>
               </div>
-              <span class="rounded-full bg-purple-50 px-2 py-1 text-[11px] font-semibold text-[#7132f5]">已激活</span>
+              <span class="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-semibold text-[#0075de]">已激活</span>
             </div>
             <p class="line-clamp-2 break-all text-xs leading-5 text-[var(--muted)]">{{ activeSummary }}</p>
             <button
-              class="mt-3 rounded-xl border border-[#dedee5] bg-white px-3 py-2 text-xs font-semibold hover:border-[#7132f5] hover:text-[#7132f5]"
+              class="mt-3 rounded border border-black/10 bg-white px-3 py-2 text-xs font-semibold hover:border-[#0075de] hover:text-[#0075de]"
               @click="openModelConfigPage">
               切换配置
             </button>
@@ -2088,7 +2117,7 @@ onMounted(loadAll);
 
           <!-- 生图模式（居中） -->
           <div
-            class="w-[220px] shrink-0 rounded-2xl border border-[#dedee5] bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+            class="samimage-flow-card w-[220px] shrink-0 rounded-lg border border-black/10 bg-white p-4 shadow-[0_4px_18px_rgba(15,15,15,0.06)]">
             <div class="mb-3 flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="h-3 w-3 rounded-full bg-[#0f9f8f]"></span>
@@ -2110,7 +2139,7 @@ onMounted(loadAll);
 
           <!-- 作品入库 -->
           <div
-            class="w-[220px] shrink-0 rounded-2xl border border-[#dedee5] bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+            class="samimage-flow-card w-[220px] shrink-0 rounded-lg border border-black/10 bg-white p-4 shadow-[0_4px_18px_rgba(15,15,15,0.06)]">
             <div class="mb-3 flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="h-3 w-3 rounded-full bg-[#c77911]"></span>
@@ -2123,7 +2152,7 @@ onMounted(loadAll);
           </div>
         </div>
 
-        <div class="absolute bottom-5 left-5 right-5 z-20 grid h-[54vh] grid-cols-[minmax(0,1fr)_360px] gap-4">
+        <div class="samimage-workspace absolute bottom-5 left-5 right-5 top-[260px] z-20 grid min-h-0 grid-cols-[minmax(0,1fr)_360px] gap-4">
           <div class="thin-scrollbar grid min-h-0 gap-4 overflow-auto pr-1">
             <section class="glass-panel rounded-2xl p-4">
             <div class="mb-3 flex items-start justify-between gap-4">
@@ -2158,7 +2187,7 @@ onMounted(loadAll);
               <div class="mb-2 flex items-center justify-between gap-3">
                 <span class="text-xs font-semibold text-[var(--muted)]">提示词</span>
                 <button
-                  class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="inline-flex h-8 items-center gap-1.5 rounded border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-[#0075de] transition-colors hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
                   :disabled="isPolishing || !prompt.trim()" @click="polishPrompt">
                   <Loader2 v-if="isPolishing" :size="13" class="animate-spin" />
                   <Wand2 v-else :size="13" />
@@ -2166,7 +2195,7 @@ onMounted(loadAll);
                 </button>
               </div>
               <textarea v-model="prompt"
-                class="h-24 w-full cursor-text resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+                class="h-24 w-full cursor-text resize-none rounded border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#0075de]"
                 placeholder="描述你想生成的画面" title="点击展开查看完整提示词" @click="isPromptExpanded = true"></textarea>
             </div>
 
@@ -2202,9 +2231,9 @@ onMounted(loadAll);
               </div>
             </div>
 
-            <div class="mt-3 rounded-2xl border border-purple-100 bg-purple-50/70 p-3">
+            <div class="mt-3 rounded-lg border border-sky-100 bg-sky-50/70 p-3">
               <button class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition"
-                :class="isStoryboardMode ? 'border-purple-500 bg-[#7132f5] text-white' : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-100'"
+                :class="isStoryboardMode ? 'border-[#0075de] bg-[#0075de] text-white' : 'border-sky-200 bg-white text-[#0075de] hover:bg-sky-100'"
                 @click="isStoryboardMode = !isStoryboardMode">
                 <Film :size="13" />
                 电影分镜
@@ -2229,10 +2258,10 @@ onMounted(loadAll);
             </div>
 
             <textarea v-model="batchPrompts"
-              class="h-40 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+              class="h-40 w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#0075de]"
               placeholder="每行输入一个提示词&#10;例如：&#10;一只橘猫在书架上晒太阳&#10;赛博朋克城市夜景&#10;水下的珊瑚礁花园"></textarea>
             <button
-              class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+              class="mt-2 inline-flex h-8 items-center gap-1.5 rounded border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-[#0075de] transition-colors hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="isPolishingBatch || !batchPrompts.trim()" @click="polishBatchPrompts">
               <Loader2 v-if="isPolishingBatch" :size="13" class="animate-spin" />
               <Wand2 v-else :size="13" />
@@ -2274,16 +2303,16 @@ onMounted(loadAll);
             </div>
 
             <label
-              class="flex h-[92px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#7132f5]/50 hover:bg-white"
+              class="flex h-[92px] cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#0075de]/50 hover:bg-white"
               @paste="handleReferencePaste">
-              <Paperclip :size="20" class="mb-2 text-[#7132f5]" />
+              <Paperclip :size="20" class="mb-2 text-[#0075de]" />
               <span class="text-xs font-semibold">点击上传，或在这里粘贴图片</span>
               <span class="mt-1 text-[11px] text-[var(--muted)]">粘贴非图片文件时会给出提示</span>
               <input type="file" accept="image/*" multiple class="hidden" @change="handleReferenceFileInput" />
             </label>
 
             <textarea v-model="referenceImageUrlDraft"
-              class="mt-3 h-16 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-[#7132f5]"
+              class="mt-3 h-16 w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-[#0075de]"
               placeholder="也可以每行粘贴一个图片 URL" @paste="handleReferencePaste"></textarea>
 
             <div v-if="referenceNotice"
@@ -2403,10 +2432,10 @@ onMounted(loadAll);
             <label>
               <span class="field-label">图标描述</span>
               <textarea v-model="iconPrompt"
-                class="h-24 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+                class="h-24 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#0075de]"
                 placeholder="描述图标主体、用途、颜色和风格"></textarea>
               <button
-                class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+                class="mt-2 inline-flex h-8 items-center gap-1.5 rounded border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-[#0075de] transition-colors hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="isPolishingIcon || !iconPrompt.trim()" @click="polishIconPrompt">
                 <Loader2 v-if="isPolishingIcon" :size="13" class="animate-spin" />
                 <Wand2 v-else :size="13" />
@@ -2452,15 +2481,15 @@ onMounted(loadAll);
               </div>
 
               <label
-                class="flex h-[56px] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#7132f5]/50 hover:bg-white"
+                class="flex h-[56px] cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-black/15 bg-white/70 text-center transition hover:border-[#0075de]/50 hover:bg-white"
                 @paste="handleIconReferencePaste">
-                <Paperclip :size="14" class="mb-0.5 text-[#7132f5]" />
+                <Paperclip :size="14" class="mb-0.5 text-[#0075de]" />
                 <span class="text-[11px] font-semibold">上传或粘贴参考图</span>
                 <input type="file" accept="image/*" multiple class="hidden" @change="handleIconReferenceFileInput" />
               </label>
 
               <textarea v-model="iconReferenceImageUrlDraft"
-                class="mt-2 h-10 w-full resize-none rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] leading-4 outline-none focus:border-[#7132f5]"
+                class="mt-2 h-10 w-full resize-none rounded border border-black/10 bg-white px-2 py-1.5 text-[11px] leading-4 outline-none focus:border-[#0075de]"
                 placeholder="也可以每行粘贴一个图片 URL" @paste="handleIconReferencePaste"></textarea>
 
               <div v-if="iconReferenceNotice"
@@ -2484,7 +2513,7 @@ onMounted(loadAll);
                 <div class="mb-1.5 text-[11px] font-semibold text-[var(--muted)]">从 ICON 作品选取</div>
                 <div class="grid max-h-[100px] gap-1.5 overflow-auto">
                   <button v-for="artifact in iconArtifacts.slice(0, 6)" :key="artifact.id"
-                    class="flex items-center gap-2 rounded-lg border border-black/5 bg-white/70 px-2 py-1 text-left transition hover:border-[#7132f5]/30 hover:bg-white"
+                    class="flex items-center gap-2 rounded-md border border-black/5 bg-white/70 px-2 py-1 text-left transition hover:border-[#0075de]/30 hover:bg-white"
                     @click="useArtifactAsIconReference(artifact.id)">
                     <img :src="artifact.imageUrl" :alt="artifact.prompt"
                       class="h-7 w-7 shrink-0 rounded object-cover" />
@@ -2544,7 +2573,7 @@ onMounted(loadAll);
             <div class="grid grid-cols-5 gap-2">
               <button v-for="item in ICON_SIZES" :key="item"
                 class="rounded-lg border px-2 py-2 text-center text-xs transition"
-                :class="normalizedSelectedIconSizes.includes(item) ? 'border-[#7132f5] bg-[#7132f5]/10 font-semibold text-[#7132f5]' : 'border-black/5 bg-white/60 text-[var(--muted)] hover:bg-white'"
+                :class="normalizedSelectedIconSizes.includes(item) ? 'border-[#0075de] bg-[#0075de]/10 font-semibold text-[#0075de]' : 'border-black/5 bg-white/60 text-[var(--muted)] hover:bg-white'"
                 @click="toggleIconSize(item)">
                 {{ item }}
               </button>
@@ -2695,7 +2724,7 @@ onMounted(loadAll);
                 :style="{ aspectRatio: galleryPreviewAspectRatio }">
                 <button v-for="overlay in galleryOverlays" :key="overlay.id"
                   class="pointer-events-auto absolute overflow-hidden rounded-lg border text-left shadow-sm"
-                  :class="selectedOverlayIds.includes(overlay.id) ? 'border-[#7132f5] ring-2 ring-[#7132f5]/20' : 'border-white/70'"
+                  :class="selectedOverlayIds.includes(overlay.id) ? 'border-[#0075de] ring-2 ring-[#0075de]/20' : 'border-white/70'"
                   :style="overlayStyle(overlay)" @click.stop="setSelectedOverlay(overlay.id, $event.shiftKey)"
                   @pointerdown.stop="startOverlayDrag($event, overlay)" @pointermove.stop="dragOverlay($event)"
                   @pointerup.stop="endOverlayDrag" @pointercancel.stop="endOverlayDrag">
@@ -2798,7 +2827,7 @@ onMounted(loadAll);
               </label>
               <label v-if="exportFormat === 'jpg'" class="block">
                 <span class="field-label">质量：{{ exportQuality }}%</span>
-                <input v-model.number="exportQuality" type="range" min="60" max="100" class="w-full accent-[#7132f5]" />
+                <input v-model.number="exportQuality" type="range" min="60" max="100" class="w-full accent-[#0075de]" />
               </label>
             </section>
 
@@ -2817,19 +2846,19 @@ onMounted(loadAll);
               <div class="grid gap-2">
                 <label>
                   <span class="field-label">亮度：{{ galleryVisualFilters.brightness }}%</span>
-                  <input v-model.number="galleryVisualFilters.brightness" type="range" min="50" max="150" class="w-full accent-[#7132f5]" />
+                  <input v-model.number="galleryVisualFilters.brightness" type="range" min="50" max="150" class="w-full accent-[#0075de]" />
                 </label>
                 <label>
                   <span class="field-label">对比度：{{ galleryVisualFilters.contrast }}%</span>
-                  <input v-model.number="galleryVisualFilters.contrast" type="range" min="50" max="150" class="w-full accent-[#7132f5]" />
+                  <input v-model.number="galleryVisualFilters.contrast" type="range" min="50" max="150" class="w-full accent-[#0075de]" />
                 </label>
                 <label>
                   <span class="field-label">饱和度：{{ galleryVisualFilters.saturation }}%</span>
-                  <input v-model.number="galleryVisualFilters.saturation" type="range" min="0" max="200" class="w-full accent-[#7132f5]" />
+                  <input v-model.number="galleryVisualFilters.saturation" type="range" min="0" max="200" class="w-full accent-[#0075de]" />
                 </label>
                 <label>
                   <span class="field-label">色相：{{ galleryVisualFilters.hue }}°</span>
-                  <input v-model.number="galleryVisualFilters.hue" type="range" min="-180" max="180" class="w-full accent-[#7132f5]" />
+                  <input v-model.number="galleryVisualFilters.hue" type="range" min="-180" max="180" class="w-full accent-[#0075de]" />
                 </label>
               </div>
             </section>
@@ -2838,7 +2867,7 @@ onMounted(loadAll);
               <div class="mb-3 flex items-center justify-between">
                 <h3 class="text-sm font-semibold text-slate-900">图层编辑</h3>
                 <label class="flex items-center gap-2">
-                  <input v-model="textOverlayEnabled" type="checkbox" class="h-4 w-4 accent-[#7132f5]" />
+                  <input v-model="textOverlayEnabled" type="checkbox" class="h-4 w-4 accent-[#0075de]" />
                   <span class="text-xs text-slate-600">启用</span>
                 </label>
               </div>
@@ -2920,7 +2949,7 @@ onMounted(loadAll);
                     <label class="block">
                       <span class="field-label">透明度：{{ Math.round((selectedOverlay.opacity ?? 1) * 100) }}%</span>
                       <input :value="selectedOverlay.opacity ?? 1" type="range" min="0.1" max="1" step="0.05"
-                        class="w-full accent-[#7132f5]" :disabled="selectedOverlay.locked"
+                        class="w-full accent-[#0075de]" :disabled="selectedOverlay.locked"
                         @input="updateOverlay(selectedOverlay.id, { opacity: Number(($event.target as HTMLInputElement).value) } as Partial<GalleryOverlay>)" />
                     </label>
                     <label class="block">
@@ -2946,7 +2975,7 @@ onMounted(loadAll);
 
                   <template v-if="selectedOverlay.kind === 'text'">
                     <textarea :value="selectedOverlay.text"
-                      class="mb-2 h-16 w-full resize-none rounded-lg border border-black/10 bg-white px-2.5 py-2 text-xs outline-none focus:border-[#7132f5]"
+                      class="mb-2 h-16 w-full resize-none rounded border border-black/10 bg-white px-2.5 py-2 text-xs outline-none focus:border-[#0075de]"
                       placeholder="输入文字内容" :disabled="selectedOverlay.locked"
                       @input="updateOverlay(selectedOverlay.id, { text: ($event.target as HTMLTextAreaElement).value } as Partial<TextOverlay>)"></textarea>
                     <div class="mb-2 grid grid-cols-2 gap-2">
@@ -2969,7 +2998,7 @@ onMounted(loadAll);
                       </label>
                       <label class="flex items-center gap-2 text-xs">
                         <input :checked="selectedOverlay.background" type="checkbox"
-                          class="h-3.5 w-3.5 accent-[#7132f5]" :disabled="selectedOverlay.locked"
+                          class="h-3.5 w-3.5 accent-[#0075de]" :disabled="selectedOverlay.locked"
                           @change="updateOverlay(selectedOverlay.id, { background: ($event.target as HTMLInputElement).checked } as Partial<TextOverlay>)" />
                         <span class="text-slate-600">背景</span>
                       </label>
@@ -3062,7 +3091,7 @@ onMounted(loadAll);
               class="mb-3 rounded-2xl border border-black/5 bg-white/75 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
               <div class="flex items-start gap-3">
                 <div
-                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#7132f5]/10 text-[#7132f5]">
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#0075de]/10 text-[#0075de]">
                   <Activity v-if="log.type === 'validate'" :size="16" />
                   <ImagePlus v-else-if="log.type === 'generate' || log.type === 'icon'" :size="16" />
                   <RefreshCw v-else-if="log.type === 'batch'" :size="16" />
@@ -3125,7 +3154,7 @@ onMounted(loadAll);
                   <p class="line-clamp-2 text-xs leading-5 text-slate-700">{{ artifact.prompt }}</p>
                   <div class="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
                     <span>{{ artifact.createdAt.slice(5, 16).replace('T', ' ') }}</span>
-                    <button class="font-semibold text-[#7132f5] hover:underline"
+                    <button class="font-semibold text-[#0075de] hover:underline"
                       @click="openGallery(artifact.id)">查看</button>
                   </div>
                 </div>
@@ -3145,7 +3174,7 @@ onMounted(loadAll);
             </div>
             <div class="rounded-2xl border border-black/5 bg-white/70 p-4">
               <div class="flex items-center gap-3">
-                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#7132f5] text-white">
+                <div class="flex h-10 w-10 items-center justify-center rounded-md bg-[#0075de] text-white">
                   <Star :size="17" />
                 </div>
                 <div class="min-w-0">
@@ -3186,8 +3215,8 @@ onMounted(loadAll);
           </div>
           <div v-else class="grid gap-2">
             <button v-for="template in promptTemplates" :key="template.id"
-              class="rounded-xl border bg-white p-3 text-left transition hover:border-[#7132f5]/40"
-              :class="templateDraft.id === template.id ? 'border-[#7132f5] shadow-sm' : 'border-black/5'"
+              class="rounded-lg border bg-white p-3 text-left transition hover:border-[#0075de]/40"
+              :class="templateDraft.id === template.id ? 'border-[#0075de] shadow-sm' : 'border-black/5'"
               @click="editTemplate(template)">
               <div class="mb-1 flex items-center justify-between gap-2">
                 <span class="truncate text-sm font-bold">{{ template.title }}</span>
@@ -3231,7 +3260,7 @@ onMounted(loadAll);
             <label>
               <span class="field-label">提示词内容</span>
               <textarea v-model="templateDraft.prompt"
-                class="h-56 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+                class="h-56 w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#0075de]"
                 placeholder="写下完整提示词模板"></textarea>
             </label>
 
@@ -3290,7 +3319,7 @@ onMounted(loadAll);
             <div class="rounded-xl border border-black/5 bg-slate-50 p-3">
               <div class="mb-2 flex items-center justify-between">
                 <div class="text-sm font-semibold">搜索结果</div>
-                <div class="flex flex-wrap items-center gap-3 text-xs font-semibold text-[#7132f5]">
+                <div class="flex flex-wrap items-center gap-3 text-xs font-semibold text-[#0075de]">
                   <a :href="`https://icon-sets.iconify.design/search/?query=${encodeURIComponent(iconfontKeyword || 'icon')}`"
                     target="_blank" rel="noreferrer">打开 Iconify</a>
                   <a :href="`https://www.iconfont.cn/search/index?searchType=icon&q=${encodeURIComponent(iconfontKeyword || 'icon')}`"
@@ -3338,7 +3367,7 @@ onMounted(loadAll);
             <label>
               <span class="field-label">SVG 源码</span>
               <textarea v-model="iconfontSvgDraft"
-                class="h-64 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-[#7132f5]"
+                class="h-64 w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-[#0075de]"
                 placeholder="<svg>...</svg>"></textarea>
             </label>
 
@@ -3378,7 +3407,7 @@ onMounted(loadAll);
                 <div class="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-[var(--muted)]">{{
                   profileSummary(profile) }}</div>
               </div>
-              <Star v-if="profile.id === selectedConfigId" :size="14" class="shrink-0 text-[#7132f5]" />
+              <Star v-if="profile.id === selectedConfigId" :size="14" class="shrink-0 text-[#0075de]" />
             </button>
           </div>
 
@@ -3397,7 +3426,7 @@ onMounted(loadAll);
           <header class="mb-5 flex items-start justify-between gap-4 border-b border-black/5 pb-4">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7132f5] text-white">
+                <div class="flex h-9 w-9 items-center justify-center rounded-md bg-[#0075de] text-white">
                   <Star :size="16" />
                 </div>
                 <div class="min-w-0">
@@ -3408,9 +3437,17 @@ onMounted(loadAll);
                 </div>
               </div>
             </div>
-            <button class="icon-btn" title="关闭" @click="isModelConfigOpen = false">
-              <X :size="16" />
-            </button>
+            <div class="flex shrink-0 items-center gap-2">
+              <UiButton v-if="canDeleteProfile" variant="danger" size="sm" class="w-auto px-3"
+                :disabled="isDeletingProfile" @click="removeProfile">
+                <Loader2 v-if="isDeletingProfile" :size="14" class="animate-spin" />
+                <Trash2 v-else :size="14" />
+                删除配置
+              </UiButton>
+              <button class="icon-btn" title="关闭" @click="isModelConfigOpen = false">
+                <X :size="16" />
+              </button>
+            </div>
           </header>
 
           <div class="grid gap-5">
@@ -3420,7 +3457,7 @@ onMounted(loadAll);
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">配置名称</span>
                   <input v-model="draft.name"
-                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    class="h-9 w-full rounded border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#0075de]"
                     placeholder="模型配置名称" />
                 </label>
                 <label class="grid gap-1">
@@ -3430,79 +3467,79 @@ onMounted(loadAll);
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">服务地址</span>
                   <input v-model="draft.baseUrl"
-                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    class="h-9 w-full rounded border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#0075de]"
                     placeholder="https://api.openai.com" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">API 密钥</span>
                   <input v-model="draft.apiKey" type="password"
-                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    class="h-9 w-full rounded border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#0075de]"
                     placeholder="sk-..." />
                 </label>
               </div>
             </section>
 
             <section class="rounded-2xl border border-black/5 bg-white p-4">
-              <h3 class="mb-3 text-xs font-bold text-slate-700">接口与模型</h3>
-              <div class="grid grid-cols-2 gap-3">
-                <label class="grid gap-1">
-                  <span class="text-[11px] font-semibold text-[var(--muted)]">对话接口路径</span>
-                  <input v-model="draft.chatEndpoint"
-                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
-                    placeholder="/v1/chat/completions" />
-                </label>
-                <label class="grid gap-1">
+              <h3 class="mb-3 text-xs font-bold text-slate-700">图像接口</h3>
+              <div class="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                <label class="grid min-w-0 gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">图像接口路径</span>
                   <input v-model="draft.imageEndpoint"
-                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]"
+                    class="h-9 w-full rounded border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#0075de]"
                     placeholder="/v1/images/generations" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">超时时间（秒）</span>
                   <input v-model.number="draft.timeoutSec" type="number" min="10" max="1800"
-                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]" />
+                    class="h-9 w-full rounded border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#0075de]" />
                 </label>
                 <label class="grid gap-1">
                   <span class="text-[11px] font-semibold text-[var(--muted)]">参考图上限</span>
                   <input v-model.number="draft.referenceImageLimit" type="number" min="1" max="16"
-                    class="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#7132f5]" />
+                    class="h-9 w-full rounded border border-black/10 bg-white px-3 text-sm outline-none focus:border-[#0075de]" />
                 </label>
               </div>
             </section>
 
-            <section class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/5 bg-slate-50 p-3">
-              <div class="relative min-w-[200px] flex-1">
+            <section class="grid gap-3 rounded-2xl border border-black/5 bg-slate-50 p-3">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 class="text-xs font-bold text-slate-700">模型选择</h3>
+                  <p class="mt-1 text-xs text-[var(--muted)]">模型列表只使用远程接口返回结果，手动添加仅用于兼容私有模型。</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <UiButton variant="secondary" size="sm" class="w-auto px-3"
+                    :disabled="isValidating || connectionErrors.length > 0" @click="validateModel">
+                    <Loader2 v-if="isValidating" :size="14" class="animate-spin" />
+                    <Activity v-else :size="14" />
+                    检测
+                  </UiButton>
+                  <UiButton variant="secondary" size="sm" class="w-auto px-3"
+                    :disabled="isFetchingModels || connectionErrors.length > 0" @click="fetchModelList">
+                    <Loader2 v-if="isFetchingModels" :size="14" class="animate-spin" />
+                    <RefreshCw v-else :size="14" />
+                    获取模型
+                  </UiButton>
+                  <UiButton size="sm" class="w-auto px-4" :disabled="isSaving || draftErrors.length > 0"
+                    @click="saveProfile">
+                    <Loader2 v-if="isSaving" :size="14" class="animate-spin" />
+                    <Save v-else :size="14" />
+                    保存配置
+                  </UiButton>
+                </div>
+              </div>
+              <div class="relative">
                 <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
                 <input v-model="modelSearch"
-                  class="h-9 w-full rounded-lg border border-black/10 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#7132f5]"
-                  placeholder="搜索模型" />
-              </div>
-              <div class="flex items-center gap-2">
-                <UiButton variant="secondary" size="sm" class="w-auto px-3"
-                  :disabled="isValidating || draftErrors.length > 0" @click="validateModel">
-                  <Loader2 v-if="isValidating" :size="14" class="animate-spin" />
-                  <Activity v-else :size="14" />
-                  检测
-                </UiButton>
-                <UiButton variant="secondary" size="sm" class="w-auto px-3"
-                  :disabled="isFetchingModels || modelListErrors.length > 0" @click="fetchModelList">
-                  <Loader2 v-if="isFetchingModels" :size="14" class="animate-spin" />
-                  <RefreshCw v-else :size="14" />
-                  获取模型
-                </UiButton>
-                <UiButton size="sm" class="w-auto px-4" :disabled="isSaving || draftErrors.length > 0"
-                  @click="saveProfile">
-                  <Loader2 v-if="isSaving" :size="14" class="animate-spin" />
-                  <Save v-else :size="14" />
-                  保存配置
-                </UiButton>
+                  class="h-9 w-full rounded border border-black/10 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#0075de]"
+                  placeholder="搜索真实模型列表" />
               </div>
             </section>
 
             <section class="flex overflow-hidden rounded-xl border border-black/10 bg-white">
               <input v-model="manualModelName" class="h-10 min-w-0 flex-1 px-3 text-sm outline-none"
                 placeholder="手动添加模型名称" @keyup.enter="addManualModel" />
-              <button class="border-l border-black/10 px-3 text-[#7132f5]" title="添加模型" @click="addManualModel">
+              <button class="border-l border-black/10 px-3 text-[#0075de]" title="添加模型" @click="addManualModel">
                 <Plus :size="18" />
               </button>
             </section>
@@ -3514,9 +3551,14 @@ onMounted(loadAll);
                 个模型，列表如下。</div>
             </div>
 
-            <div v-if="draftErrors.length"
+            <div v-if="connectionErrors.length"
               class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-700">
-              <div v-for="error in draftErrors" :key="error">{{ error }}</div>
+              <div v-for="error in connectionErrors" :key="error">{{ error }}</div>
+            </div>
+
+            <div v-if="modelSelectionError"
+              class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-700">
+              {{ modelSelectionError }}
             </div>
 
             <div v-if="validationResult" class="rounded-xl border p-3 text-xs leading-5"
@@ -3529,7 +3571,7 @@ onMounted(loadAll);
             <section class="rounded-2xl border border-black/10 bg-white">
               <div class="flex items-center justify-between gap-3 border-b border-black/5 bg-slate-50 px-4 py-3">
                 <div class="flex min-w-0 items-center gap-3">
-                  <Sparkles :size="15" class="shrink-0 text-[#7132f5]" />
+                  <Sparkles :size="15" class="shrink-0 text-[#0075de]" />
                   <div class="min-w-0">
                     <h3 class="text-sm font-bold text-slate-800">模型列表</h3>
                     <p class="mt-0.5 text-xs text-[var(--muted)]">{{ filteredModels.length }} 个模型可用</p>
@@ -3544,7 +3586,7 @@ onMounted(loadAll);
               <div v-else class="max-h-[48vh] overflow-auto thin-scrollbar">
                 <div v-for="group in groupedModels" :key="group.name" class="border-b border-black/5 last:border-b-0">
                   <div class="sticky top-0 z-10 flex items-center gap-3 bg-slate-50 px-4 py-3">
-                    <Sparkles :size="15" class="text-[#7132f5]" />
+                    <Sparkles :size="15" class="text-[#0075de]" />
                     <span class="font-semibold">{{ group.name }}</span>
                     <span class="rounded-full bg-white px-2 py-0.5 text-xs text-[var(--muted)]">{{ group.models.length
                     }}</span>
@@ -3583,7 +3625,7 @@ onMounted(loadAll);
         <header class="flex items-start justify-between gap-4 border-b border-black/5 bg-slate-50 px-5 py-4">
           <div>
             <div class="flex items-center gap-2">
-              <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7132f5] text-white">
+              <div class="flex h-9 w-9 items-center justify-center rounded-md bg-[#0075de] text-white">
                 <Sparkles :size="17" />
               </div>
               <div>
@@ -3627,7 +3669,7 @@ onMounted(loadAll);
             <h3 class="text-sm font-bold">开源与联系</h3>
             <div class="mt-3 grid gap-3 text-sm">
               <button
-                class="flex w-full items-center justify-between gap-3 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5 text-left font-semibold text-[#7132f5] hover:bg-slate-100"
+                class="flex w-full items-center justify-between gap-3 rounded-lg border border-black/5 bg-slate-50 px-3 py-2.5 text-left font-semibold text-[#0075de] hover:bg-slate-100"
                 @click="openExternalUrl('https://github.com/SamuelYooo/sam-image-app')">
                 <span class="flex min-w-0 items-center gap-2">
                   <Github :size="16" class="shrink-0" />
@@ -3675,7 +3717,7 @@ onMounted(loadAll);
             </button>
           </div>
           <textarea v-model="prompt"
-            class="h-64 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#7132f5]"
+            class="h-64 w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#0075de]"
             placeholder="描述你想生成的画面"></textarea>
           <div class="mt-3 flex items-center justify-end gap-2">
             <button class="secondary-btn" @click="isPromptExpanded = false">关闭</button>
@@ -3687,15 +3729,46 @@ onMounted(loadAll);
 </template>
 
 <style scoped>
+.samimage-generate-page {
+  background: var(--warm-white);
+}
+
+.samimage-stage {
+  border: var(--notion-border);
+  background: var(--warm-surface-muted);
+}
+
+.samimage-flow-row {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+.samimage-flow-card {
+  border: var(--notion-border);
+  box-shadow: var(--notion-shadow-card);
+}
+
+.samimage-workspace {
+  overflow: hidden;
+  top: 300px;
+}
+
+@media (max-height: 820px) {
+  .samimage-flow-row {
+    top: 104px;
+  }
+}
+
 .toolbar-btn,
 .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: white;
+  border-radius: 4px;
+  border: var(--notion-border);
+  background: var(--warm-surface);
   padding: 0.6rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
@@ -3705,7 +3778,7 @@ onMounted(loadAll);
   width: 2.5rem;
   height: 2.5rem;
   padding: 0;
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 .gallery-panel-float-btn {
@@ -3715,18 +3788,18 @@ onMounted(loadAll);
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid rgba(113, 50, 245, 0.22);
-  background: linear-gradient(135deg, rgba(113, 50, 245, 0.14), rgba(255, 255, 255, 0.96));
-  color: #7132f5;
-  box-shadow: 0 18px 38px rgba(113, 50, 245, 0.18);
+  border: 1px solid rgba(0, 117, 222, 0.22);
+  background: rgba(255, 255, 255, 0.94);
+  color: #0075de;
+  box-shadow: 0 14px 30px rgba(15, 15, 15, 0.12);
   backdrop-filter: blur(18px);
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
 .gallery-panel-float-btn:hover {
   transform: translateY(-1px) scale(1.03);
-  border-color: rgba(113, 50, 245, 0.34);
-  box-shadow: 0 22px 44px rgba(113, 50, 245, 0.24);
+  border-color: rgba(0, 117, 222, 0.34);
+  box-shadow: 0 18px 38px rgba(15, 15, 15, 0.16);
 }
 
 .gallery-panel-edge-btn {
@@ -3736,7 +3809,7 @@ onMounted(loadAll);
 
 .gallery-panel-edge-btn-right {
   border-radius: 999px 0 0 999px;
-  border-left: 1px solid rgba(113, 50, 245, 0.22);
+  border-left: 1px solid rgba(0, 117, 222, 0.22);
   border-right: 0;
 }
 
@@ -3746,7 +3819,7 @@ onMounted(loadAll);
   width: 2.25rem;
   align-items: center;
   justify-content: center;
-  border-radius: 0.75rem;
+  border-radius: 6px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   background: rgba(255, 255, 255, 0.92);
   color: #1e293b;
@@ -3768,7 +3841,7 @@ onMounted(loadAll);
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid transparent;
   padding: 0 1.1rem;
   color: #ffffff;
@@ -3780,11 +3853,11 @@ onMounted(loadAll);
 }
 
 .gallery-artifact-nav-prev {
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  background: #0075de;
 }
 
 .gallery-artifact-nav-next {
-  background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+  background: #005bab;
 }
 
 .gallery-artifact-nav-btn:hover:not(:disabled) {
@@ -3806,9 +3879,9 @@ onMounted(loadAll);
   height: 2.75rem;
   align-items: center;
   gap: 0.65rem;
-  border-radius: 999px;
-  border: 1px solid rgba(113, 50, 245, 0.16);
-  background: rgba(255, 255, 255, 0.88);
+  border-radius: 6px;
+  border: 1px solid rgba(0, 117, 222, 0.16);
+  background: rgba(255, 255, 255, 0.9);
   padding: 0.35rem 0.75rem 0.35rem 0.45rem;
   box-shadow: 0 14px 40px rgba(42, 54, 68, 0.1);
   backdrop-filter: blur(18px);
@@ -3816,7 +3889,7 @@ onMounted(loadAll);
 }
 
 .model-switcher-trigger:hover {
-  border-color: rgba(113, 50, 245, 0.32);
+  border-color: rgba(0, 117, 222, 0.32);
   background: white;
   transform: translateY(-1px);
 }
@@ -3827,11 +3900,11 @@ onMounted(loadAll);
   top: calc(100% + 0.6rem);
   z-index: 60;
   width: min(24rem, calc(100vw - 2rem));
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  background: rgba(255, 255, 255, 0.96);
+  border-radius: 8px;
+  border: var(--notion-border);
+  background: rgba(255, 255, 255, 0.97);
   padding: 0.85rem;
-  box-shadow: 0 22px 70px rgba(42, 54, 68, 0.18);
+  box-shadow: var(--notion-shadow-popover);
   backdrop-filter: blur(22px);
 }
 
@@ -3850,9 +3923,9 @@ onMounted(loadAll);
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-radius: 0.9rem;
+  border-radius: 6px;
   border: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(248, 250, 252, 0.88);
+  background: var(--warm-surface-muted);
   padding: 0.75rem;
   text-align: left;
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
@@ -3860,16 +3933,16 @@ onMounted(loadAll);
 
 .model-switcher-item:hover,
 .model-config-profile:hover {
-  border-color: rgba(113, 50, 245, 0.28);
+  border-color: rgba(0, 117, 222, 0.28);
   background: white;
   transform: translateY(-1px);
 }
 
 .model-switcher-item.is-active,
 .model-config-profile.is-active {
-  border-color: rgba(113, 50, 245, 0.38);
-  background: rgba(113, 50, 245, 0.08);
-  box-shadow: 0 12px 30px rgba(113, 50, 245, 0.1);
+  border-color: rgba(0, 117, 222, 0.38);
+  background: rgba(0, 117, 222, 0.08);
+  box-shadow: 0 10px 24px rgba(0, 117, 222, 0.1);
 }
 
 .setting-title {
@@ -3920,7 +3993,7 @@ onMounted(loadAll);
   height: 2.5rem;
   align-items: center;
   gap: 0.45rem;
-  border-radius: 999px;
+  border-radius: 4px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(255, 255, 255, 0.82);
   padding: 0 0.9rem;
@@ -3933,7 +4006,7 @@ onMounted(loadAll);
 }
 
 .prompt-template-trigger:hover {
-  border-color: rgba(113, 50, 245, 0.28);
+  border-color: rgba(0, 117, 222, 0.28);
   background: rgba(255, 255, 255, 0.96);
   transform: translateY(-1px);
 }
@@ -3942,17 +4015,18 @@ onMounted(loadAll);
   position: absolute;
   right: 0;
   top: calc(100% + 0.6rem);
+  z-index: 50;
   width: 23rem;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
+  border: var(--notion-border);
   background: rgba(255, 255, 255, 0.94);
   padding: 0.85rem;
-  box-shadow: 0 22px 70px rgba(42, 54, 68, 0.18);
+  box-shadow: var(--notion-shadow-popover);
   backdrop-filter: blur(22px);
 }
 
 .template-list-btn {
-  border-radius: 0.8rem;
+  border-radius: 6px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   background: rgba(248, 250, 252, 0.86);
   padding: 0.75rem;
@@ -3962,7 +4036,7 @@ onMounted(loadAll);
 }
 
 .template-list-btn:hover {
-  border-color: rgba(113, 50, 245, 0.32);
+  border-color: rgba(0, 117, 222, 0.32);
   background: white;
   transform: translateY(-1px);
 }
@@ -3977,7 +4051,7 @@ onMounted(loadAll);
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   gap: 0;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   background: white;
   overflow: hidden;
@@ -3988,14 +4062,14 @@ onMounted(loadAll);
 
 .gallery-list-item:hover {
   transform: translateY(-1px);
-  border-color: rgba(113, 50, 245, 0.2);
+  border-color: rgba(0, 117, 222, 0.2);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 .gallery-list-item.is-active {
-  border-color: rgba(113, 50, 245, 0.45);
-  box-shadow: 0 6px 20px rgba(113, 50, 245, 0.14);
-  background: linear-gradient(135deg, rgba(113, 50, 245, 0.03) 0%, white 100%);
+  border-color: rgba(0, 117, 222, 0.45);
+  box-shadow: 0 6px 20px rgba(0, 117, 222, 0.12);
+  background: linear-gradient(135deg, rgba(0, 117, 222, 0.03) 0%, white 100%);
 }
 
 .gallery-list-thumb {
@@ -4041,7 +4115,7 @@ onMounted(loadAll);
   justify-content: center;
   gap: 6px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
   transition: all 0.15s ease;
@@ -4049,14 +4123,14 @@ onMounted(loadAll);
 }
 
 .action-btn-primary {
-  background: #7132f5;
+  background: #0075de;
   color: white;
 }
 
 .action-btn-primary:hover {
-  background: #1557cc;
+  background: #005bab;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(113, 50, 245, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 117, 222, 0.22);
 }
 
 .action-btn-danger {
@@ -4077,7 +4151,7 @@ onMounted(loadAll);
   justify-content: center;
   gap: 4px;
   padding: 10px 8px;
-  border-radius: 10px;
+  border-radius: 6px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   background: white;
   font-size: 11px;
@@ -4088,9 +4162,9 @@ onMounted(loadAll);
 }
 
 .tool-btn:hover {
-  border-color: rgba(113, 50, 245, 0.3);
-  background: rgba(113, 50, 245, 0.04);
-  color: #7132f5;
+  border-color: rgba(0, 117, 222, 0.3);
+  background: rgba(0, 117, 222, 0.04);
+  color: #0075de;
   transform: translateY(-1px);
 }
 
@@ -4109,14 +4183,14 @@ onMounted(loadAll);
 }
 
 .layer-item:hover {
-  border-color: rgba(113, 50, 245, 0.2);
-  background: rgba(113, 50, 245, 0.02);
+  border-color: rgba(0, 117, 222, 0.2);
+  background: rgba(0, 117, 222, 0.02);
 }
 
 .layer-item-active {
-  border-color: #7132f5 !important;
-  background: rgba(113, 50, 245, 0.06) !important;
-  box-shadow: 0 0 0 3px rgba(113, 50, 245, 0.1);
+  border-color: #0075de !important;
+  background: rgba(0, 117, 222, 0.06) !important;
+  box-shadow: 0 0 0 3px rgba(0, 117, 222, 0.1);
 }
 
 .layer-item-locked {
@@ -4173,9 +4247,9 @@ onMounted(loadAll);
 }
 
 .control-btn:hover {
-  border-color: rgba(113, 50, 245, 0.3);
-  background: rgba(113, 50, 245, 0.04);
-  color: #7132f5;
+  border-color: rgba(0, 117, 222, 0.3);
+  background: rgba(0, 117, 222, 0.04);
+  color: #0075de;
 }
 
 .creative-tools-grid {
@@ -4230,7 +4304,7 @@ onMounted(loadAll);
 
 .iconfont-result-item:hover {
   transform: translateY(-1px);
-  border-color: rgba(113, 50, 245, 0.28);
+  border-color: rgba(0, 117, 222, 0.28);
   box-shadow: 0 10px 26px rgba(42, 54, 68, 0.08);
 }
 
@@ -4251,7 +4325,7 @@ onMounted(loadAll);
 .gallery-download-btn {
   min-width: 7rem;
   padding: 0 1rem;
-  background: #7132f5;
+  background: #0075de;
   color: white;
 }
 
@@ -4284,7 +4358,7 @@ onMounted(loadAll);
 
 .connection-path {
   fill: none;
-  stroke: rgba(113, 50, 245, 0.42);
+  stroke: rgba(0, 117, 222, 0.42);
   stroke-width: 3;
   stroke-linecap: round;
   stroke-dasharray: 10 10;

@@ -57,9 +57,6 @@ pub trait ImageAdapter: Send + Sync {
         reverse_openai_compatible_chat(profile, request).await
     }
 
-    fn preset_models(&self) -> Vec<String> {
-        Vec::new()
-    }
 }
 
 pub fn all_infos() -> Vec<AdapterInfo> {
@@ -96,26 +93,21 @@ pub async fn reverse_prompt(profile: &ModelProfile, request: &GenerationRequest)
 
 pub async fn list_models(profile: &ModelProfile) -> Result<ModelListResult> {
     validate_model_list_profile(profile)?;
-    let adapter = adapter_for(&profile.adapter)?;
+    let _adapter = adapter_for(&profile.adapter)?;
     match fetch_remote_models(profile).await {
-        Ok(models) if !models.is_empty() => Ok(ModelListResult {
-            models,
-            source: "remote",
-            message: "已从服务地址获取模型列表".to_string(),
-        }),
-        _ => {
-            let mut models = adapter.preset_models();
-            if !profile.model.trim().is_empty() {
-                models.push(profile.model.trim().to_string());
-            }
-            models.sort();
-            models.dedup();
+        Ok(models) => {
+            let message = if models.is_empty() {
+                "服务返回空模型列表".to_string()
+            } else {
+                "已从服务地址获取模型列表".to_string()
+            };
             Ok(ModelListResult {
                 models,
-                source: "preset",
-                message: "远程模型列表不可用，已显示适配器预设模型".to_string(),
+                source: "remote",
+                message,
             })
         }
+        Err(error) => Err(anyhow!("获取远程模型列表失败: {error}")),
     }
 }
 
@@ -217,6 +209,47 @@ async fn fetch_remote_models(profile: &ModelProfile) -> Result<Vec<String>> {
     models.sort();
     models.dedup();
     Ok(models)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::AsyncWriteExt;
+
+    fn test_profile(base_url: String) -> ModelProfile {
+        ModelProfile {
+            id: "test-profile".to_string(),
+            name: "Test profile".to_string(),
+            adapter: AdapterKind::OpenaiImages,
+            base_url,
+            api_key: String::new(),
+            model: String::new(),
+            available_models: vec!["legacy-preset-a".to_string(), "legacy-preset-b".to_string()],
+            chat_endpoint: "/v1/chat/completions".to_string(),
+            image_endpoint: "/v1/images/generations".to_string(),
+            timeout_sec: 10,
+            reference_image_limit: 4,
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn list_models_does_not_return_preset_models_when_remote_fails() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            stream
+                .write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .unwrap();
+        });
+
+        let result = list_models(&test_profile(format!("http://{address}"))).await;
+
+        assert!(result.is_err());
+    }
 }
 
 #[derive(Serialize)]

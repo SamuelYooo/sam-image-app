@@ -16,12 +16,4 @@ impl ImageAdapter for OpenAiChatAdapter {
             supports_reverse_prompt: true,
         }
     }
-
-    fn preset_models(&self) -> Vec<String> {
-        vec![
-            "gpt-4o".to_string(),
-            "gpt-4.1".to_string(),
-            "gpt-4.1-mini".to_string(),
-        ]
-    }
 }

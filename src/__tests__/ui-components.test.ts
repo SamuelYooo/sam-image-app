@@ -11,31 +11,43 @@ function readSource(path: string) {
 describe('ui component contracts', () => {
   it('defines button variants and sizes used by the app', () => {
     const source = readSource('components/ui/UiButton.vue');
+    const styles = readSource('styles.css');
 
     expect(source).toContain("type ButtonVariant = 'primary' | 'secondary' | 'subtle' | 'danger' | 'ghost'");
     expect(source).toContain("type ButtonSize = 'sm' | 'md' | 'lg'");
-    expect(source).toContain('ui-button--primary');
-    expect(source).toContain('ui-button--secondary');
-    expect(source).toContain('ui-button--danger');
-    expect(source).toContain('ui-button--subtle');
-    expect(source).toContain('ui-button--ghost');
-    expect(source).toContain('ui-button--sm');
-    expect(source).toContain('ui-button--md');
-    expect(source).toContain('ui-button--lg');
+    expect(source).toContain('`ui-button--${props.variant}`');
+    expect(source).toContain('`ui-button--${props.size}`');
+    expect(source).not.toContain("'ui-button--primary',");
+    expect(source).not.toContain("'ui-button--secondary',");
+    expect(source).not.toContain("'ui-button--danger',");
+    expect(styles).toContain('.ui-button--primary');
+    expect(styles).toContain('.ui-button--secondary');
+    expect(styles).toContain('.ui-button--danger');
+    expect(styles).toContain('.ui-button--subtle');
+    expect(styles).toContain('.ui-button--ghost');
+    expect(styles).toContain('.ui-button--sm');
+    expect(styles).toContain('.ui-button--md');
+    expect(styles).toContain('.ui-button--lg');
   });
 
   it('defines icon button variants and sizes used by icon-only actions', () => {
     const source = readSource('components/ui/UiIconButton.vue');
+    const styles = readSource('styles.css');
 
     expect(source).toContain("type IconButtonVariant = 'default' | 'primary' | 'danger' | 'ghost'");
     expect(source).toContain("type IconButtonSize = 'sm' | 'md' | 'lg'");
-    expect(source).toContain('ui-icon-button--danger');
-    expect(source).toContain('ui-icon-button--default');
-    expect(source).toContain('ui-icon-button--primary');
-    expect(source).toContain('ui-icon-button--ghost');
-    expect(source).toContain('ui-icon-button--sm');
-    expect(source).toContain('ui-icon-button--md');
-    expect(source).toContain('ui-icon-button--lg');
+    expect(source).toContain('`ui-icon-button--${props.variant}`');
+    expect(source).toContain('`ui-icon-button--${props.size}`');
+    expect(source).not.toContain("'ui-icon-button--default',");
+    expect(source).not.toContain("'ui-icon-button--primary',");
+    expect(source).not.toContain("'ui-icon-button--danger',");
+    expect(styles).toContain('.ui-icon-button--danger');
+    expect(styles).toContain('.ui-icon-button--default');
+    expect(styles).toContain('.ui-icon-button--primary');
+    expect(styles).toContain('.ui-icon-button--ghost');
+    expect(styles).toContain('.ui-icon-button--sm');
+    expect(styles).toContain('.ui-icon-button--md');
+    expect(styles).toContain('.ui-icon-button--lg');
   });
 
   it('defines field input and textarea modes', () => {
@@ -78,6 +90,22 @@ describe('ui component contracts', () => {
     expect(source).toContain('<UiIconButton');
   });
 
+  it('uses a real remote model-list flow in the model config panel', () => {
+    const source = readSource('App.vue');
+
+    expect(source).toContain('validateProfileConnectionDraft');
+    expect(source).toContain('const connectionErrors = computed(() => validateProfileConnectionDraft(draft));');
+    expect(source).not.toContain('对话接口路径');
+    expect(source).toContain('图像接口路径');
+    expect(source).toContain('@click="removeProfile"');
+    expect(source).toContain('删除配置');
+    expect(source).toContain(':disabled="isValidating || connectionErrors.length > 0" @click="validateModel"');
+    expect(source).toContain('const models = draft.availableModels;');
+    expect(source).toContain('draft.availableModels = [...result.models];');
+    expect(source).not.toContain('mergeModelList(draft.availableModels, result.models)');
+    expect(source).not.toContain("source: 'preset'");
+  });
+
   it('does not keep obsolete select overflow inline styles in App', () => {
     const source = readSource('App.vue');
 
@@ -87,10 +115,46 @@ describe('ui component contracts', () => {
   it('keeps SamTo image bottom workspace in stable two-column layout', () => {
     const source = readSource('App.vue');
 
-    expect(source).toContain('grid h-[54vh] grid-cols-[minmax(0,1fr)_360px]');
+    expect(source).toContain('top-[260px] z-20 grid min-h-0 grid-cols-[minmax(0,1fr)_360px]');
+    expect(source).not.toContain('grid h-[54vh] grid-cols-[minmax(0,1fr)_360px]');
     expect(source).toContain('row-span-2 min-h-0 overflow-auto rounded-2xl p-4');
     expect(source).toContain('grid grid-cols-[minmax(0,1fr)_80px]');
     expect(source).toContain('v-if="isStoryboardMode" class="mt-3 flex items-center gap-3"');
+  });
+
+  it('keeps the prompt template picker above the SamTo reference panel', () => {
+    const source = readSource('App.vue');
+    const promptLayerStart = source.indexOf('<div class="absolute right-6 top-5 z-40">');
+    const workspaceStart = source.indexOf('<div class="samimage-workspace absolute bottom-5 left-5 right-5 top-[260px] z-20');
+
+    expect(promptLayerStart).toBeGreaterThan(-1);
+    expect(workspaceStart).toBeGreaterThan(promptLayerStart);
+    expect(source).toContain('.prompt-template-popover');
+    expect(source).toContain('z-index: 50;');
+  });
+
+  it('uses Notion-inspired warm neutral tokens and low-radius controls', () => {
+    const styles = readSource('styles.css');
+    const appSource = readSource('App.vue');
+
+    expect(styles).toContain('--notion-blue: #0075de');
+    expect(styles).toContain('--warm-white: #f6f5f4');
+    expect(styles).toContain('--notion-shadow-card');
+    expect(styles).toContain('border-radius: 4px;');
+    expect(styles).toContain('font-family:');
+    expect(styles).toContain('NotionInter');
+    expect(styles).toContain('background: var(--warm-white);');
+    expect(styles).toContain('border: var(--notion-border);');
+    expect(appSource).toContain('samimage-generate-page');
+    expect(appSource).toContain('samimage-stage');
+  });
+
+  it('adds a rendered-layout guard so the generate workspace stays below flow cards', () => {
+    const source = readSource('App.vue');
+
+    expect(source).toContain('.samimage-workspace');
+    expect(source).toContain('top: 300px;');
+    expect(source).not.toContain('top: 236px;');
   });
 
   it('keeps SamTo batch controls inside the left scroll column', () => {

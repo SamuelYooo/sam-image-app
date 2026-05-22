@@ -1,17 +1,34 @@
 @import "tailwindcss";
 
 :root {
-  /* Kraken Design System - Light Theme */
-  /* Primary */
-  --purple:        #7132f5;
-  --purple-dark:    #5741d8;
-  --purple-deep:    #5b1ecf;
-  --purple-subtle:  rgba(133, 91, 251, 0.16);
-  /* Neutral */
-  --near-black:     #101114;
-  --cool-gray:      #686b82;
-  --silver-blue:    #9497a9;
-  --border-gray:    #dedee5;
+  /* Notion-inspired warm neutral system */
+  --notion-blue: #0075de;
+  --notion-blue-active: #005bab;
+  --notion-blue-soft: rgba(0, 117, 222, 0.1);
+  --notion-ink: rgba(0, 0, 0, 0.95);
+  --notion-ink-soft: rgba(0, 0, 0, 0.72);
+  --notion-border: 1px solid rgba(0, 0, 0, 0.1);
+  --notion-border-hover: rgba(0, 0, 0, 0.18);
+  --notion-shadow-card: 0 4px 18px rgba(15, 15, 15, 0.06);
+  --notion-shadow-popover: 0 18px 50px rgba(15, 15, 15, 0.12);
+  --warm-white: #f6f5f4;
+  --warm-surface: #ffffff;
+  --warm-surface-muted: #fbfaf9;
+  --warm-gray-100: #f1efee;
+  --warm-gray-200: #e6e3e1;
+  --warm-gray-300: #a39e98;
+  --warm-gray-500: #615d59;
+  --warm-gray-700: #37352f;
+
+  /* Backwards-compatible aliases for existing app code */
+  --purple:        var(--notion-blue);
+  --purple-dark:    var(--notion-blue-active);
+  --purple-deep:    #004f96;
+  --purple-subtle:  var(--notion-blue-soft);
+  --near-black:     var(--notion-ink);
+  --cool-gray:      var(--warm-gray-500);
+  --silver-blue:    var(--warm-gray-300);
+  --border-gray:    rgba(0, 0, 0, 0.1);
   /* Semantic */
   --green:          #149e61;
   --green-text:     #026b3f;
@@ -21,15 +38,17 @@
   --red-subtle:     rgba(220, 38, 38, 0.10);
 
   /* App-level aliases (backwards compatible) */
-  --ink:    #101114;
-  --muted:  #686b82;
-  --line:   rgba(104, 107, 130, 0.12);
-  --panel:  rgba(255, 255, 255, 0.78);
-  --panel-solid: #ffffff;
+  --ink:    var(--notion-ink);
+  --muted:  var(--warm-gray-500);
+  --line:   rgba(0, 0, 0, 0.09);
+  --panel:  rgba(255, 255, 255, 0.88);
+  --panel-solid: var(--warm-surface);
 
-  color: #101114;
-  background: #ffffff;
+  color: var(--notion-ink);
+  background: var(--warm-white);
   font-family:
+    "NotionInter",
+    "Geist",
     "IBM Plex Sans",
     "PingFang SC",
     "Microsoft YaHei",
@@ -51,7 +70,7 @@ body {
   min-width: 1100px;
   min-height: 100vh;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--warm-white);
 }
 
 button,
@@ -65,56 +84,56 @@ button {
   cursor: pointer;
 }
 
-/* ── Buttons ─────────────────────────────────────────────── */
+/* Buttons */
 
-/* Primary CTA — Kraken Purple */
+/* Primary CTA */
 .ui-button--primary,
 .primary-btn {
   color: #ffffff;
-  background: #7132f5;
+  background: var(--notion-blue);
   border: 1px solid transparent;
   box-shadow: none;
 }
 
 .ui-button--primary:hover:not(:disabled),
 .primary-btn:hover:not(:disabled) {
-  background: #5b1ecf;
+  background: var(--notion-blue-active);
 }
 
-/* Outlined — Purple border */
+/* Outlined */
 .ui-button--secondary,
 .secondary-btn {
-  color: #5741d8;
-  background: #ffffff;
-  border: 1px solid #5741d8;
+  color: var(--notion-ink);
+  background: var(--warm-surface);
+  border: var(--notion-border);
 }
 
 .ui-button--secondary:hover:not(:disabled),
 .secondary-btn:hover:not(:disabled) {
-  background: var(--purple-subtle);
+  border-color: var(--notion-border-hover);
+  background: var(--warm-gray-100);
 }
 
-/* Subtle — 16% purple bg */
 .ui-button--subtle {
-  color: #7132f5;
-  background: var(--purple-subtle);
+  color: var(--notion-blue);
+  background: var(--notion-blue-soft);
   border: 1px solid transparent;
 }
 
 .ui-button--subtle:hover:not(:disabled) {
-  background: rgba(133, 91, 251, 0.25);
+  background: rgba(0, 117, 222, 0.16);
 }
 
 /* Ghost */
 .ui-button--ghost {
-  color: var(--cool-gray);
+  color: var(--warm-gray-500);
   background: transparent;
   border: 1px solid transparent;
 }
 
 .ui-button--ghost:hover:not(:disabled) {
-  background: rgba(104, 107, 130, 0.08);
-  color: #101114;
+  background: var(--warm-gray-100);
+  color: var(--notion-ink);
 }
 
 /* Danger */
@@ -140,7 +159,7 @@ button {
   gap: 0.5rem;
   min-height: 2.5rem;
   padding: 0.65rem 1rem;
-  border-radius: 12px;
+  border-radius: 4px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -165,7 +184,7 @@ button {
 .primary-btn--sm {
   min-height: 2rem;
   padding: 0.4rem 0.75rem;
-  border-radius: 12px;
+  border-radius: 4px;
   font-size: 0.875rem;
 }
 
@@ -176,22 +195,22 @@ button {
 .ui-button--lg {
   min-height: 3rem;
   padding: 0.8rem 1.1rem;
-  border-radius: 16px;
+  border-radius: 4px;
   font-size: 1rem;
 }
 
-/* ── Icon Buttons ────────────────────────────────────────── */
+/* Icon Buttons */
 .ui-icon-button,
 .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid var(--border-gray);
-  border-radius: 12px;
-  color: #101114;
-  background: #ffffff;
-  box-shadow: rgba(0, 0, 0, 0.03) 0px 4px 24px;
+  border: var(--notion-border);
+  border-radius: 6px;
+  color: var(--notion-ink);
+  background: var(--warm-surface);
+  box-shadow: none;
   transition:
     background-color 0.16s ease,
     border-color 0.16s ease,
@@ -202,9 +221,10 @@ button {
 
 .ui-icon-button:hover:not(:disabled),
 .icon-btn:hover:not(:disabled) {
-  border-color: #5741d8;
-  color: #5741d8;
-  box-shadow: rgba(0, 0, 0, 0.03) 0px 4px 24px;
+  border-color: var(--notion-border-hover);
+  color: var(--notion-blue);
+  background: var(--warm-gray-100);
+  box-shadow: none;
 }
 
 .ui-icon-button:disabled,
@@ -215,19 +235,19 @@ button {
 
 /* Icon button variants */
 .ui-icon-button--default {
-  color: #101114;
-  background: #ffffff;
-  border-color: var(--border-gray);
+  color: var(--notion-ink);
+  background: var(--warm-surface);
+  border-color: rgba(0, 0, 0, 0.1);
 }
 
 .ui-icon-button--primary {
   color: #ffffff;
-  background: #7132f5;
-  border-color: #7132f5;
+  background: var(--notion-blue);
+  border-color: var(--notion-blue);
 }
 
 .ui-icon-button--primary:hover:not(:disabled) {
-  background: #5b1ecf;
+  background: var(--notion-blue-active);
 }
 
 .ui-icon-button--danger {
@@ -237,7 +257,7 @@ button {
 }
 
 .ui-icon-button--ghost {
-  color: #686b82;
+  color: var(--warm-gray-500);
   background: transparent;
   border-color: transparent;
   box-shadow: none;
@@ -259,16 +279,16 @@ button {
   height: 3rem;
 }
 
-/* ── Form Fields ─────────────────────────────────────────── */
+/* Form Fields */
 .ui-field,
 .field-input {
   width: 100%;
   min-width: 0;
   padding: 0.75rem 1rem;
-  border: 1px solid var(--border-gray);
-  border-radius: 12px;
-  color: #101114;
-  background: #ffffff;
+  border: var(--notion-border);
+  border-radius: 4px;
+  color: var(--notion-ink);
+  background: var(--warm-surface);
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease;
@@ -276,15 +296,15 @@ button {
 
 .ui-field::placeholder,
 .field-input::placeholder {
-  color: #9497a9;
+  color: var(--warm-gray-300);
 }
 
 .ui-field:focus,
 .field-input:focus {
   outline: none;
-  border-color: #7132f5;
-  box-shadow: 0 0 0 1px #7132f5;
-  background: #ffffff;
+  border-color: var(--notion-blue);
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.16);
+  background: var(--warm-surface);
 }
 
 .ui-field--textarea {
@@ -292,16 +312,16 @@ button {
   min-height: 7.5rem;
 }
 
-/* ── Selects ─────────────────────────────────────────────── */
+/* Selects */
 .ui-select {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--border-gray);
-  border-radius: 12px;
+  border: var(--notion-border);
+  border-radius: 4px;
   padding: 0.75rem 2.5rem 0.75rem 1rem;
-  color: #101114;
-  background-color: #ffffff;
-  /* Replace native arrow with custom purple chevron */
+  color: var(--notion-ink);
+  background-color: var(--warm-surface);
+  /* Replace native arrow with custom chevron */
   appearance: none;
   -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23686b82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
@@ -317,13 +337,13 @@ button {
 }
 
 .ui-select:hover:not(:disabled) {
-  border-color: #5741d8;
+  border-color: var(--notion-border-hover);
 }
 
 .ui-select:focus {
   outline: none;
-  border-color: #7132f5;
-  box-shadow: 0 0 0 1px #7132f5;
+  border-color: var(--notion-blue);
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.16);
 }
 
 .ui-select:disabled {
@@ -345,16 +365,21 @@ button {
   white-space: nowrap;
 }
 
-/* ── Cards / Panels ─────────────────────────────────────── */
+/* Cards / Panels */
 .glass-panel {
-  border: 1px solid var(--border-gray);
-  background: #ffffff;
-  box-shadow: rgba(0, 0, 0, 0.03) 0px 4px 24px;
+  border: var(--notion-border);
+  background: var(--panel);
+  box-shadow: var(--notion-shadow-card);
 }
 
-/* ── Scrollbars ──────────────────────────────────────────── */
+input[type="range"],
+input[type="checkbox"] {
+  accent-color: var(--notion-blue);
+}
+
+/* Scrollbars */
 .thin-scrollbar {
-  scrollbar-color: rgba(104, 107, 130, 0.28) transparent;
+  scrollbar-color: rgba(97, 93, 89, 0.32) transparent;
   scrollbar-width: thin;
 }
 
@@ -364,6 +389,6 @@ button {
 }
 
 .thin-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(104, 107, 130, 0.24);
+  background: rgba(97, 93, 89, 0.28);
   border-radius: 999px;
 }

@@ -8,3 +8,9 @@ samimage-runtime-check.png
 .worktrees/
 .bitfun/
 /.bitfun/search/flashgrep-index/
+.claude/
+.vscode/
+.omx/
+docs/
+AGENTS.md
+CLAUDE.md

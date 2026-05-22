@@ -19,7 +19,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "tauri": "powershell -ExecutionPolicy Bypass -File ./scripts/run-tauri.ps1",
-    "build:exe": "npm.cmd run tauri -- build --no-bundle",
+    "build:exe": "powershell -ExecutionPolicy Bypass -File ./scripts/build-exe-single.ps1",
     "build:msi": "powershell -ExecutionPolicy Bypass -File ./scripts/build-msi-local.ps1",
     "build:msi:tauri": "npm.cmd run tauri -- build --bundles msi",
     "build:nsis": "npm.cmd run tauri -- build --bundles nsis",

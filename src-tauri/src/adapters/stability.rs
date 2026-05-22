@@ -16,12 +16,4 @@ impl ImageAdapter for StabilityAdapter {
             supports_reverse_prompt: false,
         }
     }
-
-    fn preset_models(&self) -> Vec<String> {
-        vec![
-            "stable-image-core".to_string(),
-            "stable-image-ultra".to_string(),
-            "sd3.5-large".to_string(),
-        ]
-    }
 }

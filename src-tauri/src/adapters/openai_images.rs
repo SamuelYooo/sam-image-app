@@ -16,8 +16,4 @@ impl ImageAdapter for OpenAiImagesAdapter {
             supports_reverse_prompt: false,
         }
     }
-
-    fn preset_models(&self) -> Vec<String> {
-        vec!["gpt-image-1".to_string(), "gpt-image-2".to_string()]
-    }
 }

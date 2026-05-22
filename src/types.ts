@@ -50,7 +50,7 @@ export interface ModelListRequest {
 
 export interface ModelListResult {
   models: string[];
-  source: 'remote' | 'preset';
+  source: 'remote';
   message: string;
 }
 
