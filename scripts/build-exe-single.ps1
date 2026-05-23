@@ -7,9 +7,18 @@ $tauriConfig = Get-Content $tauriConfigPath -Raw | ConvertFrom-Json
 
 $productName = $tauriConfig.productName
 $version = $tauriConfig.version
+$packageSuffix = $env:PACKAGE_SUFFIX
+if ([string]::IsNullOrWhiteSpace($packageSuffix)) {
+  $packageSuffix = ''
+} else {
+  $packageSuffix = $packageSuffix.Trim()
+  if (-not $packageSuffix.StartsWith('-')) {
+    $packageSuffix = "-$packageSuffix"
+  }
+}
 $releaseDir = Join-Path $projectRoot "src-tauri\target\release"
 $sourceExePath = Join-Path $releaseDir "${productName}.exe"
-$archiveExePath = Join-Path $releaseDir "${productName}-single-${version}.exe"
+$archiveExePath = Join-Path $releaseDir "${productName}-single-${version}${packageSuffix}.exe"
 
 Write-Host "Running standalone EXE build pipeline..."
 cmd.exe /c "npm.cmd run tauri -- build --no-bundle"

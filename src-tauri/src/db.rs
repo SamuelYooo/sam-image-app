@@ -281,6 +281,7 @@ pub fn get_profile(conn: &Connection, id: &str) -> Result<ModelProfile> {
 }
 
 pub fn delete_profile(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute("DELETE FROM artifacts WHERE profile_id = ?1", [id])?;
     conn.execute("DELETE FROM profiles WHERE id = ?1", [id])?;
     Ok(())
 }
@@ -1004,7 +1005,7 @@ fn default_prompt_templates() -> Vec<PromptTemplate> {
 #[cfg(test)]
 mod tests {
     use super::{
-        delete_prompt_template, list_artifacts, list_prompt_templates, migrate, upsert_prompt_template,
+        delete_profile, delete_prompt_template, list_artifacts, list_prompt_templates, migrate, upsert_prompt_template,
     };
     use crate::models::PromptTemplate;
     use rusqlite::Connection;
@@ -1075,6 +1076,33 @@ mod tests {
         let artifacts = list_artifacts(&conn).unwrap();
         assert_eq!(artifacts.len(), 1);
         assert!(artifacts[0].filter_adjustments.is_none());
+    }
+
+    #[test]
+    fn delete_profile_removes_related_artifacts_first() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        migrate(&conn).unwrap();
+        conn.execute(
+            r#"
+            INSERT INTO profiles (id, name, adapter, base_url, api_key, model, chat_endpoint, image_endpoint, timeout_sec, reference_image_limit)
+            VALUES ('profile-1', '配置 1', 'openai_images', 'https://example.com', 'key', 'model', '/v1/chat/completions', '/v1/images/generations', 60, 4)
+            "#,
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            r#"
+            INSERT INTO artifacts (id, profile_id, mode, prompt, image_url)
+            VALUES ('artifact-1', 'profile-1', 'txt2img', 'prompt', 'data:image/png;base64,AAAA')
+            "#,
+            [],
+        )
+        .unwrap();
+
+        delete_profile(&conn, "profile-1").unwrap();
+
+        assert!(list_artifacts(&conn).unwrap().is_empty());
     }
 
     #[test]

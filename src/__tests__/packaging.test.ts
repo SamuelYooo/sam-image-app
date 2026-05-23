@@ -16,7 +16,7 @@ describe('packaging contracts', () => {
     expect(packageJson.scripts['build:exe']).toBe(
       'powershell -ExecutionPolicy Bypass -File ./scripts/build-exe-single.ps1',
     );
-    expect(scriptSource).toContain('${productName}-single-${version}.exe');
+    expect(scriptSource).toContain('${productName}-single-${version}${packageSuffix}.exe');
     expect(scriptSource).toContain('npm.cmd run tauri -- build --no-bundle');
     expect(scriptSource).toContain('src-tauri\\target\\release');
   });

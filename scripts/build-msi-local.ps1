@@ -6,7 +6,17 @@ $tauriConfigPath = Join-Path $projectRoot "src-tauri\tauri.conf.json"
 $tauriConfig = Get-Content $tauriConfigPath -Raw | ConvertFrom-Json
 $productName = $tauriConfig.productName
 $version = $tauriConfig.version
+$packageSuffix = $env:PACKAGE_SUFFIX
+if ([string]::IsNullOrWhiteSpace($packageSuffix)) {
+  $packageSuffix = ''
+} else {
+  $packageSuffix = $packageSuffix.Trim()
+  if (-not $packageSuffix.StartsWith('-')) {
+    $packageSuffix = "-$packageSuffix"
+  }
+}
 $msiFileName = "${productName}_${version}_x64_en-US.msi"
+$fixedMsiFileName = "${productName}_${version}${packageSuffix}_x64_en-US.msi"
 
 $buildCommand = "npm.cmd run tauri -- build --bundles msi"
 $wixObjectDir = Join-Path $projectRoot "src-tauri\target\release\wix\x64"
@@ -15,12 +25,20 @@ $localePath = Join-Path $wixObjectDir "locale.wxl"
 $wixLightPath = Join-Path $projectRoot "src-tauri\target\.tauri\WixTools314\light.exe"
 $msiOutputDir = Join-Path $projectRoot "src-tauri\target\release\bundle\msi"
 $msiOutputPath = Join-Path $msiOutputDir $msiFileName
+$fixedMsiOutputPath = Join-Path $msiOutputDir $fixedMsiFileName
 
 Write-Host "Running Tauri MSI build pipeline..."
 cmd.exe /c $buildCommand
 $tauriExitCode = $LASTEXITCODE
 
 if ($tauriExitCode -eq 0) {
+  if ($packageSuffix -ne '' -and (Test-Path $msiOutputPath)) {
+    if (Test-Path $fixedMsiOutputPath) {
+      Remove-Item -LiteralPath $fixedMsiOutputPath -Force
+    }
+    Move-Item -LiteralPath $msiOutputPath -Destination $fixedMsiOutputPath
+    Write-Host "MSI created successfully: $fixedMsiOutputPath"
+  }
   exit 0
 }
 
@@ -56,4 +74,12 @@ if (-not (Test-Path $msiOutputPath)) {
   exit 1
 }
 
-Write-Host "MSI created successfully: $msiOutputPath"
+if ($packageSuffix -ne '') {
+  if (Test-Path $fixedMsiOutputPath) {
+    Remove-Item -LiteralPath $fixedMsiOutputPath -Force
+  }
+  Move-Item -LiteralPath $msiOutputPath -Destination $fixedMsiOutputPath
+  Write-Host "MSI created successfully: $fixedMsiOutputPath"
+} else {
+  Write-Host "MSI created successfully: $msiOutputPath"
+}
