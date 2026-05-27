@@ -1,4 +1,5 @@
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 
@@ -8,6 +9,8 @@ const tauriConfigPath = path.join(rootDir, 'src-tauri', 'tauri.conf.json')
 const cargoTomlPath = path.join(rootDir, 'src-tauri', 'Cargo.toml')
 const releaseDir = path.join(rootDir, 'release')
 const targetReleaseDir = path.join(rootDir, 'src-tauri', 'target', 'release')
+const cargoBin = path.join(os.homedir(), '.cargo', 'bin')
+const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path') || 'PATH'
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'))
@@ -19,10 +22,24 @@ function readCargoPackageName() {
   return match?.[1] || ''
 }
 
+function envWithCargo() {
+  const env = { ...process.env }
+  const currentPath = env[pathKey] || ''
+  const pathParts = currentPath.split(path.delimiter).filter(Boolean)
+  const hasCargoBin = pathParts.some((part) => part.toLowerCase() === cargoBin.toLowerCase())
+
+  if (fs.existsSync(path.join(cargoBin, process.platform === 'win32' ? 'cargo.exe' : 'cargo')) && !hasCargoBin) {
+    env[pathKey] = [cargoBin, currentPath].filter(Boolean).join(path.delimiter)
+  }
+
+  return env
+}
+
 function runBuild() {
   const tauriCli = path.join(rootDir, 'node_modules', '@tauri-apps', 'cli', 'tauri.js')
   const result = spawnSync(process.execPath, [tauriCli, 'build', '--no-bundle', '--ci'], {
     cwd: rootDir,
+    env: envWithCargo(),
     stdio: 'inherit',
     shell: false,
   })
@@ -60,19 +77,19 @@ function findBuiltExecutable(productName, cargoPackageName) {
   return candidates[0]
 }
 
-function archiveSingleExe() {
+function archiveVersionedExe() {
   const packageJson = readJson(packageJsonPath)
   const tauriConfig = readJson(tauriConfigPath)
   const version = tauriConfig.version || packageJson.version
   const productName = tauriConfig.productName || 'SamImage'
   const cargoPackageName = readCargoPackageName()
   const sourceExe = findBuiltExecutable(productName, cargoPackageName)
-  const targetExe = path.join(releaseDir, `${productName}-single-${version}.exe`)
+  const targetExe = path.join(releaseDir, `${productName}-${version}.exe`)
 
   fs.mkdirSync(releaseDir, { recursive: true })
   fs.copyFileSync(sourceExe, targetExe)
-  console.log(`Single executable archived: ${path.relative(rootDir, targetExe)}`)
+  console.log(`Versioned executable archived: ${path.relative(rootDir, targetExe)}`)
 }
 
 runBuild()
-archiveSingleExe()
+archiveVersionedExe()

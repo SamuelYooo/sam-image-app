@@ -114,7 +114,23 @@ pnpm build:exe
 产物会复制到：
 
 ```text
-release/SamImage-single-2.0.0.exe
+release/SamImage-2.0.0.exe
+```
+
+macOS 和 Linux 需要在对应系统本机执行：
+
+```bash
+pnpm build:mac
+pnpm build:linux
+```
+
+产物会复制到：
+
+```text
+release/SamImage-2.0.0-mac.dmg
+release/SamImage-2.0.0-linux.AppImage
+release/SamImage-2.0.0-linux.deb
+release/SamImage-2.0.0-linux.rpm
 ```
 
 如果在受限沙箱中遇到 `@tailwindcss/oxide`、`@swc/core` 原生依赖加载失败，或 Cargo 写入 `target` 被拒绝，请在本机普通 PowerShell 终端中执行打包命令。

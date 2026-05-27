@@ -12,9 +12,12 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --build --force",
-    "tauri": "tauri",
+    "tauri": "node scripts/tauri-cli.cjs",
     "bump": "node bump-version.cjs",
     "build:exe": "node scripts/build-single-exe.cjs",
+    "build:win": "node scripts/build-single-exe.cjs",
+    "build:mac": "node scripts/build-platform-package.cjs mac",
+    "build:linux": "node scripts/build-platform-package.cjs linux",
     "check": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
