@@ -19,7 +19,9 @@ import appSource from '../../src/App.vue?raw'
 import mainSource from '../../src/main.ts?raw'
 import rustLibSource from '../../src-tauri/src/lib.rs?raw'
 import modelProfilesApiSource from '../../src-tauri/src/api/model_profiles.rs?raw'
+import promptAssetsApiSource from '../../src-tauri/src/api/prompt_assets.rs?raw'
 import modelProfileRepoSource from '../../src-tauri/src/db/model_profile_repo.rs?raw'
+import promptAssetRepoSource from '../../src-tauri/src/db/prompt_asset_repo.rs?raw'
 import viteConfigSource from '../../vite.config.ts?raw'
 import packageJsonSource from '../../package.json?raw'
 
@@ -417,7 +419,10 @@ describe('workspace design contracts', () => {
     expect(mainCssSource).toMatch(/\.sam-project-card strong\s*\{[^}]*-webkit-line-clamp:\s*2;[^}]*\}/)
     expect(mainCssSource).toMatch(/\.sam-task-row-output span\.error\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;[^}]*\}/)
     expect(mainCssSource).toMatch(
-      /@media \(max-width:\s*860px\)\s*\{[\s\S]*\.sam-assets-toolbar,\s*\.sam-prompts-toolbar\s*\{[^}]*grid-template-columns:\s*minmax\(184px,\s*1\.2fr\) repeat\(2,\s*minmax\(116px,\s*0\.8fr\)\) minmax\(76px,\s*auto\);[^}]*\}/
+      /@media \(max-width:\s*860px\)\s*\{[\s\S]*\.sam-assets-toolbar\s*\{[^}]*grid-template-columns:\s*minmax\(184px,\s*1\.2fr\) repeat\(2,\s*minmax\(116px,\s*0\.8fr\)\) minmax\(76px,\s*auto\);[^}]*\}/
+    )
+    expect(mainCssSource).toMatch(
+      /@media \(max-width:\s*860px\)\s*\{[\s\S]*\.sam-prompts-toolbar\s*\{[^}]*grid-template-columns:\s*minmax\(184px,\s*1\.3fr\) repeat\(2,\s*minmax\(104px,\s*0\.8fr\)\) repeat\(2,\s*minmax\(82px,\s*auto\)\);[^}]*\}/
     )
     expect(mainCssSource).toMatch(
       /@media \(max-width:\s*860px\)\s*\{[\s\S]*\.sam-assets-hero,\s*\.sam-prompts-hero,\s*\.sam-projects-hero\s*\{[^}]*align-items:\s*center;[^}]*flex-direction:\s*row;[^}]*\}/
@@ -714,7 +719,13 @@ describe('workspace design contracts', () => {
     expect(promptMarketStoreSource).toContain('hasTauriRuntime')
     expect(promptMarketStoreSource).toContain('importPromptJson')
     expect(promptMarketStoreSource).toContain('importPromptJsonText')
+    expect(promptMarketStoreSource).toContain('favoriteOnly')
+    expect(promptMarketStoreSource).toContain('setFavoriteOnly')
+    expect(promptMarketStoreSource).toContain('togglePromptFavorite')
     expect(promptMarketStoreSource).toContain("invoke<PromptAsset[]>('list_prompt_assets')")
+    expect(promptMarketStoreSource).toContain("invoke<PromptAsset[]>('toggle_prompt_favorite'")
+    expect(promptsMarketPageSource).toContain('仅看收藏')
+    expect(promptsMarketPageSource).toContain("promptMarketStore.togglePromptFavorite(item.id)")
     expect(workbenchSource).toContain('loadPromptAssets')
     expect(workbenchSource).toContain('导入 JSON')
     expect(workbenchSource).toContain('下载模板')
@@ -827,5 +838,12 @@ describe('workspace design contracts', () => {
     expect(defaultCreativeAssetsSource).toContain('ICON 母图')
     expect(defaultCreativeAssetsSource).toContain('分镜帧示例')
     expect(mainCssSource).toMatch(/\.sam-asset-actions button,[\s\S]*min-width:\s*52px;[\s\S]*white-space:\s*nowrap;[\s\S]*\}/)
+  })
+
+  it('registers prompt favorite persistence on the Rust side', () => {
+    expect(promptAssetsApiSource).toContain('pub async fn toggle_prompt_favorite')
+    expect(promptAssetRepoSource).toContain('pub async fn toggle_prompt_favorite')
+    expect(promptAssetRepoSource).toContain('SET favorite = CASE favorite WHEN 1 THEN 0 ELSE 1')
+    expect(rustLibSource).toContain('toggle_prompt_favorite')
   })
 })

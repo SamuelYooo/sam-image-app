@@ -17,6 +17,7 @@ const workspaceStore = useWorkspaceStore()
 const {
   sourceFilter,
   useCaseFilter,
+  favoriteOnly,
   searchQuery,
   filteredPromptAssets,
   isLoadingPrompts,
@@ -159,6 +160,13 @@ function insertWorkspacePrompt(item: PromptAsset) {
       <button type="button" :disabled="isLoadingPrompts" @click="promptMarketStore.loadPromptAssets">
         {{ isLoadingPrompts ? '刷新中' : '刷新' }}
       </button>
+      <button
+        type="button"
+        :class="{ active: favoriteOnly }"
+        @click="promptMarketStore.setFavoriteOnly(!favoriteOnly)"
+      >
+        仅看收藏
+      </button>
     </section>
 
     <section class="sam-prompts-syncbar">
@@ -186,6 +194,14 @@ function insertWorkspacePrompt(item: PromptAsset) {
         <footer>
           <span>使用 {{ item.usageCount }}</span>
           <div class="sam-prompt-card-actions">
+            <button
+              type="button"
+              :title="item.favorite ? '取消收藏' : '收藏'"
+              :aria-label="item.favorite ? '取消收藏' : '收藏'"
+              @click="promptMarketStore.togglePromptFavorite(item.id)"
+            >
+              {{ item.favorite ? '已收藏' : '收藏' }}
+            </button>
             <button type="button" title="插入到工作台" aria-label="插入到工作台" @click="insertWorkspacePrompt(item)">
               插入
             </button>

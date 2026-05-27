@@ -141,6 +141,22 @@ pub async fn increment_prompt_usage(pool: &SqlitePool, id: &str) -> AppResult<Ve
     list_prompt_assets(pool).await
 }
 
+pub async fn toggle_prompt_favorite(pool: &SqlitePool, id: &str) -> AppResult<Vec<PromptAsset>> {
+    sqlx::query(
+        r#"
+        UPDATE prompt_assets
+        SET favorite = CASE favorite WHEN 1 THEN 0 ELSE 1 END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        "#,
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+
+    list_prompt_assets(pool).await
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -187,11 +203,15 @@ mod tests {
         let used = increment_prompt_usage(&pool, "prompt-test")
             .await
             .expect("usage should increment");
+        let favorited = toggle_prompt_favorite(&pool, "prompt-test")
+            .await
+            .expect("favorite should toggle");
 
         assert_eq!(imported.len(), 1);
         assert_eq!(imported[0].source, "builtin");
         assert_eq!(imported[0].categories, vec!["产品"]);
         assert_eq!(used[0].usage_count, 1);
+        assert!(favorited[0].favorite);
 
         pool.close().await;
         drop(pool);

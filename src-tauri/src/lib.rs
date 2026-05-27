@@ -23,6 +23,7 @@ use crate::{
     },
     api::prompt_assets::{
         import_prompt_assets, increment_prompt_usage, list_prompt_assets, sync_prompt_source,
+        toggle_prompt_favorite,
     },
     api::prompt_polish::polish_prompt,
     api::storyboard::{
@@ -68,6 +69,7 @@ pub fn run() {
             list_prompt_assets,
             import_prompt_assets,
             increment_prompt_usage,
+            toggle_prompt_favorite,
             sync_prompt_source,
             create_storyboard_draft,
             list_storyboard_projects,

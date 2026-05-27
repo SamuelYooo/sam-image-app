@@ -13,6 +13,7 @@ dist-ssr
 *.local
 release/
 target-codex-release*/
+_tmp_*
 
 # Editor directories and files
 .idea

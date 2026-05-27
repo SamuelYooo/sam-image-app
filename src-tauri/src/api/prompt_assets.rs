@@ -68,6 +68,14 @@ pub async fn increment_prompt_usage(
 }
 
 #[tauri::command]
+pub async fn toggle_prompt_favorite(
+    state: State<'_, AppState>,
+    id: String,
+) -> AppResult<Vec<PromptAsset>> {
+    prompt_asset_repo::toggle_prompt_favorite(&state.db, &id).await
+}
+
+#[tauri::command]
 pub async fn sync_prompt_source(source: String) -> AppResult<PromptSourcePayload> {
     let url = prompt_source_url(&source)?;
     let content = reqwest::Client::new()

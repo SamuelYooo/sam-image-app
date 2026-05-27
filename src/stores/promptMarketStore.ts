@@ -77,6 +77,7 @@ export const usePromptMarketStore = defineStore('promptMarket', {
     promptAssets: [...promptMarketSnapshot] as PromptAsset[],
     sourceFilter: 'all' as PromptSourceFilter,
     useCaseFilter: 'all' as PromptUseCaseFilter,
+    favoriteOnly: false,
     searchQuery: '',
     isLoadingPrompts: false,
     isSyncingPrompts: false,
@@ -90,6 +91,7 @@ export const usePromptMarketStore = defineStore('promptMarket', {
       return state.promptAssets.filter((asset) => {
         const matchesSource = state.sourceFilter === 'all' || asset.source === state.sourceFilter
         const matchesUseCase = state.useCaseFilter === 'all' || asset.useCases.includes(state.useCaseFilter)
+        const matchesFavorite = !state.favoriteOnly || asset.favorite
         const searchable = [
           asset.title,
           asset.content,
@@ -103,7 +105,7 @@ export const usePromptMarketStore = defineStore('promptMarket', {
           .join(' ')
         const matchesQuery = !query || searchable.includes(query)
 
-        return matchesSource && matchesUseCase && matchesQuery
+        return matchesSource && matchesUseCase && matchesFavorite && matchesQuery
       })
     },
   },
@@ -141,6 +143,10 @@ export const usePromptMarketStore = defineStore('promptMarket', {
 
     setUseCaseFilter(useCase: PromptUseCaseFilter) {
       this.useCaseFilter = useCase
+    },
+
+    setFavoriteOnly(enabled: boolean) {
+      this.favoriteOnly = enabled
     },
 
     setSearchQuery(query: string) {
@@ -216,6 +222,25 @@ export const usePromptMarketStore = defineStore('promptMarket', {
         this.promptAssets = await invoke<PromptAsset[]>('increment_prompt_usage', { id })
       } catch {
         // Browser-only fallback keeps offline prompt usage responsive without Tauri IPC.
+      }
+    },
+
+    async togglePromptFavorite(id: string) {
+      const prompt = this.promptAssets.find((item) => item.id === id)
+      const previousFavorite = prompt?.favorite
+      if (prompt) {
+        prompt.favorite = !prompt.favorite
+      }
+      if (!hasTauriRuntime()) {
+        return
+      }
+      try {
+        this.promptAssets = await invoke<PromptAsset[]>('toggle_prompt_favorite', { id })
+      } catch (error) {
+        if (prompt && previousFavorite !== undefined) {
+          prompt.favorite = previousFavorite
+        }
+        this.lastImportError = formatError(error)
       }
     },
   },

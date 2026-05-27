@@ -2983,13 +2983,20 @@ textarea {
 .sam-assets-toolbar,
 .sam-prompts-toolbar {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) 180px 180px auto;
   gap: 10px;
   margin-top: 14px;
   border: 1px solid var(--sam-border);
   border-radius: 10px;
   background: rgba(255, 253, 249, 0.9);
   padding: 12px;
+}
+
+.sam-assets-toolbar {
+  grid-template-columns: minmax(240px, 1fr) 180px 180px auto;
+}
+
+.sam-prompts-toolbar {
+  grid-template-columns: minmax(240px, 1fr) 160px 160px auto auto;
 }
 
 .sam-assets-toolbar input,
@@ -3006,7 +3013,8 @@ textarea {
   font-size: 12px;
 }
 
-.sam-assets-toolbar button.active {
+.sam-assets-toolbar button.active,
+.sam-prompts-toolbar button.active {
   border-color: var(--sam-ink);
   background: var(--sam-ink);
   color: #fffdf9;
@@ -5329,9 +5337,16 @@ textarea {
 
   .sam-assets-toolbar,
   .sam-prompts-toolbar {
-    grid-template-columns: minmax(184px, 1.2fr) repeat(2, minmax(116px, 0.8fr)) minmax(76px, auto);
     gap: 8px;
     padding: 8px 10px;
+  }
+
+  .sam-assets-toolbar {
+    grid-template-columns: minmax(184px, 1.2fr) repeat(2, minmax(116px, 0.8fr)) minmax(76px, auto);
+  }
+
+  .sam-prompts-toolbar {
+    grid-template-columns: minmax(184px, 1.3fr) repeat(2, minmax(104px, 0.8fr)) repeat(2, minmax(82px, auto));
   }
 
   .sam-assets-toolbar input,
