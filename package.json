@@ -1,0 +1,73 @@
+{
+  "name": "tauri-app",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm vite:dev",
+    "dev:with-devtools": "concurrently --kill-others \"cross-env VITE_ENABLE_VUE_DEVTOOLS=true pnpm vite:dev\" \"pnpm devtools\"",
+    "vite:dev": "cross-env DEBUG=0 vite",
+    "devtools": "vue-devtools",
+    "test": "vitest",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --build --force",
+    "tauri": "tauri",
+    "bump": "node bump-version.cjs",
+    "build:exe": "node scripts/build-single-exe.cjs",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.10.1",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "@vue/devtools": "^8.1.1",
+    "animejs": "^4.4.1",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.30"
+  },
+  "devDependencies": {
+    "@egoist/tailwindcss-icons": "^1.9.2",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify/types": "^2.0.0",
+    "@pinia/testing": "^1.0.3",
+    "@tailwindcss/vite": "^4.2.2",
+    "@tauri-apps/cli": "2.10.1",
+    "@tsconfig/node22": "^22.0.5",
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "^25.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/test-utils": "^2.4.6",
+    "@vue/tsconfig": "^0.9.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "esbuild": "^0.27.2",
+    "eslint": "^10.1.0",
+    "eslint-plugin-security": "^4.0.0",
+    "eslint-plugin-vue": "^10.8.0",
+    "jiti": "^2.6.1",
+    "lodash-es": "^4.17.23",
+    "prettier": "^3.8.1",
+    "rollup": "^4.57.1",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2",
+    "unplugin-auto-import": "^21.0.0",
+    "unplugin-vue-components": "^32.0.0",
+    "vite": "^8.0.2",
+    "vite-plugin-node-polyfills": "^0.26.0",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-vue-devtools": "^8.1.1",
+    "vitest": "^4.1.1",
+    "vue-tsc": "^3.2.6"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@swc/core",
+      "@tailwindcss/oxide",
+      "electron",
+      "esbuild",
+      "vue-demi"
+    ]
+  }
+}

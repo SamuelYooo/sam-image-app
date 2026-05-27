@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "tests/**"
+      - "pnpm-lock.yaml"
+      - "src-tauri/Cargo.lock"
+      - ".github/workflows/test-build.yml"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-tauri:
+    permissions:
+      contents: write
+
+    runs-on: "ubuntu-24.04"
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install pnpm + deps
+        uses: pnpm/action-setup@v6.0.8
+        with:
+          version: 10
+          run_install: true
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Build Tauri
+        run: pnpm tauri build

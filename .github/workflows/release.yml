@@ -1,0 +1,68 @@
+name: "publish"
+
+on:
+  push:
+    tags:
+      - v*.*.*
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin"
+          # Uncomment for Intel builds
+          #   - platform: 'macos-latest' # for Intel based macs.
+          #     args: '--target x86_64-apple-darwin'
+          - platform: "ubuntu-24.04"
+            args: ""
+          - platform: "windows-latest"
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install pnpm + deps
+        uses: pnpm/action-setup@v6.0.8
+        with:
+          version: 10
+          run_install: true
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: tauri-apps/tauri-action@action-v0.5.20
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
+          releaseName: "v__VERSION__"
+          releaseBody: "Note: macOS builds are not signed so in order to run the app, after moving the app to Applications folder you need to run xattr -c /Applications/tauri-app.app in the terminal. (See tauri-apps/tauri-action#919) See [CHANGES.md](https://github.com/Uninen/tauri-vue-template/blob/main/CHANGES.md) for a complete list of changes."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
