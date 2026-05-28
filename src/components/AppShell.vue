@@ -1,0 +1,104 @@
+<script setup lang="ts">
+import {
+  CircleHelp,
+  Clock3,
+  Home,
+  Images,
+  Layers3,
+  Plus,
+  Settings,
+  Sparkles,
+  Wrench,
+} from 'lucide-vue-next'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useAppStore } from '@/stores/app'
+
+const route = useRoute()
+const store = useAppStore()
+
+const navItems = [
+  { to: '/', label: '首页', icon: Home },
+  { to: '/workspace', label: '工作台', icon: Layers3 },
+  { to: '/tools', label: '工具库', icon: Wrench },
+  { to: '/history', label: '历史', icon: Clock3, badge: computed(() => store.tasks.length) },
+  { to: '/settings', label: '设置', icon: Settings },
+  { to: '/about', label: '关于帮助', icon: CircleHelp },
+]
+
+const imageStatus = computed(() => store.primaryImageModel?.status ?? 'untested')
+const textStatus = computed(() => store.textModels.some((model) => model.status === 'connected') ? 'connected' : 'untested')
+</script>
+
+<template>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <RouterLink class="brand" to="/">
+        <span class="brand-mark">S</span>
+        <span class="brand-name">
+          <strong>SamImage</strong>
+          <span>本地 AI 生图</span>
+        </span>
+      </RouterLink>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">导航</div>
+        <nav class="sidebar-nav">
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            class="nav-link"
+            :class="{ active: route.path === item.to }"
+            :to="item.to"
+          >
+            <component :is="item.icon" :size="16" />
+            {{ item.label }}
+            <span v-if="item.badge?.value" class="badge">{{ item.badge.value }}</span>
+          </RouterLink>
+        </nav>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="model-status">
+          <div class="model-status-row">
+            <strong>图像模型</strong>
+            <span class="status-pill">
+              <span class="status-dot" :class="{ warn: imageStatus !== 'connected' }" />
+              {{ imageStatus === 'connected' ? '已连接' : '待配置' }}
+            </span>
+          </div>
+          <div class="model-status-row">
+            <strong>文本模型</strong>
+            <span class="status-pill">
+              <span class="status-dot" :class="{ warn: textStatus !== 'connected' }" />
+              {{ textStatus === 'connected' ? '已连接' : '未配置' }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="app-main">
+      <div class="app-topbar">
+        <div class="breadcrumb">
+          <Images :size="16" />
+          <strong>SamImage 3.0</strong>
+          <span>/</span>
+          <span>{{ route.name }}</span>
+        </div>
+        <div class="topbar-actions">
+          <RouterLink class="btn-soft" to="/tools">
+            <Sparkles :size="16" />
+            工具库
+          </RouterLink>
+          <RouterLink class="btn-primary" to="/workspace">
+            <Plus :size="16" />
+            开始创作
+          </RouterLink>
+        </div>
+      </div>
+
+      <slot />
+    </main>
+  </div>
+</template>

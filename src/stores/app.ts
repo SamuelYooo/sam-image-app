@@ -1,0 +1,237 @@
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
+import { createLocalGeneration } from '@/domain/generation'
+import { mergePromptItems, normalizePromptImport } from '@/domain/promptImport'
+import {
+  defaultCoverPresets,
+  defaultModels,
+  defaultPrompts,
+  modeAliases,
+  modeLabels,
+} from '@/data/catalog'
+import { browserStorage } from '@/services/storage'
+import { invokeOptional, isTauriRuntime } from '@/services/tauri'
+import type {
+  AppSettings,
+  CoverPreset,
+  GeneratedAsset,
+  GenerationInput,
+  GenerationMode,
+  GenerationTask,
+  ModelProfile,
+  PromptItem,
+} from '@/types/domain'
+import { createId } from '@/domain/ids'
+
+const STORAGE_KEY = 'samimage.v3.state'
+
+interface PersistedState {
+  models: ModelProfile[]
+  prompts: PromptItem[]
+  tasks: GenerationTask[]
+  coverPresets: CoverPreset[]
+  settings: AppSettings
+}
+
+const defaultState: PersistedState = {
+  models: defaultModels,
+  prompts: defaultPrompts,
+  tasks: [],
+  coverPresets: defaultCoverPresets,
+  settings: {
+    defaultOutputDir: 'D:\\SamImage\\Exports',
+    autoSaveHistory: true,
+    includePromptMetadata: true,
+    theme: 'dark',
+  },
+}
+
+function cloneDefault(): PersistedState {
+  return JSON.parse(JSON.stringify(defaultState)) as PersistedState
+}
+
+export const useAppStore = defineStore('app', () => {
+  const initial = browserStorage.read<PersistedState>(STORAGE_KEY, cloneDefault())
+  const models = ref<ModelProfile[]>(initial.models.length ? initial.models : defaultModels)
+  const prompts = ref<PromptItem[]>(initial.prompts.length ? initial.prompts : defaultPrompts)
+  const tasks = ref<GenerationTask[]>(initial.tasks)
+  const coverPresets = ref<CoverPreset[]>(initial.coverPresets.length ? initial.coverPresets : defaultCoverPresets)
+  const settings = ref<AppSettings>(initial.settings)
+  const toast = ref<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const activePrompt = ref('')
+  const activeMode = ref<GenerationMode>('txt2img')
+
+  const imageModels = computed(() => models.value.filter((model) => model.kind === 'image'))
+  const textModels = computed(() => models.value.filter((model) => model.kind === 'text'))
+  const primaryImageModel = computed(() => imageModels.value.find((model) => model.isPrimary) ?? imageModels.value[0])
+  const recentTasks = computed(() => tasks.value.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8))
+  const allAssets = computed(() => tasks.value.flatMap((task) => task.assets.map((asset) => ({ task, asset }))))
+  const completedAssets = computed(() => allAssets.value.filter(({ task }) => task.status === 'completed'))
+
+  function persist(): void {
+    browserStorage.write(STORAGE_KEY, {
+      models: models.value,
+      prompts: prompts.value,
+      tasks: tasks.value,
+      coverPresets: coverPresets.value,
+      settings: settings.value,
+    })
+  }
+
+  function notify(message: string, type: 'success' | 'error' | 'info' = 'success'): void {
+    toast.value = { message, type }
+    window.setTimeout(() => {
+      if (toast.value?.message === message) toast.value = null
+    }, 2400)
+  }
+
+  function resolveMode(value: string | null | undefined): GenerationMode {
+    if (!value) return 'txt2img'
+    if (value in modeLabels) return value as GenerationMode
+    return modeAliases[value] ?? 'txt2img'
+  }
+
+  function setMode(mode: GenerationMode): void {
+    activeMode.value = mode
+  }
+
+  function setActivePrompt(prompt: string): void {
+    activePrompt.value = prompt
+  }
+
+  async function generate(input: GenerationInput): Promise<GenerationTask> {
+    const commandResult = await invokeOptional<GenerationTask>('create_generation_task', { input })
+    const task = commandResult ?? createLocalGeneration(input)
+    tasks.value.unshift(task)
+    persist()
+    notify(`已生成 ${task.assets.length} 张${modeLabels[task.mode]}结果`)
+    return task
+  }
+
+  function importPrompts(content: string, filename: string): number {
+    const imported = normalizePromptImport(content, filename)
+    const before = prompts.value.length
+    prompts.value = mergePromptItems(prompts.value, imported)
+    persist()
+    const count = prompts.value.length - before
+    notify(count ? `已导入 ${count} 条提示词` : '没有新增提示词', count ? 'success' : 'info')
+    return count
+  }
+
+  function usePrompt(item: PromptItem): void {
+    activePrompt.value = item.prompt
+    notify(`已应用提示词：${item.title}`)
+  }
+
+  function saveModel(profile: ModelProfile): void {
+    const next = profile.id ? profile : { ...profile, id: createId('model') }
+    if (next.isPrimary && next.kind === 'image') {
+      models.value = models.value.map((model) => (model.kind === 'image' ? { ...model, isPrimary: false } : model))
+    }
+    const index = models.value.findIndex((model) => model.id === next.id)
+    if (index >= 0) models.value[index] = next
+    else models.value.push(next)
+    persist()
+    notify('模型配置已保存')
+  }
+
+  async function testModel(id: string): Promise<void> {
+    const model = models.value.find((item) => item.id === id)
+    if (!model) return
+    if (model.provider === 'local-preview') {
+      model.status = 'connected'
+      model.lastCheckedAt = new Date().toISOString()
+      persist()
+      notify('本地预览模型可用')
+      return
+    }
+    const result = await invokeOptional<{ ok: boolean; message: string }>('test_model_profile', { profile: model })
+    model.status = result?.ok ? 'connected' : 'failed'
+    model.lastCheckedAt = new Date().toISOString()
+    persist()
+    notify(result?.message ?? (isTauriRuntime() ? '模型连接检测失败' : '浏览器预览模式无法直连模型 API'), result?.ok ? 'success' : 'error')
+  }
+
+  function removeModel(id: string): void {
+    if (id === 'local-preview') {
+      notify('本地预览模型不能删除', 'error')
+      return
+    }
+    models.value = models.value.filter((model) => model.id !== id)
+    if (!imageModels.value.some((model) => model.isPrimary)) {
+      const first = imageModels.value[0]
+      if (first) first.isPrimary = true
+    }
+    persist()
+    notify('模型已删除')
+  }
+
+  function saveSettings(next: Partial<AppSettings>): void {
+    settings.value = { ...settings.value, ...next }
+    persist()
+    notify('设置已保存')
+  }
+
+  function addCoverPreset(preset: Omit<CoverPreset, 'id' | 'custom'>): void {
+    coverPresets.value.push({ ...preset, id: createId('cover'), custom: true })
+    persist()
+    notify('封面预设已添加')
+  }
+
+  function removeCoverPreset(id: string): void {
+    coverPresets.value = coverPresets.value.filter((preset) => preset.id !== id || !preset.custom)
+    persist()
+    notify('封面预设已删除')
+  }
+
+  function resetDemoData(): void {
+    const fresh = cloneDefault()
+    models.value = fresh.models
+    prompts.value = fresh.prompts
+    coverPresets.value = fresh.coverPresets
+    settings.value = fresh.settings
+    tasks.value = []
+    activePrompt.value = ''
+    persist()
+    notify('已恢复初始数据')
+  }
+
+  function downloadAsset(asset: GeneratedAsset): void {
+    const link = document.createElement('a')
+    link.href = asset.dataUrl
+    link.download = `${asset.title}.${asset.format}`
+    link.click()
+    notify('已导出到浏览器下载目录')
+  }
+
+  return {
+    models,
+    prompts,
+    tasks,
+    coverPresets,
+    settings,
+    toast,
+    activePrompt,
+    activeMode,
+    imageModels,
+    textModels,
+    primaryImageModel,
+    recentTasks,
+    completedAssets,
+    resolveMode,
+    setMode,
+    setActivePrompt,
+    generate,
+    importPrompts,
+    usePrompt,
+    saveModel,
+    testModel,
+    removeModel,
+    saveSettings,
+    addCoverPreset,
+    removeCoverPreset,
+    resetDemoData,
+    downloadAsset,
+    notify,
+  }
+})

@@ -2,3 +2,11 @@ design/
 docs/
 .omx/
 .codegraph/
+node_modules/
+dist/
+.cargo-target*/
+src-tauri/target*/
+*.log
+ui-*.png
+test-results/
+playwright-report/
