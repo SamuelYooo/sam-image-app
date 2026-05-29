@@ -285,6 +285,25 @@ test('workspace export includes prompt metadata when enabled', async ({ page }) 
   expect(metadata.asset.height).toBe(768)
 })
 
+test('workspace export omits prompt metadata when disabled', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '生成参数' }).click()
+  await page.getByLabel('导出时包含提示词元数据').uncheck()
+  await page.getByRole('button', { name: '保存生成参数' }).click()
+  await expect(page.getByText('设置已保存')).toBeVisible()
+
+  await page.goto('/workspace?mode=cover&prompt=关闭元数据导出回归测试封面')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await page.getByLabel('格式').selectOption('png')
+
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 1)
+  expect(downloads).toHaveLength(1)
+  expect(downloads[0].suggestedFilename()).toMatch(/\.png$/)
+})
+
 test('history detail export confirms format before browser download', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=历史导出弹窗回归测试封面')
   await page.getByRole('button', { name: '生成新结果' }).click()
@@ -677,6 +696,73 @@ test('home recent detail can reuse prompt in workspace', async ({ page }) => {
   await expect(page.getByLabel('高度')).toHaveValue('360')
   await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('32')
   await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('13579')
+})
+
+test('home recent detail export confirms format before browser download', async ({ page }) => {
+  await page.addInitScript(() => {
+    const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#57a6ff"/></svg>')
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [],
+        tasks: [
+          {
+            id: 'home-export-task',
+            mode: 'cover',
+            prompt: '首页最近导出回归测试封面',
+            negativePrompt: '低清晰度',
+            modelId: 'local-preview',
+            width: 640,
+            height: 360,
+            batchSize: 1,
+            steps: 32,
+            seed: 24680,
+            style: '赛博',
+            status: 'completed',
+            assets: [
+              {
+                id: 'home-export-asset',
+                taskId: 'home-export-task',
+                title: '首页最近导出资源',
+                width: 640,
+                height: 360,
+                format: 'svg',
+                dataUrl: `data:image/svg+xml;charset=utf-8,${assetSvg}`,
+                createdAt: '2026-01-11T00:00:00.000Z',
+              },
+            ],
+            createdAt: '2026-01-11T00:00:00.000Z',
+          },
+        ],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/')
+  await page.getByRole('button', { name: /首页最近导出回归测试封面/ }).click()
+  await page.getByRole('button', { name: '导出到本地' }).click()
+
+  await expect(page.getByRole('heading', { name: '导出到本地' })).toBeVisible()
+  await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\Exports')
+  await page.getByLabel('格式').selectOption('webp')
+
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '确认导出' }).click(), 2)
+  const imageDownload = findDownload(downloads, '.webp')
+  const metadataDownload = findDownload(downloads, '.metadata.json')
+  expect(imageDownload.suggestedFilename()).toMatch(/\.webp$/)
+  expect(metadataDownload.suggestedFilename()).toMatch(/\.metadata\.json$/)
 })
 
 test('home recent detail can retry a failed generation with original parameters', async ({ page }) => {
