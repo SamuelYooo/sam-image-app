@@ -90,6 +90,18 @@ test('tool catalog opens workspace with a focused generation intent', async ({ p
   await expect(page.getByText('本地 AI 图像工具 App Icon').first()).toBeVisible()
 })
 
+test('workspace explains the active generation mode data flow', async ({ page }) => {
+  await page.goto('/workspace?mode=txt2img')
+
+  await expect(page.getByText('文生图读取正向/反向提示词与风格预设')).toBeVisible()
+
+  await page.getByRole('button', { name: /图生图/ }).click()
+  await expect(page.getByText('图生图读取参考图、正向提示词与图片强度')).toBeVisible()
+
+  await page.getByRole('button', { name: /GIF 动图/ }).click()
+  await expect(page.getByText('GIF 动图读取提示词、时长和循环动作描述')).toBeVisible()
+})
+
 test('default export format from settings is used by workspace export', async ({ page }) => {
   await page.goto('/settings')
 

@@ -36,6 +36,17 @@ const retryNotice = ref('')
 const referenceInput = ref<HTMLInputElement | null>(null)
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
+const modeFlowCopy = computed(() => {
+  const flowCopy: Record<GenerationMode, string> = {
+    txt2img: '文生图读取正向/反向提示词与风格预设，结合模型、尺寸和批量参数生成多张结果。',
+    img2img: '图生图读取参考图、正向提示词与图片强度，保留主体结构并输出新的风格变体。',
+    cover: '封面图读取平台尺寸、标题提示词与风格预设，生成适配自媒体平台的封面。',
+    icon: 'ICON 读取品牌描述、输出尺寸和背景策略，生成适合应用或网站的图标。',
+    '3d': '3D 图读取产品描述、立体感和材质提示，生成具备空间深度的概念图。',
+    gif: 'GIF 动图读取提示词、时长和循环动作描述，生成短循环动画结果。',
+  }
+  return flowCopy[mode.value]
+})
 const defaultModel = computed(() => store.defaultImageModel)
 const selectedModel = computed(() => store.imageModels.find((model) => model.id === selectedModelId.value) ?? defaultModel.value)
 const selectedTextModel = computed(() => store.textModels.find((model) => model.id === selectedTextModelId.value) ?? store.primaryTextModel)
@@ -529,6 +540,14 @@ async function chooseWorkspaceExportDir(): Promise<void> {
           </div>
         </div>
 
+        <div class="block mode-flow-block">
+          <div class="title-row">
+            <strong>数据流说明</strong>
+            <span>{{ currentModeLabel }}</span>
+          </div>
+          <p class="muted">{{ modeFlowCopy }}</p>
+        </div>
+
         <button class="generate-btn btn-primary" type="button" @click="generate">
           <WandSparkles :size="17" />
           生成新结果
@@ -760,6 +779,10 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   object-fit: cover;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
+}
+
+.mode-flow-block p {
+  line-height: 1.65;
 }
 
 .chip-button {
