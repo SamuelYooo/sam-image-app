@@ -127,6 +127,7 @@ export const useAppStore = defineStore('app', () => {
   const imageModels = computed(() => models.value.filter((model) => model.kind === 'image'))
   const textModels = computed(() => models.value.filter((model) => model.kind === 'text'))
   const primaryImageModel = computed(() => imageModels.value.find((model) => model.isPrimary) ?? imageModels.value[0])
+  const primaryTextModel = computed(() => textModels.value.find((model) => model.isPrimary) ?? textModels.value[0])
   const defaultImageModel = computed(() => imageModels.value.find((model) => model.id === settings.value.defaultImageModelId) ?? primaryImageModel.value)
   const recentTasks = computed(() => tasks.value.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8))
   const allAssets = computed(() => tasks.value.flatMap((task) => task.assets.map((asset) => ({ task, asset }))))
@@ -349,6 +350,7 @@ export const useAppStore = defineStore('app', () => {
     imageModels,
     textModels,
     primaryImageModel,
+    primaryTextModel,
     defaultImageModel,
     recentTasks,
     completedAssets,

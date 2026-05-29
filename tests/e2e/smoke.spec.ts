@@ -211,6 +211,61 @@ test('default image model from settings initializes a new workspace', async ({ p
   await expect(page.getByText('secondary-image')).toBeVisible()
 })
 
+test('workspace prompt polish uses the selected text model', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [
+          {
+            id: 'local-preview',
+            name: 'Local Preview',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'samimage-local-preview',
+            kind: 'image',
+            isPrimary: true,
+            status: 'connected',
+          },
+          {
+            id: 'local-text-polish',
+            name: 'Local Text Polish',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'samimage-local-text-polish',
+            kind: 'text',
+            isPrimary: true,
+            status: 'connected',
+          },
+        ],
+        prompts: [],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '赛博',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/workspace?mode=txt2img&prompt=星际观察站')
+  await expect(page.getByLabel('文本润色模型')).toHaveValue('local-text-polish')
+  await page.getByRole('button', { name: '润色' }).click()
+  await expect(page.locator('.prompt-preview')).toContainText('星际观察站')
+  await expect(page.locator('.prompt-preview')).toContainText('赛博')
+  await expect(page.locator('.prompt-preview')).toContainText('Local Text Polish')
+  await expect(page.getByText('已使用 Local Text Polish 润色提示词')).toBeVisible()
+})
+
 test('generation defaults from settings initialize a new workspace', async ({ page }) => {
   await page.goto('/settings')
 

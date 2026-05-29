@@ -19,6 +19,7 @@ const batchSize = ref(store.settings.defaultBatchSize)
 const steps = ref(28)
 const seed = ref(128409)
 const selectedModelId = ref('')
+const selectedTextModelId = ref('')
 const referenceImage = ref('')
 const currentTask = ref<GenerationTask | null>(null)
 const selectedAsset = ref<GeneratedAsset | null>(null)
@@ -32,6 +33,7 @@ const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 const currentModeLabel = computed(() => modeLabels[mode.value])
 const defaultModel = computed(() => store.defaultImageModel)
 const selectedModel = computed(() => store.imageModels.find((model) => model.id === selectedModelId.value) ?? defaultModel.value)
+const selectedTextModel = computed(() => store.textModels.find((model) => model.id === selectedTextModelId.value) ?? store.primaryTextModel)
 const visiblePrompts = computed(() => {
   const keyword = promptSearch.value.trim().toLowerCase()
   return store.prompts.filter((item) => !keyword || `${item.title} ${item.prompt} ${item.category}`.toLowerCase().includes(keyword)).slice(0, 24)
@@ -45,6 +47,7 @@ watch(() => store.activePrompt, (value) => {
 
 onMounted(() => {
   selectedModelId.value = defaultModel.value?.id ?? ''
+  selectedTextModelId.value = selectedTextModel.value?.id ?? ''
   mode.value = store.resolveMode(String(route.query.mode ?? 'txt2img'))
   store.setMode(mode.value)
   const toolId = typeof route.query.tool === 'string' ? route.query.tool : ''
@@ -85,6 +88,25 @@ function applyPrompt(item: PromptItem): void {
   prompt.value = item.prompt
   store.usePrompt(item)
   libraryOpen.value = false
+}
+
+function polishPrompt(): void {
+  const source = prompt.value.trim()
+  if (!source) {
+    prompt.value = `高质量${currentModeLabel.value}，主体明确，${style.value}风格，画面层次清晰，细节丰富。`
+    store.notify('已生成基础提示词')
+    return
+  }
+
+  const modelName = selectedTextModel.value?.name ?? '本地文本润色'
+  prompt.value = [
+    source,
+    `${style.value}风格`,
+    '主体明确，构图稳定，光线层次清晰，材质细节丰富',
+    `适合${currentModeLabel.value}输出`,
+    `由 ${modelName} 润色`,
+  ].join('，')
+  store.notify(`已使用 ${modelName} 润色提示词`)
 }
 
 async function generate(): Promise<void> {
@@ -184,7 +206,7 @@ function openExportDialog(): void {
               <Library :size="15" />
               词库
             </button>
-            <button class="btn-soft" type="button" @click="prompt += prompt ? '，画面层次清晰，主体明确，细节丰富。' : '高质量图像，画面层次清晰，主体明确，细节丰富。'">
+            <button class="btn-soft" type="button" @click="polishPrompt">
               <Sparkles :size="15" />
               润色
             </button>
@@ -296,6 +318,12 @@ function openExportDialog(): void {
             <label for="workspace-image-model">图像模型</label>
             <select id="workspace-image-model" v-model="selectedModelId">
               <option v-for="model in store.imageModels" :key="model.id" :value="model.id">{{ model.name }} / {{ model.model }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="workspace-text-model">文本润色模型</label>
+            <select id="workspace-text-model" v-model="selectedTextModelId">
+              <option v-for="model in store.textModels" :key="model.id" :value="model.id">{{ model.name }} / {{ model.model || '未配置模型 ID' }}</option>
             </select>
           </div>
         </div>
