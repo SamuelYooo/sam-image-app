@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { Copy, Download, Library, RotateCcw, Sparkles, Upload, WandSparkles } from 'lucide-vue-next'
 import { aspectPresets, defaultCoverPresets, exportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
-import type { ExportFormat, GeneratedAsset, GenerationMode, PromptItem } from '@/types/domain'
+import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask, PromptItem } from '@/types/domain'
 
 const route = useRoute()
 const store = useAppStore()
@@ -19,6 +19,7 @@ const batchSize = ref(4)
 const steps = ref(28)
 const seed = ref(128409)
 const referenceImage = ref('')
+const currentTask = ref<GenerationTask | null>(null)
 const selectedAsset = ref<GeneratedAsset | null>(null)
 const generating = ref(false)
 const promptModalOpen = ref(false)
@@ -33,7 +34,7 @@ const visiblePrompts = computed(() => {
   const keyword = promptSearch.value.trim().toLowerCase()
   return store.prompts.filter((item) => !keyword || `${item.title} ${item.prompt} ${item.category}`.toLowerCase().includes(keyword)).slice(0, 24)
 })
-const currentAssets = computed(() => store.recentTasks.find((task) => task.assets.some((asset) => asset.id === selectedAsset.value?.id))?.assets ?? store.recentTasks[0]?.assets ?? [])
+const currentAssets = computed(() => currentTask.value?.assets ?? store.recentTasks[0]?.assets ?? [])
 
 watch(prompt, (value) => store.setActivePrompt(value))
 watch(() => store.activePrompt, (value) => {
@@ -99,6 +100,7 @@ async function generate(): Promise<void> {
       style: style.value,
       referenceImage: referenceImage.value,
     })
+    currentTask.value = task
     selectedAsset.value = task.assets[0] ?? null
   } catch (error) {
     store.notify(error instanceof Error ? error.message : '生成失败', 'error')

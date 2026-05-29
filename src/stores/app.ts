@@ -147,11 +147,15 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function generate(input: GenerationInput): Promise<GenerationTask> {
-    const commandResult = await invokeOptional<GenerationTask>('create_generation_task', { input })
+    const commandResult = settings.value.autoSaveHistory ? await invokeOptional<GenerationTask>('create_generation_task', { input }) : null
     const task = commandResult ?? createLocalGeneration(input)
-    tasks.value.unshift(task)
-    persist()
-    notify(`已生成 ${task.assets.length} 张${modeLabels[task.mode]}结果`)
+    if (settings.value.autoSaveHistory) {
+      tasks.value.unshift(task)
+      persist()
+      notify(`已生成 ${task.assets.length} 张${modeLabels[task.mode]}结果`)
+    } else {
+      notify(`已生成 ${task.assets.length} 张${modeLabels[task.mode]}结果，未保存到历史`, 'info')
+    }
     return task
   }
 

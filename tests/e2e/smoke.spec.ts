@@ -80,3 +80,20 @@ test('default export format from settings is used by workspace export', async ({
   expect(content.subarray(0, 4).toString('ascii')).toBe('RIFF')
   expect(content.subarray(8, 12).toString('ascii')).toBe('WEBP')
 })
+
+test('generation can run without saving to history when auto-save is disabled', async ({ page }) => {
+  await page.goto('/settings')
+
+  await page.getByRole('button', { name: '生成参数' }).click()
+  await page.getByLabel('自动保存生成历史').uncheck()
+  await page.getByRole('button', { name: '保存生成参数' }).click()
+  await expect(page.getByText('设置已保存')).toBeVisible()
+
+  await page.goto('/workspace?mode=cover&prompt=不保存历史回归测试封面')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('link', { name: /历史/ }).click()
+  await expect(page.getByText('暂无历史记录')).toBeVisible()
+  await expect(page.getByText('不保存历史回归测试封面')).toHaveCount(0)
+})
