@@ -7,6 +7,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 const MAX_EXPORT_NAME_CHARS: usize = 80;
+const LOCAL_GIF_DATA_URL: &str =
+    "data:image/gif;base64,R0lGODlhAQABAPAAABQ4pv///yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==";
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
@@ -243,6 +245,11 @@ fn create_preview_asset(
     let label = mode_label(&input.mode);
     let (start, end) = mode_colors(&input.mode);
     let hash = stable_hash(&format!("{}-{}-{}", input.prompt, input.seed, index));
+    let format = if input.mode == GenerationMode::Gif {
+        "gif"
+    } else {
+        "svg"
+    };
     let min_side = input.width.min(input.height) as f32;
     let title = format!("{} {}", mode_title(&input.mode), index + 1);
     let svg = format!(
@@ -285,8 +292,12 @@ fn create_preview_asset(
         title,
         width: input.width,
         height: input.height,
-        format: "svg".into(),
-        data_url: format!("data:image/svg+xml;base64,{}", STANDARD.encode(svg)),
+        format: format.into(),
+        data_url: if format == "gif" {
+            LOCAL_GIF_DATA_URL.into()
+        } else {
+            format!("data:image/svg+xml;base64,{}", STANDARD.encode(svg))
+        },
         local_path: None,
         created_at: created_at.into(),
     }

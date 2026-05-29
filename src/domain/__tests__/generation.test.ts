@@ -44,4 +44,28 @@ describe('generation task domain', () => {
     )
     expect(task.assets[0].dataUrl).toContain('data:image/svg+xml')
   })
+
+  it('creates gif preview assets for gif mode', () => {
+    const task = createLocalGeneration({
+      mode: 'gif',
+      prompt: '循环动图导出回归测试',
+      negativePrompt: '低清晰度',
+      modelId: 'local-preview',
+      width: 512,
+      height: 512,
+      batchSize: 1,
+      steps: 24,
+      seed: 84,
+      style: '像素',
+    })
+
+    expect(task.assets[0]).toEqual(
+      expect.objectContaining({
+        format: 'gif',
+        width: 512,
+        height: 512,
+      }),
+    )
+    expect(task.assets[0].dataUrl).toContain('data:image/gif')
+  })
 })

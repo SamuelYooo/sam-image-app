@@ -304,6 +304,25 @@ test('workspace export omits prompt metadata when disabled', async ({ page }) =>
   expect(downloads[0].suggestedFilename()).toMatch(/\.png$/)
 })
 
+test('gif workspace exports a gif asset when gif format is selected', async ({ page }) => {
+  await page.goto('/workspace?mode=gif&prompt=GIF 导出回归测试动图')
+  await page.getByText('批量').locator('..').getByRole('slider').fill('1')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+  await expect(page.locator('.sample').first()).toContainText('GIF 动图 1')
+
+  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await page.getByLabel('格式').selectOption('gif')
+
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 2)
+  const download = findDownload(downloads, '.gif')
+  expect(download.suggestedFilename()).toMatch(/\.gif$/)
+  const path = await download.path()
+  expect(path).toBeTruthy()
+  const content = await readFile(path!)
+  expect(content.subarray(0, 6).toString('ascii')).toBe('GIF89a')
+})
+
 test('history detail export confirms format before browser download', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=历史导出弹窗回归测试封面')
   await page.getByRole('button', { name: '生成新结果' }).click()

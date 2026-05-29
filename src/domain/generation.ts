@@ -19,6 +19,8 @@ const MODE_COLORS: Record<GenerationInput['mode'], [string, string]> = {
   gif: ['#14b8a6', '#a3e635'],
 }
 
+const LOCAL_GIF_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAPAAABQ4pv///yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='
+
 export function validateGenerationInput(input: GenerationInput): void {
   if (!input.prompt.trim()) throw new Error('请输入正向提示词')
   if (!input.modelId.trim()) throw new Error('请选择图像模型')
@@ -47,6 +49,7 @@ function createPreviewAsset(taskId: string, input: GenerationInput, index: numbe
   const seed = hashString(`${input.prompt}-${input.seed}-${index}`)
   const [start, end] = MODE_COLORS[input.mode]
   const label = MODE_LABELS[input.mode]
+  const format = input.mode === 'gif' ? 'gif' : 'svg'
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}">`,
     '<defs>',
@@ -69,8 +72,8 @@ function createPreviewAsset(taskId: string, input: GenerationInput, index: numbe
     title: `${modeTitle(input.mode)} ${index + 1}`,
     width: input.width,
     height: input.height,
-    format: 'svg',
-    dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+    format,
+    dataUrl: format === 'gif' ? LOCAL_GIF_DATA_URL : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
     createdAt,
   }
 }

@@ -261,6 +261,7 @@ export const exportFormatOptions: Array<{ value: ExportFormat; label: string }> 
   { value: 'png', label: 'PNG' },
   { value: 'jpg', label: 'JPG' },
   { value: 'webp', label: 'WEBP' },
+  { value: 'gif', label: 'GIF' },
 ]
 
 export const defaultCoverPresets: CoverPreset[] = [

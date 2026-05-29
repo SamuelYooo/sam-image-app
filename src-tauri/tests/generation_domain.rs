@@ -37,3 +37,19 @@ fn local_generation_creates_svg_assets() {
     assert_eq!(task.assets[0].width, 1080);
     assert!(task.assets[0].data_url.starts_with("data:image/svg+xml"));
 }
+
+#[test]
+fn local_generation_creates_gif_assets_for_gif_mode() {
+    let mut input = valid_input();
+    input.mode = GenerationMode::Gif;
+    input.width = 512;
+    input.height = 512;
+    input.batch_size = 1;
+    input.prompt = "循环动图导出回归测试".into();
+
+    let task = create_local_generation(input).expect("gif preview should generate");
+
+    assert_eq!(task.assets.len(), 1);
+    assert_eq!(task.assets[0].format, "gif");
+    assert!(task.assets[0].data_url.starts_with("data:image/gif"));
+}
