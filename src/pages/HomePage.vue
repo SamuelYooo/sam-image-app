@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { Download, Eye, ImagePlus, ShieldCheck, Sparkles, Settings, WandSparkles } from 'lucide-vue-next'
+import { Download, Eye, FolderOpen, ImagePlus, ShieldCheck, Sparkles, Settings, WandSparkles } from 'lucide-vue-next'
 import { exportFormatOptions, modeLabels, toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
+import { pickDirectory } from '@/services/tauri'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
 
 const router = useRouter()
@@ -57,6 +58,14 @@ async function confirmRecentExport(): Promise<void> {
   if (!selectedRecent.value) return
   await store.downloadAsset(selectedRecent.value.asset, exportFormat.value, 1, selectedRecent.value.task)
   exportOpen.value = false
+}
+
+async function chooseRecentExportDir(): Promise<void> {
+  const directory = await pickDirectory(store.settings.defaultOutputDir)
+  if (!directory) return
+
+  store.settings.defaultOutputDir = directory
+  store.notify(`已选择导出目录：${directory}`)
 }
 </script>
 
@@ -205,7 +214,13 @@ async function confirmRecentExport(): Promise<void> {
         <div class="modal-body stack">
           <div class="field">
             <label for="home-export-dir">导出目录</label>
-            <input id="home-export-dir" v-model="store.settings.defaultOutputDir" />
+            <div class="directory-picker">
+              <input id="home-export-dir" v-model="store.settings.defaultOutputDir" />
+              <button class="btn-soft" type="button" @click="chooseRecentExportDir">
+                <FolderOpen :size="16" />
+                重新选择目录
+              </button>
+            </div>
           </div>
           <div class="field">
             <label for="home-export-format">格式</label>

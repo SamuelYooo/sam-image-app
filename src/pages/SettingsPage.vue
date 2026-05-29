@@ -701,16 +701,6 @@ async function chooseDefaultOutputDir(): Promise<void> {
   font-size: 11px;
 }
 
-.directory-picker {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-}
-
-.directory-picker .btn-soft {
-  white-space: nowrap;
-}
-
 .builtin-note {
   color: var(--muted);
   font-family: var(--font-mono);
@@ -728,10 +718,6 @@ async function chooseDefaultOutputDir(): Promise<void> {
   }
 
   .model-fetch-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .directory-picker {
     grid-template-columns: 1fr;
   }
 }

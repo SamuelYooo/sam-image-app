@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Copy, Download, Library, RotateCcw, Sparkles, Upload, WandSparkles } from 'lucide-vue-next'
+import { Copy, Download, FolderOpen, Library, RotateCcw, Sparkles, Upload, WandSparkles } from 'lucide-vue-next'
 import { aspectPresets, exportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
+import { pickDirectory } from '@/services/tauri'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask, PromptItem } from '@/types/domain'
 
 const route = useRoute()
@@ -317,6 +318,14 @@ function openExportDialog(): void {
   exportScale.value = 1
   exportOpen.value = true
 }
+
+async function chooseWorkspaceExportDir(): Promise<void> {
+  const directory = await pickDirectory(store.settings.defaultOutputDir)
+  if (!directory) return
+
+  store.settings.defaultOutputDir = directory
+  store.notify(`已选择导出目录：${directory}`)
+}
 </script>
 
 <template>
@@ -593,7 +602,13 @@ function openExportDialog(): void {
         <div class="modal-body stack">
           <div class="field">
             <label for="workspace-export-dir">导出目录</label>
-            <input id="workspace-export-dir" v-model="store.settings.defaultOutputDir" />
+            <div class="directory-picker">
+              <input id="workspace-export-dir" v-model="store.settings.defaultOutputDir" />
+              <button class="btn-soft" type="button" @click="chooseWorkspaceExportDir">
+                <FolderOpen :size="16" />
+                重新选择目录
+              </button>
+            </div>
           </div>
           <div class="field">
             <label for="workspace-export-format">格式</label>

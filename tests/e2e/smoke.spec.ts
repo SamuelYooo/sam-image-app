@@ -113,6 +113,41 @@ test('settings can pick and persist the default output directory', async ({ page
   await expect(page.getByLabel('默认输出目录')).toHaveValue('D:\\SamImage\\Picked')
 })
 
+test('export dialogs can pick output directories from all result surfaces', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.samimageE2eDirectory = 'D:\\SamImage\\WorkspacePicked'
+  })
+
+  await page.goto('/workspace?mode=cover&prompt=导出目录选择回归测试封面')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await page.getByRole('button', { name: '重新选择目录' }).click()
+  await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\WorkspacePicked')
+  await page.getByRole('button', { name: '×' }).last().click()
+
+  await page.evaluate(() => {
+    window.samimageE2eDirectory = 'D:\\SamImage\\HistoryPicked'
+  })
+  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('button', { name: /导出目录选择回归测试封面/ }).first().click()
+  await page.getByRole('button', { name: '导出到本地' }).click()
+  await page.getByRole('button', { name: '重新选择目录' }).click()
+  await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\HistoryPicked')
+  await page.getByRole('button', { name: '×' }).last().click()
+  await page.getByRole('button', { name: '×' }).last().click()
+
+  await page.evaluate(() => {
+    window.samimageE2eDirectory = 'D:\\SamImage\\HomePicked'
+  })
+  await page.getByRole('link', { name: /首页/ }).click()
+  await page.getByRole('button', { name: /导出目录选择回归测试封面/ }).first().click()
+  await page.getByRole('button', { name: '导出到本地' }).click()
+  await page.getByRole('button', { name: '重新选择目录' }).click()
+  await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\HomePicked')
+})
+
 test('workspace export scale produces a larger png download', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=导出倍率回归测试封面')
   await page.getByLabel('宽度').fill('320')

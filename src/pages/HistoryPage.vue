@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Download, Eye, RotateCcw, Search, Star, Trash2 } from 'lucide-vue-next'
+import { Download, Eye, FolderOpen, RotateCcw, Search, Star, Trash2 } from 'lucide-vue-next'
 import { exportFormatOptions, modeLabels } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
+import { pickDirectory } from '@/services/tauri'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
 
 const router = useRouter()
@@ -100,6 +101,14 @@ function openHistoryExport(): void {
 
 function loadMore(): void {
   visibleCount.value += 8
+}
+
+async function chooseHistoryExportDir(): Promise<void> {
+  const directory = await pickDirectory(store.settings.defaultOutputDir)
+  if (!directory) return
+
+  store.settings.defaultOutputDir = directory
+  store.notify(`已选择导出目录：${directory}`)
 }
 
 async function confirmHistoryExport(): Promise<void> {
@@ -252,7 +261,13 @@ async function confirmHistoryExport(): Promise<void> {
         <div class="modal-body stack">
           <div class="field">
             <label for="history-export-dir">导出目录</label>
-            <input id="history-export-dir" v-model="store.settings.defaultOutputDir" />
+            <div class="directory-picker">
+              <input id="history-export-dir" v-model="store.settings.defaultOutputDir" />
+              <button class="btn-soft" type="button" @click="chooseHistoryExportDir">
+                <FolderOpen :size="16" />
+                重新选择目录
+              </button>
+            </div>
           </div>
           <div class="field">
             <label for="history-export-format">格式</label>

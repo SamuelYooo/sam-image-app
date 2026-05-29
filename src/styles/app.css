@@ -541,6 +541,16 @@ svg {
   gap: 6px;
 }
 
+.directory-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.directory-picker .btn-soft {
+  white-space: nowrap;
+}
+
 .field label,
 .field-label {
   font-family: var(--font-mono);
@@ -799,6 +809,10 @@ input[type="range"] {
   .grid-2,
   .grid-3,
   .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .directory-picker {
     grid-template-columns: 1fr;
   }
 }
