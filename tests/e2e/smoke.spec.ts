@@ -1032,6 +1032,30 @@ test('settings cover presets control the tools catalog', async ({ page }) => {
   await expect(page.getByRole('button', { name: /小红书封面/ })).toBeVisible()
 })
 
+test('settings can add a custom cover preset for tools and workspace', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+
+  await page.getByRole('button', { name: '新增预设' }).click()
+  await expect(page.getByRole('heading', { name: '新增封面预设' })).toBeVisible()
+  await page.getByLabel('名称').fill('设置页竖版封面')
+  await page.getByLabel('宽度').fill('900')
+  await page.getByLabel('高度').fill('1200')
+  await page.getByRole('button', { name: '添加预设' }).click()
+
+  await expect(page.getByText('封面预设已添加')).toBeVisible()
+  await expect(page.locator('.cover-row').filter({ hasText: '设置页竖版封面' })).toContainText('900 x 1200')
+  await expect(page.getByText('5 个启用')).toBeVisible()
+
+  await page.goto('/tools')
+  const presetCard = page.locator('.cover-preset').filter({ hasText: '设置页竖版封面' }).first()
+  await expect(presetCard).toBeVisible()
+  await presetCard.click()
+  await expect(page).toHaveURL(/\/workspace/)
+  await expect(page.getByLabel('宽度')).toHaveValue('900')
+  await expect(page.getByLabel('高度')).toHaveValue('1200')
+})
+
 test('tools page manages custom cover presets', async ({ page }) => {
   await page.goto('/tools')
 

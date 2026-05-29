@@ -14,6 +14,10 @@ const promptCategoryFilter = ref('all')
 const modelCatalogOpen = ref(false)
 const modelCatalogSearch = ref('')
 const selectedCatalogModelId = ref('')
+const coverPresetModalOpen = ref(false)
+const coverPresetName = ref('')
+const coverPresetWidth = ref(1080)
+const coverPresetHeight = ref(608)
 const draft = ref<ModelProfile>({
   id: '',
   name: '',
@@ -150,6 +154,29 @@ async function chooseDefaultOutputDir(): Promise<void> {
 
   store.settings.defaultOutputDir = directory
   store.notify('默认输出目录已更新')
+}
+
+function openCoverPresetModal(): void {
+  coverPresetName.value = ''
+  coverPresetWidth.value = 1080
+  coverPresetHeight.value = 608
+  coverPresetModalOpen.value = true
+}
+
+function addCoverPresetFromSettings(): void {
+  const name = coverPresetName.value.trim()
+  if (!name) {
+    store.notify('请输入预设名称', 'error')
+    return
+  }
+
+  store.addCoverPreset({
+    name,
+    width: coverPresetWidth.value,
+    height: coverPresetHeight.value,
+    enabled: true,
+  })
+  coverPresetModalOpen.value = false
 }
 </script>
 
@@ -394,6 +421,10 @@ async function chooseDefaultOutputDir(): Promise<void> {
               <RotateCcw :size="14" />
               恢复默认封面预设
             </button>
+            <button class="btn-primary btn-sm" type="button" @click="openCoverPresetModal">
+              <Plus :size="14" />
+              新增预设
+            </button>
           </div>
           <div class="cover-settings-list">
             <article v-for="preset in store.coverPresets" :key="preset.id" class="cover-row">
@@ -428,6 +459,38 @@ async function chooseDefaultOutputDir(): Promise<void> {
         </div>
       </div>
     </section>
+
+    <div v-if="coverPresetModalOpen" class="modal-overlay" @click.self="coverPresetModalOpen = false">
+      <div class="modal small">
+        <div class="modal-head">
+          <div>
+            <h2>新增封面预设</h2>
+            <p class="muted">添加常用尺寸后，可在工具库和工作台直接使用。</p>
+          </div>
+          <button class="btn-icon" type="button" @click="coverPresetModalOpen = false">×</button>
+        </div>
+        <div class="modal-body stack">
+          <div class="field">
+            <label for="settings-cover-preset-name">名称</label>
+            <input id="settings-cover-preset-name" v-model="coverPresetName" placeholder="例如：竖版课程封面" />
+          </div>
+          <div class="grid grid-2">
+            <div class="field">
+              <label for="settings-cover-preset-width">宽度</label>
+              <input id="settings-cover-preset-width" v-model.number="coverPresetWidth" type="number" min="128" max="4096" />
+            </div>
+            <div class="field">
+              <label for="settings-cover-preset-height">高度</label>
+              <input id="settings-cover-preset-height" v-model.number="coverPresetHeight" type="number" min="128" max="4096" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-soft" type="button" @click="coverPresetModalOpen = false">取消</button>
+          <button class="btn-primary" type="button" @click="addCoverPresetFromSettings">添加预设</button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="modelCatalogOpen" class="modal-overlay" @click.self="modelCatalogOpen = false">
       <div class="modal">
