@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Download, Plus, Save, TestTube2, Upload } from 'lucide-vue-next'
-import { exportFormatOptions } from '@/data/catalog'
+import { exportFormatOptions, stylePresets } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { ModelProfile } from '@/types/domain'
 import { createId } from '@/domain/ids'
@@ -171,6 +171,27 @@ function exportPrompts(): void {
       <div class="card">
         <div class="card-body stack">
           <h2>生成参数</h2>
+          <div class="grid grid-2">
+            <div class="field">
+              <label for="default-generation-size">默认尺寸</label>
+              <input id="default-generation-size" v-model.number="store.settings.defaultGenerationSize" type="number" min="128" max="4096" step="64" />
+            </div>
+            <div class="field">
+              <label for="default-batch-size">默认数量</label>
+              <select id="default-batch-size" v-model.number="store.settings.defaultBatchSize">
+                <option :value="1">1</option>
+                <option :value="2">2</option>
+                <option :value="3">3</option>
+                <option :value="4">4</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="default-style">默认风格预设</label>
+              <select id="default-style" v-model="store.settings.defaultStyle">
+                <option v-for="item in stylePresets" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+          </div>
           <label class="toggle-line"><input v-model="store.settings.autoSaveHistory" type="checkbox" /> 自动保存生成历史</label>
           <label class="toggle-line"><input v-model="store.settings.includePromptMetadata" type="checkbox" /> 导出时包含提示词元数据</label>
           <button class="btn-primary" type="button" @click="store.saveSettings(store.settings)">保存生成参数</button>

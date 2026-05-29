@@ -87,6 +87,9 @@ export interface CoverPreset {
 export interface AppSettings {
   defaultOutputDir: string
   defaultExportFormat: ExportFormat
+  defaultGenerationSize: number
+  defaultBatchSize: number
+  defaultStyle: string
   autoSaveHistory: boolean
   includePromptMetadata: boolean
   theme: 'dark'

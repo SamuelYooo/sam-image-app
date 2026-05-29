@@ -12,10 +12,10 @@ const store = useAppStore()
 const mode = ref<GenerationMode>('txt2img')
 const prompt = ref('')
 const negativePrompt = ref('低清晰度、变形、文字水印、错误构图')
-const style = ref('自然')
-const width = ref(1024)
-const height = ref(1024)
-const batchSize = ref(4)
+const style = ref(store.settings.defaultStyle)
+const width = ref(store.settings.defaultGenerationSize)
+const height = ref(store.settings.defaultGenerationSize)
+const batchSize = ref(store.settings.defaultBatchSize)
 const steps = ref(28)
 const seed = ref(128409)
 const selectedModelId = ref('')
@@ -312,12 +312,12 @@ function openExportDialog(): void {
           </div>
           <div class="param-two">
             <div class="field">
-              <label>宽度</label>
-              <input v-model.number="width" type="number" min="128" max="4096" />
+              <label for="workspace-width">宽度</label>
+              <input id="workspace-width" v-model.number="width" type="number" min="128" max="4096" />
             </div>
             <div class="field">
-              <label>高度</label>
-              <input v-model.number="height" type="number" min="128" max="4096" />
+              <label for="workspace-height">高度</label>
+              <input id="workspace-height" v-model.number="height" type="number" min="128" max="4096" />
             </div>
           </div>
         </div>

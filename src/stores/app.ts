@@ -8,6 +8,7 @@ import {
   defaultPrompts,
   modeAliases,
   modeLabels,
+  stylePresets,
 } from '@/data/catalog'
 import { browserStorage } from '@/services/storage'
 import { invokeOptional, isTauriRuntime } from '@/services/tauri'
@@ -47,6 +48,9 @@ const defaultState: PersistedState = {
   settings: {
     defaultOutputDir: 'D:\\SamImage\\Exports',
     defaultExportFormat: 'svg',
+    defaultGenerationSize: 1024,
+    defaultBatchSize: 4,
+    defaultStyle: '自然',
     autoSaveHistory: true,
     includePromptMetadata: true,
     theme: 'dark',
@@ -59,6 +63,16 @@ function cloneDefault(): PersistedState {
 
 function normalizeDefaultExportFormat(value: unknown): ExportFormat {
   return value === 'png' || value === 'jpg' || value === 'webp' || value === 'svg' ? value : 'svg'
+}
+
+function normalizeInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, Math.round(parsed)))
+}
+
+function normalizeStyle(value: unknown): string {
+  return typeof value === 'string' && stylePresets.includes(value) ? value : '自然'
 }
 
 async function rasterizeDataUrl(dataUrl: string, width: number, height: number, format: 'png' | 'jpg' | 'webp'): Promise<string> {
@@ -89,6 +103,9 @@ export const useAppStore = defineStore('app', () => {
   const initial = browserStorage.read<PersistedState>(STORAGE_KEY, cloneDefault())
   const initialSettings = { ...defaultState.settings, ...initial.settings }
   initialSettings.defaultExportFormat = normalizeDefaultExportFormat(initialSettings.defaultExportFormat)
+  initialSettings.defaultGenerationSize = normalizeInteger(initialSettings.defaultGenerationSize, defaultState.settings.defaultGenerationSize, 128, 4096)
+  initialSettings.defaultBatchSize = normalizeInteger(initialSettings.defaultBatchSize, defaultState.settings.defaultBatchSize, 1, 4)
+  initialSettings.defaultStyle = normalizeStyle(initialSettings.defaultStyle)
   const models = ref<ModelProfile[]>(initial.models.length ? initial.models : defaultModels)
   const prompts = ref<PromptItem[]>(initial.prompts.length ? initial.prompts : defaultPrompts)
   const tasks = ref<GenerationTask[]>(initial.tasks)

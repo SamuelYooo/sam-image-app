@@ -150,3 +150,26 @@ test('workspace generation uses the selected image model', async ({ page }) => {
   await page.getByRole('button', { name: /模型选择回归测试封面/ }).first().click()
   await expect(page.getByText('secondary-image')).toBeVisible()
 })
+
+test('generation defaults from settings initialize a new workspace', async ({ page }) => {
+  await page.goto('/settings')
+
+  await page.getByRole('button', { name: '生成参数' }).click()
+  await page.getByLabel('默认尺寸').fill('1536')
+  await page.getByLabel('默认数量').selectOption('2')
+  await page.getByLabel('默认风格预设').selectOption('赛博')
+  await page.getByRole('button', { name: '保存生成参数' }).click()
+  await expect(page.getByText('设置已保存')).toBeVisible()
+
+  await page.goto('/workspace?mode=txt2img&prompt=默认生成参数回归测试')
+  await expect(page.getByLabel('宽度')).toHaveValue('1536')
+  await expect(page.getByLabel('高度')).toHaveValue('1536')
+  await expect(page.getByRole('button', { name: '赛博' })).toHaveClass(/active/)
+  await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('2')
+
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample')).toHaveCount(2)
+  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('button', { name: /默认生成参数回归测试/ }).first().click()
+  await expect(page.getByText('1536 x 1536', { exact: true })).toBeVisible()
+})
