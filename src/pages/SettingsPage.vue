@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Download, Plus, Save, TestTube2, Upload } from 'lucide-vue-next'
+import { Download, Plus, RotateCcw, Save, TestTube2, Trash2, Upload } from 'lucide-vue-next'
 import { exportFormatOptions, stylePresets } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { ModelProfile } from '@/types/domain'
@@ -21,6 +21,7 @@ const draft = ref<ModelProfile>({
 })
 
 const promptSources = computed(() => Array.from(new Set(store.prompts.map((item) => item.source))))
+const enabledCoverPresetCount = computed(() => store.coverPresets.filter((preset) => preset.enabled).length)
 
 function newModel(): void {
   draft.value = {
@@ -80,6 +81,11 @@ function exportPrompts(): void {
   link.click()
   URL.revokeObjectURL(link.href)
   store.notify('Prompts 已导出')
+}
+
+function toggleCoverPreset(id: string, event: Event): void {
+  const input = event.target as HTMLInputElement
+  store.setCoverPresetEnabled(id, input.checked)
 }
 </script>
 
@@ -239,6 +245,51 @@ function exportPrompts(): void {
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-body stack">
+          <div class="section-head">
+            <div>
+              <h2>自媒体封面预设</h2>
+              <p class="muted">{{ enabledCoverPresetCount }} 个启用</p>
+            </div>
+            <button class="btn-soft btn-sm" type="button" @click="store.resetCoverPresets">
+              <RotateCcw :size="14" />
+              恢复默认封面预设
+            </button>
+          </div>
+          <div class="cover-settings-list">
+            <article v-for="preset in store.coverPresets" :key="preset.id" class="cover-row">
+              <div>
+                <div class="inline">
+                  <strong>{{ preset.name }}</strong>
+                  <span v-if="preset.custom" class="chip accent">自定义</span>
+                </div>
+                <p class="muted">{{ preset.width }} x {{ preset.height }}</p>
+              </div>
+              <label class="toggle-line">
+                <input
+                  :checked="preset.enabled"
+                  type="checkbox"
+                  :aria-label="`启用 ${preset.name}`"
+                  @change="toggleCoverPreset(preset.id, $event)"
+                />
+                启用
+              </label>
+              <button
+                v-if="preset.custom"
+                class="btn-icon"
+                type="button"
+                :aria-label="`删除 ${preset.name}`"
+                @click="store.removeCoverPreset(preset.id)"
+              >
+                <Trash2 :size="14" />
+              </button>
+              <span v-else class="builtin-note">内置</span>
+            </article>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 </template>
@@ -335,5 +386,40 @@ function exportPrompts(): void {
   margin-top: 6px;
   color: var(--fg-2);
   line-height: 1.6;
+}
+
+.cover-settings-list {
+  display: grid;
+  gap: 10px;
+}
+
+.cover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: rgba(6, 10, 18, 0.34);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.cover-row p {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.builtin-note {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .cover-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
 }
 </style>

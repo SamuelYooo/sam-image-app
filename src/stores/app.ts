@@ -69,6 +69,10 @@ function cloneDefault(): PersistedState {
   return JSON.parse(JSON.stringify(defaultState)) as PersistedState
 }
 
+function cloneDefaultCoverPresets(): CoverPreset[] {
+  return JSON.parse(JSON.stringify(defaultCoverPresets)) as CoverPreset[]
+}
+
 function normalizeDefaultExportFormat(value: unknown): ExportFormat {
   return value === 'png' || value === 'jpg' || value === 'webp' || value === 'svg' ? value : 'svg'
 }
@@ -125,7 +129,7 @@ export const useAppStore = defineStore('app', () => {
   const models = ref<ModelProfile[]>(initialModels)
   const prompts = ref<PromptItem[]>(initial.prompts.length ? initial.prompts : defaultPrompts)
   const tasks = ref<GenerationTask[]>(initial.tasks)
-  const coverPresets = ref<CoverPreset[]>(initial.coverPresets.length ? initial.coverPresets : defaultCoverPresets)
+  const coverPresets = ref<CoverPreset[]>(initial.coverPresets.length ? initial.coverPresets : cloneDefaultCoverPresets())
   const settings = ref<AppSettings>(initialSettings)
   const toast = ref<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const activePrompt = ref('')
@@ -136,6 +140,7 @@ export const useAppStore = defineStore('app', () => {
   const primaryImageModel = computed(() => imageModels.value.find((model) => model.isPrimary) ?? imageModels.value[0])
   const primaryTextModel = computed(() => textModels.value.find((model) => model.isPrimary) ?? textModels.value[0])
   const defaultImageModel = computed(() => imageModels.value.find((model) => model.id === settings.value.defaultImageModelId) ?? primaryImageModel.value)
+  const enabledCoverPresets = computed(() => coverPresets.value.filter((preset) => preset.enabled))
   const recentTasks = computed(() => tasks.value.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8))
   const allAssets = computed(() => tasks.value.flatMap((task) => task.assets.map((asset) => ({ task, asset }))))
   const completedAssets = computed(() => allAssets.value.filter(({ task }) => task.status === 'completed'))
@@ -279,10 +284,29 @@ export const useAppStore = defineStore('app', () => {
     notify('封面预设已添加')
   }
 
+  function setCoverPresetEnabled(id: string, enabled: boolean): void {
+    const preset = coverPresets.value.find((item) => item.id === id)
+    if (!preset) return
+    preset.enabled = enabled
+    persist()
+    notify(enabled ? '封面预设已启用' : '封面预设已停用', 'info')
+  }
+
   function removeCoverPreset(id: string): void {
-    coverPresets.value = coverPresets.value.filter((preset) => preset.id !== id || !preset.custom)
+    const preset = coverPresets.value.find((item) => item.id === id)
+    if (preset && !preset.custom) {
+      notify('内置封面预设不能删除，可在系统设置中停用', 'error')
+      return
+    }
+    coverPresets.value = coverPresets.value.filter((preset) => preset.id !== id)
     persist()
     notify('封面预设已删除')
+  }
+
+  function resetCoverPresets(): void {
+    coverPresets.value = cloneDefaultCoverPresets()
+    persist()
+    notify('已恢复默认封面预设')
   }
 
   async function resetDemoData(): Promise<void> {
@@ -418,6 +442,7 @@ export const useAppStore = defineStore('app', () => {
     primaryImageModel,
     primaryTextModel,
     defaultImageModel,
+    enabledCoverPresets,
     recentTasks,
     completedAssets,
     resolveMode,
@@ -433,7 +458,9 @@ export const useAppStore = defineStore('app', () => {
     removeModel,
     saveSettings,
     addCoverPreset,
+    setCoverPresetEnabled,
     removeCoverPreset,
+    resetCoverPresets,
     resetDemoData,
     clearHistory,
     downloadAllAssets,

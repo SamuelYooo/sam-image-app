@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Copy, Download, Library, RotateCcw, Sparkles, Upload, WandSparkles } from 'lucide-vue-next'
-import { aspectPresets, defaultCoverPresets, exportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
+import { aspectPresets, exportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask, PromptItem } from '@/types/domain'
 
@@ -82,7 +82,7 @@ onMounted(() => {
   if (queryModelId && store.imageModels.some((model) => model.id === queryModelId)) selectedModelId.value = queryModelId
 
   const presetId = routeString('preset') || selectedTool?.preset || ''
-  const preset = [...defaultCoverPresets, ...store.coverPresets].find((item) => item.id === presetId)
+  const preset = store.coverPresets.find((item) => item.id === presetId)
   if (preset) {
     width.value = preset.width
     height.value = preset.height
@@ -104,7 +104,7 @@ function setMode(next: GenerationMode): void {
   mode.value = next
   store.setMode(next)
   if (next === 'cover') {
-    const xhs = defaultCoverPresets[0]
+    const xhs = store.enabledCoverPresets[0] ?? store.coverPresets[0]
     width.value = xhs.width
     height.value = xhs.height
   }

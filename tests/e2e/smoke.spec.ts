@@ -415,6 +415,27 @@ test('prompt market imports multiple json files at once', async ({ page }) => {
   await expect(page.getByText('批量导入提示词 B')).toBeVisible()
 })
 
+test('settings cover presets control the tools catalog', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+
+  await expect(page.getByRole('heading', { name: '自媒体封面预设' })).toBeVisible()
+  await page.getByLabel('启用 小红书封面').uncheck()
+  await expect(page.getByText('3 个启用')).toBeVisible()
+
+  await page.goto('/tools')
+  await expect(page.getByRole('button', { name: /小红书封面/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /公众号封面/ })).toBeVisible()
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+  await page.getByRole('button', { name: '恢复默认封面预设' }).click()
+  await expect(page.getByText('4 个启用')).toBeVisible()
+
+  await page.goto('/tools')
+  await expect(page.getByRole('button', { name: /小红书封面/ })).toBeVisible()
+})
+
 test('workspace generation uses the selected image model', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

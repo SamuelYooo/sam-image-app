@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { Download, Eye, ImagePlus, ShieldCheck, Sparkles, Settings, WandSparkles } from 'lucide-vue-next'
-import { defaultCoverPresets, exportFormatOptions, modeLabels, toolGroups } from '@/data/catalog'
+import { exportFormatOptions, modeLabels, toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
 
@@ -121,7 +121,7 @@ async function confirmRecentExport(): Promise<void> {
       </div>
       <div class="preset-grid">
         <RouterLink
-          v-for="preset in defaultCoverPresets"
+          v-for="preset in store.enabledCoverPresets"
           :key="preset.id"
           class="preset-btn"
           :to="{ path: '/workspace', query: { mode: 'cover', preset: preset.id } }"

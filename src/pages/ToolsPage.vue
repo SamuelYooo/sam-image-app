@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Trash2, Wrench } from 'lucide-vue-next'
-import { defaultCoverPresets, toolGroups } from '@/data/catalog'
+import { Plus, Wrench } from 'lucide-vue-next'
+import { toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { GenerationMode } from '@/types/domain'
 import type { ToolEntry } from '@/data/catalog'
@@ -85,28 +85,17 @@ function savePreset(): void {
         </button>
       </div>
       <div class="cover-grid">
-        <button v-for="preset in defaultCoverPresets" :key="preset.id" class="cover-preset" type="button" @click="openWorkspace('cover', preset.id)">
+        <button
+          v-for="preset in store.enabledCoverPresets"
+          :key="preset.id"
+          class="cover-preset"
+          type="button"
+          @click="openWorkspace('cover', preset.id)"
+        >
           <span class="cover-thumb">{{ preset.name.slice(0, 4) }}</span>
           <strong>{{ preset.name }}</strong>
           <small>{{ preset.width }} x {{ preset.height }}</small>
         </button>
-        <div
-          v-for="preset in store.coverPresets.filter((item) => item.custom)"
-          :key="preset.id"
-          class="cover-preset custom-preset"
-          role="button"
-          tabindex="0"
-          @click="openWorkspace('cover', preset.id)"
-          @keydown.enter.prevent="openWorkspace('cover', preset.id)"
-          @keydown.space.prevent="openWorkspace('cover', preset.id)"
-        >
-          <span class="cover-thumb custom">{{ preset.name.slice(0, 4) }}</span>
-          <strong>{{ preset.name }}</strong>
-          <small>{{ preset.width }} x {{ preset.height }}</small>
-          <button class="btn-icon delete-btn" type="button" @click.stop="store.removeCoverPreset(preset.id)">
-            <Trash2 :size="14" />
-          </button>
-        </div>
         <button class="cover-preset add" type="button" @click="modalOpen = true">
           <Plus :size="28" />
           <strong>自定义尺寸</strong>
