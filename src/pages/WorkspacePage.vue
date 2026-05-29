@@ -549,7 +549,11 @@ async function chooseWorkspaceExportDir(): Promise<void> {
           <textarea v-model="prompt" rows="12" placeholder="输入更完整的正向提示词" />
         </div>
         <div class="modal-foot">
-          <button class="btn-soft" type="button" @click="openPromptLibrary">从词库选择</button>
+          <div class="btn-row">
+            <button class="btn-soft" type="button" @click="openPromptLibrary">从词库选择</button>
+            <button class="btn-soft" type="button" @click="polishPrompt">AI 润色</button>
+            <button class="btn-soft" type="button" @click="clearPrompt">清空</button>
+          </div>
           <button class="btn-primary" type="button" @click="promptModalOpen = false">应用到工作台</button>
         </div>
       </div>

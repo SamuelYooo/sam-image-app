@@ -55,6 +55,25 @@ test('history clear persists after reload', async ({ page }) => {
   await expect(page.getByText('清空历史回归测试封面')).toHaveCount(0)
 })
 
+test('workspace prompt editor can polish and clear draft prompts', async ({ page }) => {
+  await page.goto('/workspace?mode=cover')
+
+  await page.getByText('点击打开大编辑器').click()
+  const dialog = page.locator('.modal').filter({ has: page.getByRole('heading', { name: '编辑正向提示词' }) })
+  const editor = page.getByPlaceholder('输入更完整的正向提示词')
+  await editor.fill('弹窗内润色回归测试封面')
+  await dialog.getByRole('button', { name: 'AI 润色' }).click()
+
+  await expect(page.getByText(/已使用 .* 润色提示词/)).toBeVisible()
+  await expect(editor).toHaveValue(/弹窗内润色回归测试封面.*封面图输出/)
+
+  await dialog.getByRole('button', { name: '清空', exact: true }).click()
+  await expect(editor).toHaveValue('')
+
+  await page.getByRole('button', { name: '应用到工作台' }).click()
+  await expect(page.getByText('点击打开大编辑器')).toBeVisible()
+})
+
 test('tool catalog opens workspace with a focused generation intent', async ({ page }) => {
   await page.goto('/tools')
 
