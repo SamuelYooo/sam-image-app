@@ -38,6 +38,26 @@ interface PersistedState {
   tasks: GenerationTask[]
   coverPresets: CoverPreset[]
   settings: AppSettings
+  promptSync?: PromptSyncState
+}
+
+interface PromptSyncState {
+  glidea?: PromptSyncResult
+  EvoLinkAI?: PromptSyncResult
+  freestylefly?: PromptSyncResult
+}
+
+interface PromptSyncResult {
+  at: string
+  count: number
+  url: string
+}
+
+interface PromptSyncSource {
+  key: 'glidea' | 'EvoLinkAI' | 'freestylefly'
+  label: string
+  repo: string
+  candidates: string[]
 }
 
 interface ExportAssetData {
@@ -64,6 +84,36 @@ const defaultState: PersistedState = {
     theme: 'dark',
   },
 }
+
+const promptSyncSources: PromptSyncSource[] = [
+  {
+    key: 'glidea',
+    label: 'Glide',
+    repo: 'glidea/banana-prompt-quicker',
+    candidates: [
+      'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/main/prompts.json',
+      'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/master/prompts.json',
+    ],
+  },
+  {
+    key: 'EvoLinkAI',
+    label: 'EvoLinkAI',
+    repo: 'EvoLinkAI/awesome-gpt-image-2-API-and-Prompts',
+    candidates: [
+      'https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts/main/prompts.json',
+      'https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts/master/prompts.json',
+    ],
+  },
+  {
+    key: 'freestylefly',
+    label: 'Freestylefly',
+    repo: 'freestylefly/awesome-gpt-image-2',
+    candidates: [
+      'https://raw.githubusercontent.com/freestylefly/awesome-gpt-image-2/main/prompts.json',
+      'https://raw.githubusercontent.com/freestylefly/awesome-gpt-image-2/master/prompts.json',
+    ],
+  },
+]
 
 function cloneDefault(): PersistedState {
   return JSON.parse(JSON.stringify(defaultState)) as PersistedState
@@ -130,6 +180,7 @@ export const useAppStore = defineStore('app', () => {
   const prompts = ref<PromptItem[]>(initial.prompts.length ? initial.prompts : defaultPrompts)
   const tasks = ref<GenerationTask[]>(initial.tasks)
   const coverPresets = ref<CoverPreset[]>(initial.coverPresets.length ? initial.coverPresets : cloneDefaultCoverPresets())
+  const promptSync = ref<PromptSyncState>(initial.promptSync ?? {})
   const settings = ref<AppSettings>(initialSettings)
   const toast = ref<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const activePrompt = ref('')
@@ -152,6 +203,7 @@ export const useAppStore = defineStore('app', () => {
       prompts: prompts.value,
       tasks: tasks.value,
       coverPresets: coverPresets.value,
+      promptSync: promptSync.value,
       settings: settings.value,
     })
   }
@@ -216,6 +268,55 @@ export const useAppStore = defineStore('app', () => {
     const count = prompts.value.length - before
     notify(count ? `已导入 ${count} 条提示词` : '没有新增提示词', count ? 'success' : 'info')
     return count
+  }
+
+  async function syncPromptSource(key: PromptSyncSource['key']): Promise<void> {
+    const source = promptSyncSources.find((item) => item.key === key)
+    if (!source) {
+      notify('未知的同步来源', 'error')
+      return
+    }
+
+    const backup = prompts.value.slice()
+    let lastError: unknown = null
+
+    for (const url of source.candidates) {
+      try {
+        const response = await fetch(url, { cache: 'no-cache' })
+        if (!response.ok) {
+          lastError = new Error(`HTTP ${response.status}`)
+          continue
+        }
+
+        const content = await response.text()
+        const imported = normalizePromptImport(content, `${key}-prompts.json`)
+        if (!imported.length) {
+          lastError = new Error('未解析到提示词')
+          continue
+        }
+
+        const keep = prompts.value.filter((item) => item.source !== key)
+        prompts.value = mergePromptItems(keep, imported)
+        promptSync.value = {
+          ...promptSync.value,
+          [key]: {
+            at: new Date().toISOString(),
+            count: imported.length,
+            url,
+          },
+        }
+        persist()
+        notify(`${source.label} 已同步 ${imported.length} 条提示词`)
+        return
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    prompts.value = backup
+    persist()
+    const message = lastError instanceof Error ? lastError.message : '网络错误'
+    notify(`${source.label} 同步失败：${message}，已保留本地数据`, 'error')
   }
 
   function usePrompt(item: PromptItem): void {
@@ -469,6 +570,7 @@ export const useAppStore = defineStore('app', () => {
     prompts,
     tasks,
     coverPresets,
+    promptSync,
     settings,
     toast,
     activePrompt,
@@ -482,6 +584,7 @@ export const useAppStore = defineStore('app', () => {
     recentTasks,
     completedAssets,
     favoriteTasks,
+    promptSyncSources,
     resolveMode,
     setMode,
     setActivePrompt,
@@ -489,6 +592,7 @@ export const useAppStore = defineStore('app', () => {
     generate,
     importPrompts,
     importPromptBatch,
+    syncPromptSource,
     usePrompt,
     saveModel,
     setPrimaryImageModel,

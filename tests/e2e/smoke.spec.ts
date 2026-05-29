@@ -769,6 +769,59 @@ test('prompt market copies a prompt to clipboard', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => localStorage.getItem('samimage.e2e.clipboard'))).toBe('复制到剪贴板的完整提示词内容')
 })
 
+test('prompt market syncs open source prompt repositories safely', async ({ page }) => {
+  await page.addInitScript(() => {
+    const syncedPayload = JSON.stringify({
+      prompts: [
+        {
+          id: 'remote-glidea-cover',
+          title: '远程 Glidea 封面提示词',
+          prompt: '远程同步得到的封面提示词内容',
+          category: '封面',
+          author: 'glidea',
+        },
+      ],
+    })
+    let shouldFail = false
+    window.fetch = async () => {
+      if (shouldFail) throw new Error('network down')
+      return new Response(syncedPayload, { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    Object.defineProperty(window, 'samimageE2eFailPromptSync', {
+      get: () => shouldFail,
+      set: (value) => {
+        shouldFail = Boolean(value)
+      },
+    })
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+
+  await expect(page.getByRole('heading', { name: '从开源仓库同步' })).toBeVisible()
+  await page.getByRole('button', { name: '同步-Glide' }).click()
+
+  await expect(page.getByText('Glide 已同步 1 条提示词')).toBeVisible()
+  await expect(page.getByText('远程 Glidea 封面提示词')).toBeVisible()
+  await page.getByLabel('来源筛选').selectOption('glidea')
+  await expect(page.getByText('远程 Glidea 封面提示词')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return {
+      synced: state.prompts?.some((prompt: { source: string; sourceId: string }) => prompt.source === 'glidea' && prompt.sourceId === 'remote-glidea-cover'),
+      syncCount: state.promptSync?.glidea?.count,
+    }
+  })).toEqual({ synced: true, syncCount: 1 })
+
+  await page.evaluate(() => {
+    ;(window as typeof window & { samimageE2eFailPromptSync: boolean }).samimageE2eFailPromptSync = true
+  })
+  await page.getByRole('button', { name: '同步-Glide' }).click()
+
+  await expect(page.getByText(/Glide 同步失败/)).toBeVisible()
+  await expect(page.getByText('远程 Glidea 封面提示词')).toBeVisible()
+})
+
 test('settings cover presets control the tools catalog', async ({ page }) => {
   await page.goto('/settings')
   await page.getByRole('button', { name: '系统设置' }).click()

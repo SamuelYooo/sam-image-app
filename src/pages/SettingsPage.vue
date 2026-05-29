@@ -261,6 +261,24 @@ function toggleCoverPreset(id: string, event: Event): void {
         <div class="stat-card"><strong>{{ promptSources.length }}</strong><span>来源</span></div>
         <div class="stat-card"><strong>{{ filteredPrompts.length }}</strong><span>当前命中</span></div>
       </div>
+      <div class="sync-panel card">
+        <div class="card-body stack">
+          <div>
+            <h3>从开源仓库同步</h3>
+            <p class="muted">同步失败时会保留本地已有提示词，不会清空用户数据。</p>
+          </div>
+          <div class="sync-grid">
+            <article v-for="source in store.promptSyncSources" :key="source.key" class="sync-card">
+              <div>
+                <strong>{{ source.label }}</strong>
+                <p class="muted">{{ source.repo }}</p>
+              </div>
+              <span class="chip">{{ store.promptSync[source.key]?.count ? `${store.promptSync[source.key]?.count} 条` : '未同步' }}</span>
+              <button class="btn-primary btn-sm" type="button" @click="store.syncPromptSource(source.key)">同步-{{ source.label }}</button>
+            </article>
+          </div>
+        </div>
+      </div>
       <div class="prompt-filters">
         <div class="field">
           <label for="prompt-source-filter">来源筛选</label>
@@ -548,6 +566,26 @@ function toggleCoverPreset(id: string, event: Event): void {
   font-size: 11px;
 }
 
+.sync-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sync-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(6, 10, 18, 0.34);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.sync-card strong,
+.sync-card p {
+  min-width: 0;
+}
+
 .prompt-list {
   display: grid;
   gap: 10px;
@@ -655,6 +693,10 @@ function toggleCoverPreset(id: string, event: Event): void {
 }
 
 @media (max-width: 720px) {
+  .sync-grid {
+    grid-template-columns: 1fr;
+  }
+
   .cover-row {
     grid-template-columns: 1fr;
     align-items: start;
