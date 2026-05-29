@@ -30,6 +30,7 @@ const exportOpen = ref(false)
 const promptSearch = ref('')
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 const exportScale = ref(1)
+const retryNotice = ref('')
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
 const defaultModel = computed(() => store.defaultImageModel)
@@ -85,6 +86,7 @@ onMounted(() => {
 
   const queryModelId = routeString('modelId')
   if (queryModelId && store.imageModels.some((model) => model.id === queryModelId)) selectedModelId.value = queryModelId
+  if (routeString('retryTaskId')) retryNotice.value = '已载入失败任务参数，可重新生成'
 
   const presetId = routeString('preset') || selectedTool?.preset || ''
   const preset = store.coverPresets.find((item) => item.id === presetId)
@@ -271,6 +273,7 @@ function openExportDialog(): void {
           <button class="prompt-preview" type="button" @click="promptModalOpen = true">
             {{ prompt || '点击打开大编辑器，输入主题、构图、风格、镜头、颜色和平台用途。' }}
           </button>
+          <p v-if="retryNotice" class="retry-notice">{{ retryNotice }}</p>
           <div class="btn-row">
             <button class="btn-soft" type="button" @click="promptModalOpen = true">编辑</button>
             <button class="btn-soft" type="button" @click="libraryOpen = true">
@@ -614,6 +617,12 @@ function openExportDialog(): void {
   color: var(--fg-2);
   text-align: left;
   line-height: 1.6;
+}
+
+.retry-notice {
+  margin-top: -4px;
+  color: var(--accent);
+  font-size: 12px;
 }
 
 .upload-box {

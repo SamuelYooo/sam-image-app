@@ -192,6 +192,87 @@ test('history reuse restores generation parameters in workspace', async ({ page 
   await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('987654')
 })
 
+test('history failed task can retry generation with original parameters', async ({ page }) => {
+  await page.addInitScript(() => {
+    const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512" fill="#b84c4c"/></svg>')
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [
+          {
+            id: 'local-preview',
+            name: 'Local Preview',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'samimage-local-preview',
+            kind: 'image',
+            isPrimary: true,
+            status: 'connected',
+          },
+        ],
+        prompts: [],
+        tasks: [
+          {
+            id: 'history-failed-task',
+            mode: 'img2img',
+            prompt: '失败重试参数回归测试',
+            negativePrompt: '低质量',
+            modelId: 'local-preview',
+            width: 896,
+            height: 1152,
+            batchSize: 2,
+            steps: 37,
+            seed: 7654321,
+            style: '赛博',
+            status: 'failed',
+            error: '模型连接失败',
+            assets: [
+              {
+                id: 'history-failed-asset',
+                taskId: 'history-failed-task',
+                title: '失败任务占位资源',
+                width: 896,
+                height: 1152,
+                format: 'svg',
+                dataUrl: `data:image/svg+xml;charset=utf-8,${assetSvg}`,
+                createdAt: '2026-01-12T00:00:00.000Z',
+              },
+            ],
+            createdAt: '2026-01-12T00:00:00.000Z',
+          },
+        ],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/history')
+  await page.getByRole('button', { name: /失败重试参数回归测试/ }).click()
+  await page.getByRole('button', { name: '失败重新生成' }).click()
+
+  await expect(page).toHaveURL(/\/workspace/)
+  await expect(page).toHaveURL(/retryTaskId=history-failed-task/)
+  await expect(page.locator('.prompt-preview')).toContainText('失败重试参数回归测试')
+  await expect(page.getByRole('button', { name: '图生图' })).toHaveClass(/active/)
+  await expect(page.getByLabel('宽度')).toHaveValue('896')
+  await expect(page.getByLabel('高度')).toHaveValue('1152')
+  await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('2')
+  await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('37')
+  await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('7654321')
+  await expect(page.getByText('已载入失败任务参数，可重新生成')).toBeVisible()
+})
+
 test('history supports sorting and loading more records', async ({ page }) => {
   await page.addInitScript(() => {
     const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="#1f6bff"/></svg>')

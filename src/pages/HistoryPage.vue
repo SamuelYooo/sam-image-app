@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Download, Eye, Search, Star, Trash2 } from 'lucide-vue-next'
+import { Download, Eye, RotateCcw, Search, Star, Trash2 } from 'lucide-vue-next'
 import { exportFormatOptions, modeLabels } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
@@ -54,6 +54,26 @@ function reusePrompt(task: GenerationTask): void {
   router.push({
     path: '/workspace',
     query: {
+      mode: task.mode,
+      prompt: task.prompt,
+      negativePrompt: task.negativePrompt,
+      modelId: task.modelId,
+      width: String(task.width),
+      height: String(task.height),
+      batchSize: String(task.batchSize),
+      steps: String(task.steps),
+      seed: String(task.seed),
+      style: task.style,
+    },
+  })
+}
+
+function retryTask(task: GenerationTask): void {
+  store.setActivePrompt(task.prompt)
+  router.push({
+    path: '/workspace',
+    query: {
+      retryTaskId: task.id,
       mode: task.mode,
       prompt: task.prompt,
       negativePrompt: task.negativePrompt,
@@ -158,7 +178,10 @@ async function confirmHistoryExport(): Promise<void> {
             <span class="image-info">
               <span class="mode-chip">{{ modeLabels[task.mode] }}</span>
               <strong>{{ task.prompt }}</strong>
-              <small>{{ new Date(task.createdAt).toLocaleString() }} · {{ task.width }} x {{ task.height }}</small>
+              <small>
+                {{ new Date(task.createdAt).toLocaleString() }} · {{ task.width }} x {{ task.height }}
+                <span v-if="task.status === 'failed'" class="status-text error"> · 失败</span>
+              </small>
             </span>
           </button>
         </article>
@@ -187,6 +210,8 @@ async function confirmHistoryExport(): Promise<void> {
             <div class="detail-row"><span>生成类型</span><strong>{{ modeLabels[selected.task.mode] }}</strong></div>
             <div class="detail-row"><span>模型</span><strong>{{ selected.task.modelId }}</strong></div>
             <div class="detail-row"><span>尺寸</span><strong>{{ selected.asset.width }} x {{ selected.asset.height }}</strong></div>
+            <div class="detail-row"><span>状态</span><strong :class="{ 'status-error': selected.task.status === 'failed' }">{{ selected.task.status === 'failed' ? '失败' : selected.task.status === 'completed' ? '完成' : selected.task.status }}</strong></div>
+            <div v-if="selected.task.error" class="prompt-box error-box">{{ selected.task.error }}</div>
             <div class="prompt-box">{{ selected.task.prompt }}</div>
           </div>
         </div>
@@ -202,6 +227,10 @@ async function confirmHistoryExport(): Promise<void> {
           <button class="btn-soft" type="button" @click="reusePrompt(selected.task)">
             <Eye :size="15" />
             复用提示词
+          </button>
+          <button v-if="selected.task.status === 'failed'" class="btn-soft" type="button" @click="retryTask(selected.task)">
+            <RotateCcw :size="15" />
+            失败重新生成
           </button>
           <button class="btn-primary" type="button" @click="openHistoryExport">
             <Download :size="15" />
@@ -399,6 +428,11 @@ async function confirmHistoryExport(): Promise<void> {
   font-size: 11px;
 }
 
+.status-text.error,
+.status-error {
+  color: var(--danger);
+}
+
 .mode-chip {
   width: fit-content;
   color: var(--accent);
@@ -449,6 +483,12 @@ async function confirmHistoryExport(): Promise<void> {
   border-radius: var(--radius-md);
   background: rgba(6, 10, 18, .42);
   line-height: 1.7;
+}
+
+.error-box {
+  color: var(--danger);
+  border-color: rgba(184, 76, 76, .42);
+  background: rgba(184, 76, 76, .1);
 }
 
 @media (max-width: 980px) {
