@@ -14,7 +14,7 @@ const filter = ref<'all' | GenerationMode>('all')
 const sortMode = ref<'newest' | 'oldest' | 'model'>('newest')
 const visibleCount = ref(8)
 const selected = ref<{ task: GenerationTask; asset: GeneratedAsset } | null>(null)
-const exportOpen = ref(false)
+const exportOpen = ref<'selected' | 'all' | null>(null)
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 
 const filteredTasks = computed(() => {
@@ -96,7 +96,12 @@ function clearHistory(): void {
 
 function openHistoryExport(): void {
   exportFormat.value = store.settings.defaultExportFormat
-  exportOpen.value = true
+  exportOpen.value = 'selected'
+}
+
+function openAllHistoryExport(): void {
+  exportFormat.value = store.settings.defaultExportFormat
+  exportOpen.value = 'all'
 }
 
 function loadMore(): void {
@@ -112,9 +117,14 @@ async function chooseHistoryExportDir(): Promise<void> {
 }
 
 async function confirmHistoryExport(): Promise<void> {
+  if (exportOpen.value === 'all') {
+    await store.downloadAllAssets(exportFormat.value)
+    exportOpen.value = null
+    return
+  }
   if (!selected.value) return
   await store.downloadAsset(selected.value.asset, exportFormat.value, 1, selected.value.task)
-  exportOpen.value = false
+  exportOpen.value = null
 }
 </script>
 
@@ -127,7 +137,7 @@ async function confirmHistoryExport(): Promise<void> {
         <p class="page-desc">查看所有本地生成结果，筛选、复用提示词或导出图片。</p>
       </div>
       <div class="btn-row">
-        <button class="btn-soft" type="button" @click="store.downloadAllAssets">
+        <button class="btn-soft" type="button" @click="openAllHistoryExport">
           <Download :size="16" />
           导出全部
         </button>
@@ -249,14 +259,14 @@ async function confirmHistoryExport(): Promise<void> {
       </div>
     </div>
 
-    <div v-if="exportOpen && selected" class="modal-overlay" @click.self="exportOpen = false">
+    <div v-if="exportOpen" class="modal-overlay" @click.self="exportOpen = null">
       <div class="modal small">
         <div class="modal-head">
           <div>
-            <h2>导出到本地</h2>
+            <h2>{{ exportOpen === 'all' ? '导出全部' : '导出到本地' }}</h2>
             <p class="muted">默认读取设置中的输出目录，也可以临时调整格式。</p>
           </div>
-          <button class="btn-icon" type="button" @click="exportOpen = false">×</button>
+          <button class="btn-icon" type="button" @click="exportOpen = null">×</button>
         </div>
         <div class="modal-body stack">
           <div class="field">
@@ -275,11 +285,11 @@ async function confirmHistoryExport(): Promise<void> {
               <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </div>
-          <p class="muted">导出将使用当前结果并保留可用的提示词元数据。</p>
+          <p class="muted">{{ exportOpen === 'all' ? '导出将包含全部已完成结果，并保留可用的提示词元数据。' : '导出将使用当前结果并保留可用的提示词元数据。' }}</p>
         </div>
         <div class="modal-foot">
-          <button class="btn-soft" type="button" @click="exportOpen = false">取消</button>
-          <button class="btn-primary" type="button" @click="confirmHistoryExport">确认导出</button>
+          <button class="btn-soft" type="button" @click="exportOpen = null">取消</button>
+          <button class="btn-primary" type="button" @click="confirmHistoryExport">{{ exportOpen === 'all' ? '确认导出全部' : '确认导出' }}</button>
         </div>
       </div>
     </div>

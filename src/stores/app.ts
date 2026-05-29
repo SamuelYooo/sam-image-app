@@ -481,7 +481,7 @@ export const useAppStore = defineStore('app', () => {
     notify(task.isFavorite ? `已收藏：${task.prompt}` : `已取消收藏：${task.prompt}`, task.isFavorite ? 'success' : 'info')
   }
 
-  async function downloadAllAssets(): Promise<void> {
+  async function downloadAllAssets(format: ExportFormat = settings.value.defaultExportFormat): Promise<void> {
     const taskAssets = completedAssets.value
     if (!taskAssets.length) {
       notify('暂无可导出的结果', 'info')
@@ -489,7 +489,7 @@ export const useAppStore = defineStore('app', () => {
     }
 
     for (const { task, asset } of taskAssets) {
-      await downloadAsset(asset, settings.value.defaultExportFormat, 1, task)
+      await downloadAsset(asset, format, 1, task)
     }
     notify(`已导出 ${taskAssets.length} 个结果`)
   }

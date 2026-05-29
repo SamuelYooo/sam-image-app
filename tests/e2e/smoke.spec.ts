@@ -251,6 +251,36 @@ test('history detail export confirms format before browser download', async ({ p
   expect(download.suggestedFilename()).toMatch(/\.webp$/)
 })
 
+test('history export all confirms format before downloading every asset', async ({ page }) => {
+  await page.goto('/history')
+  page.once('dialog', async (dialog) => {
+    await dialog.accept()
+  })
+  await page.getByRole('button', { name: '清空历史', exact: true }).click()
+  await expect(page.getByText('暂无历史记录')).toBeVisible()
+
+  await page.goto('/workspace?mode=cover&prompt=历史批量导出 A')
+  await page.getByText('批量').locator('..').getByRole('slider').fill('1')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.goto('/workspace?mode=icon&prompt=历史批量导出 B')
+  await page.getByText('批量').locator('..').getByRole('slider').fill('1')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('button', { name: '导出全部' }).click()
+
+  await expect(page.getByRole('heading', { name: '导出全部' })).toBeVisible()
+  await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\Exports')
+  await page.getByLabel('格式').selectOption('webp')
+
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '确认导出全部' }).click(), 4)
+  expect(downloads.filter((download) => download.suggestedFilename().endsWith('.webp'))).toHaveLength(2)
+  expect(downloads.filter((download) => download.suggestedFilename().endsWith('.metadata.json'))).toHaveLength(2)
+})
+
 test('history reuse restores generation parameters in workspace', async ({ page }) => {
   await page.goto('/workspace?mode=txt2img&prompt=历史复用参数回归测试')
   await page.getByRole('button', { name: '赛博' }).click()
