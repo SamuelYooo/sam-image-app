@@ -6,11 +6,27 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 3030",
     "build": "vue-tsc --noEmit && vite build",
+    "build:web": "npm run build",
+    "build:tauri": "npm run tauri -- build --ci",
+    "build:app": "npm run tauri -- build --ci --no-bundle",
+    "build:debug": "npm run tauri -- build --ci --debug",
+    "build:win": "npm run tauri -- build --ci --bundles nsis,msi",
+    "build:windows": "npm run build:win",
+    "build:exe": "npm run tauri -- build --ci --bundles nsis",
+    "build:nsis": "npm run build:exe",
+    "build:msi": "npm run tauri -- build --ci --bundles msi",
+    "bundle:win": "npm run tauri -- bundle --ci --bundles nsis,msi",
+    "bundle:windows": "npm run bundle:win",
+    "bundle:exe": "npm run tauri -- bundle --ci --bundles nsis",
+    "bundle:nsis": "npm run bundle:exe",
+    "bundle:msi": "npm run tauri -- bundle --ci --bundles msi",
     "preview": "vite preview --host 127.0.0.1 --port 3031",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "check": "npm run test && npm run build",
-    "tauri": "tauri"
+    "tauri:dev": "npm run tauri -- dev",
+    "tauri:info": "npm run tauri -- info",
+    "tauri": "node scripts/tauri-cli.cjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",

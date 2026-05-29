@@ -76,14 +76,23 @@ function savePreset(): void {
           <strong>{{ preset.name }}</strong>
           <small>{{ preset.width }} x {{ preset.height }}</small>
         </button>
-        <button v-for="preset in store.coverPresets.filter((item) => item.custom)" :key="preset.id" class="cover-preset custom-preset" type="button" @click="openWorkspace('cover', preset.id)">
+        <div
+          v-for="preset in store.coverPresets.filter((item) => item.custom)"
+          :key="preset.id"
+          class="cover-preset custom-preset"
+          role="button"
+          tabindex="0"
+          @click="openWorkspace('cover', preset.id)"
+          @keydown.enter.prevent="openWorkspace('cover', preset.id)"
+          @keydown.space.prevent="openWorkspace('cover', preset.id)"
+        >
           <span class="cover-thumb custom">{{ preset.name.slice(0, 4) }}</span>
           <strong>{{ preset.name }}</strong>
           <small>{{ preset.width }} x {{ preset.height }}</small>
           <button class="btn-icon delete-btn" type="button" @click.stop="store.removeCoverPreset(preset.id)">
             <Trash2 :size="14" />
           </button>
-        </button>
+        </div>
         <button class="cover-preset add" type="button" @click="modalOpen = true">
           <Plus :size="28" />
           <strong>自定义尺寸</strong>
