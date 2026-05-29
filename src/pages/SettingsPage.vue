@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Download, FolderOpen, Plus, RotateCcw, Save, Star, TestTube2, Trash2, Upload } from 'lucide-vue-next'
 import { exportFormatOptions, stylePresets } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
@@ -8,6 +9,7 @@ import type { ModelProfile, PromptItem } from '@/types/domain'
 import { createId } from '@/domain/ids'
 
 const store = useAppStore()
+const router = useRouter()
 const activeTab = ref<'models' | 'prompts' | 'generation' | 'system'>('models')
 const promptSourceFilter = ref('all')
 const promptCategoryFilter = ref('all')
@@ -159,6 +161,17 @@ function exportPrompts(): void {
 async function copyPrompt(item: PromptItem): Promise<void> {
   await navigator.clipboard?.writeText(item.prompt)
   store.notify('提示词已复制')
+}
+
+function usePromptInWorkspace(item: PromptItem): void {
+  store.usePrompt(item)
+  void router.push({
+    path: '/workspace',
+    query: {
+      mode: item.category === '封面' ? 'cover' : item.category === 'ICON' ? 'icon' : 'txt2img',
+      prompt: item.prompt,
+    },
+  })
 }
 
 function toggleCoverPreset(id: string, event: Event): void {
@@ -371,7 +384,7 @@ function addCoverPresetFromSettings(): void {
             <p>{{ item.prompt }}</p>
           </div>
           <div class="prompt-actions">
-            <button class="btn-primary btn-sm" type="button" @click="store.usePrompt(item)">使用</button>
+            <button class="btn-primary btn-sm" type="button" @click="usePromptInWorkspace(item)">使用</button>
             <button class="btn-soft btn-sm" type="button" @click="copyPrompt(item)">复制</button>
           </div>
         </article>

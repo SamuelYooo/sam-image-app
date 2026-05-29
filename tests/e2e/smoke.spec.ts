@@ -1180,6 +1180,52 @@ test('prompt market filters prompts by source and category', async ({ page }) =>
   await expect(page.getByText('自定义 ICON 提示词', { exact: true })).toHaveCount(0)
 })
 
+test('prompt market use action opens workspace with the selected prompt', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [
+          {
+            id: 'prompt-use-custom',
+            title: '使用提示词回归测试',
+            prompt: '从 Prompts 市场进入工作台的完整提示词内容',
+            source: 'custom',
+            sourceId: 'use-custom',
+            category: '封面',
+            subCategory: '',
+            author: 'User',
+            tags: ['封面'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-06T00:00:00.000Z',
+          },
+        ],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+  await page.locator('.prompt-card').filter({ hasText: '使用提示词回归测试' }).getByRole('button', { name: '使用' }).click()
+
+  await expect(page).toHaveURL(/\/workspace/)
+  await expect(page.locator('.prompt-preview')).toContainText('从 Prompts 市场进入工作台的完整提示词内容')
+})
+
 test('prompt market copies a prompt to clipboard', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'clipboard', {
