@@ -65,6 +65,7 @@ function reusePrompt(task: GenerationTask): void {
       steps: String(task.steps),
       seed: String(task.seed),
       style: task.style,
+      modeOptions: JSON.stringify(task.modeOptions ?? {}),
     },
   })
 }
@@ -85,6 +86,7 @@ function retryTask(task: GenerationTask): void {
       steps: String(task.steps),
       seed: String(task.seed),
       style: task.style,
+      modeOptions: JSON.stringify(task.modeOptions ?? {}),
     },
   })
 }

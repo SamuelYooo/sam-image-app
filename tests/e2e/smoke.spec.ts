@@ -394,13 +394,15 @@ test('history export all confirms format before downloading every asset', async 
 })
 
 test('history reuse restores generation parameters in workspace', async ({ page }) => {
-  await page.goto('/workspace?mode=txt2img&prompt=历史复用参数回归测试')
+  await page.goto('/workspace?mode=img2img&prompt=历史复用参数回归测试')
   await page.getByRole('button', { name: '赛博' }).click()
   await page.getByLabel('宽度').fill('1536')
   await page.getByLabel('高度').fill('1024')
   await page.getByText('批量').locator('..').getByRole('slider').fill('2')
   await page.getByText('步数').locator('..').getByRole('slider').fill('44')
   await page.getByText('Seed').locator('..').getByRole('spinbutton').fill('987654')
+  await page.getByLabel('图片强度').fill('68')
+  await page.getByLabel('Resize Mode').selectOption('crop-resize')
   await page.getByRole('button', { name: '生成新结果' }).click()
   await expect(page.locator('.sample')).toHaveCount(2)
 
@@ -410,12 +412,15 @@ test('history reuse restores generation parameters in workspace', async ({ page 
 
   await expect(page).toHaveURL(/\/workspace/)
   await expect(page.locator('.prompt-preview')).toContainText('历史复用参数回归测试')
+  await expect(page.getByRole('button', { name: '图生图', exact: true })).toHaveClass(/active/)
   await expect(page.getByRole('button', { name: '赛博' })).toHaveClass(/active/)
   await expect(page.getByLabel('宽度')).toHaveValue('1536')
   await expect(page.getByLabel('高度')).toHaveValue('1024')
   await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('2')
   await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('44')
   await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('987654')
+  await expect(page.getByLabel('图片强度')).toHaveValue('68')
+  await expect(page.getByLabel('Resize Mode')).toHaveValue('crop-resize')
 })
 
 test('history failed task can retry generation with original parameters', async ({ page }) => {
@@ -451,6 +456,10 @@ test('history failed task can retry generation with original parameters', async 
             steps: 37,
             seed: 7654321,
             style: '赛博',
+            modeOptions: {
+              imageStrength: 72,
+              resizeMode: 'resize-fill',
+            },
             status: 'failed',
             error: '模型连接失败',
             assets: [
@@ -496,6 +505,8 @@ test('history failed task can retry generation with original parameters', async 
   await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('2')
   await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('37')
   await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('7654321')
+  await expect(page.getByLabel('图片强度')).toHaveValue('72')
+  await expect(page.getByLabel('Resize Mode')).toHaveValue('resize-fill')
   await expect(page.getByText('已载入失败任务参数，可重新生成')).toBeVisible()
 })
 
@@ -839,6 +850,10 @@ test('home recent detail can retry a failed generation with original parameters'
             steps: 41,
             seed: 424242,
             style: '像素',
+            modeOptions: {
+              imageStrength: 74,
+              resizeMode: 'crop-resize',
+            },
             status: 'failed',
             error: '模型连接失败',
             assets: [
@@ -886,6 +901,8 @@ test('home recent detail can retry a failed generation with original parameters'
   await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('3')
   await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('41')
   await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('424242')
+  await expect(page.getByLabel('图片强度')).toHaveValue('74')
+  await expect(page.getByLabel('Resize Mode')).toHaveValue('crop-resize')
   await expect(page.getByText('已载入失败任务参数，可重新生成')).toBeVisible()
 })
 

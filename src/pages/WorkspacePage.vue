@@ -41,6 +41,9 @@ const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 const exportScale = ref(1)
 const retryNotice = ref('')
 const referenceInput = ref<HTMLInputElement | null>(null)
+const resizeModeOptions = ['just-resize', 'crop-resize', 'resize-fill'] as const
+const iconBackgroundOptions = ['transparent', 'rounded', 'solid'] as const
+type RouteModeOptions = Record<string, string | number | boolean>
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
 const modeFlowCopy = computed(() => {
@@ -107,6 +110,44 @@ function routeInteger(name: string, fallback: number, min: number, max: number):
   return Math.min(max, Math.max(min, Math.round(parsed)))
 }
 
+function modeOptionInteger(options: RouteModeOptions, name: string, fallback: number, min: number, max: number): number {
+  const value = options[name]
+  if (typeof value !== 'string' && typeof value !== 'number') return fallback
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, Math.round(parsed)))
+}
+
+function routeModeOptions(): RouteModeOptions {
+  const raw = routeString('modeOptions')
+  if (!raw) return {}
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return {}
+    return parsed as RouteModeOptions
+  } catch {
+    return {}
+  }
+}
+
+function applyRouteModeOptions(options: RouteModeOptions): void {
+  creativity.value = modeOptionInteger(options, 'creativity', creativity.value, 0, 100)
+  detailLevel.value = modeOptionInteger(options, 'detailLevel', detailLevel.value, 0, 100)
+  imageStrength.value = modeOptionInteger(options, 'imageStrength', imageStrength.value, 0, 100)
+  depthStrength.value = modeOptionInteger(options, 'depthStrength', depthStrength.value, 0, 100)
+  gifDuration.value = modeOptionInteger(options, 'durationSeconds', gifDuration.value, 2, 8)
+
+  const nextResizeMode = options.resizeMode
+  if (typeof nextResizeMode === 'string' && resizeModeOptions.includes(nextResizeMode as (typeof resizeModeOptions)[number])) {
+    resizeMode.value = nextResizeMode
+  }
+
+  const nextBackground = options.background
+  if (typeof nextBackground === 'string' && iconBackgroundOptions.includes(nextBackground as (typeof iconBackgroundOptions)[number])) {
+    iconBackground.value = nextBackground
+  }
+}
+
 onMounted(() => {
   selectedModelId.value = defaultModel.value?.id ?? ''
   selectedTextModelId.value = selectedTextModel.value?.id ?? ''
@@ -142,6 +183,7 @@ onMounted(() => {
   batchSize.value = routeInteger('batchSize', batchSize.value, 1, 4)
   steps.value = routeInteger('steps', steps.value, 1, 80)
   seed.value = routeInteger('seed', seed.value, 0, 999999999)
+  applyRouteModeOptions(routeModeOptions())
   window.addEventListener('keydown', handleShortcut)
   window.addEventListener('paste', handlePaste)
 })
