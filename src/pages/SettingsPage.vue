@@ -76,6 +76,13 @@ function editModel(model: ModelProfile): void {
   draft.value = { ...model }
 }
 
+function removeModelWithConfirmation(model: ModelProfile): void {
+  const confirmed = window.confirm(`确定删除模型「${model.name}」？此操作会移除该模型的 API 地址、Key 和连接状态。`)
+  if (!confirmed) return
+
+  store.removeModel(model.id)
+}
+
 function saveDraft(): void {
   if (!draft.value.name.trim()) {
     store.notify('请输入模型名称', 'error')
@@ -292,7 +299,7 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
               <TestTube2 :size="14" />
               检测连接
             </button>
-            <button class="btn-danger btn-sm" type="button" @click="store.removeModel(model.id)">删除</button>
+            <button class="btn-danger btn-sm" type="button" @click="removeModelWithConfirmation(model)">删除</button>
           </div>
         </article>
       </div>

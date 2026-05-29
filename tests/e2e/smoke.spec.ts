@@ -1815,6 +1815,71 @@ test('settings model cards can set the primary image model directly', async ({ p
   await expect(page.getByLabel('图像模型')).toHaveValue('secondary-image')
 })
 
+test('settings model deletion requires confirmation before removing user models', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [
+          {
+            id: 'local-preview',
+            name: 'Local Preview',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'samimage-local-preview',
+            kind: 'image',
+            isPrimary: true,
+            status: 'connected',
+          },
+          {
+            id: 'delete-guard-image',
+            name: 'Delete Guard Image',
+            provider: 'openai-compatible',
+            endpoint: 'https://api.example.com/v1/images/generations',
+            apiKey: 'sk-delete-guard',
+            model: 'delete-guard-model',
+            kind: 'image',
+            isPrimary: false,
+            status: 'connected',
+          },
+        ],
+        prompts: [],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultImageModelId: 'local-preview',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  const modelCard = page.locator('.model-card').filter({ hasText: 'Delete Guard Image' })
+  await expect(modelCard).toBeVisible()
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('删除模型')
+    expect(dialog.message()).toContain('Delete Guard Image')
+    await dialog.dismiss()
+  })
+  await modelCard.getByRole('button', { name: '删除' }).click()
+
+  await expect(modelCard).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return state.models?.some((model: { id: string }) => model.id === 'delete-guard-image')
+  })).toBe(true)
+})
+
 test('settings model editor can fetch a model from the local catalog', async ({ page }) => {
   await page.goto('/settings')
 
