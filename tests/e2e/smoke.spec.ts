@@ -285,6 +285,28 @@ test('workspace export includes prompt metadata when enabled', async ({ page }) 
   expect(metadata.asset.height).toBe(768)
 })
 
+test('workspace export metadata includes mode-specific parameters', async ({ page }) => {
+  await page.goto('/workspace?mode=img2img&prompt=图生图模式参数回归测试')
+  await page.getByLabel('图片强度').fill('68')
+  await page.getByLabel('Resize Mode').selectOption('crop-resize')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await page.getByLabel('格式').selectOption('png')
+
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 2)
+  const metadataDownload = findDownload(downloads, '.metadata.json')
+  const metadataPath = await metadataDownload.path()
+  expect(metadataPath).toBeTruthy()
+  const metadata = JSON.parse(await readFile(metadataPath!, 'utf8'))
+
+  expect(metadata.modeOptions).toEqual({
+    imageStrength: 68,
+    resizeMode: 'crop-resize',
+  })
+})
+
 test('workspace export omits prompt metadata when disabled', async ({ page }) => {
   await page.goto('/settings')
   await page.getByRole('button', { name: '生成参数' }).click()

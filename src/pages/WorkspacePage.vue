@@ -19,6 +19,13 @@ const height = ref(store.settings.defaultGenerationSize)
 const batchSize = ref(store.settings.defaultBatchSize)
 const steps = ref(28)
 const seed = ref(128409)
+const creativity = ref(64)
+const detailLevel = ref(72)
+const imageStrength = ref(55)
+const resizeMode = ref('just-resize')
+const iconBackground = ref('transparent')
+const depthStrength = ref(78)
+const gifDuration = ref(4)
 const selectedModelId = ref('')
 const selectedTextModelId = ref('')
 const referenceImage = ref('')
@@ -59,6 +66,23 @@ const visiblePrompts = computed(() => {
     .slice(0, 24)
 })
 const currentAssets = computed(() => currentTask.value?.assets ?? store.recentTasks[0]?.assets ?? [])
+const modeOptions = computed<Record<string, string | number | boolean>>(() => {
+  const options: Record<string, string | number | boolean> = {}
+  if (mode.value === 'txt2img') {
+    options.creativity = creativity.value
+    options.detailLevel = detailLevel.value
+  } else if (mode.value === 'img2img') {
+    options.imageStrength = imageStrength.value
+    options.resizeMode = resizeMode.value
+  } else if (mode.value === 'icon') {
+    options.background = iconBackground.value
+  } else if (mode.value === '3d') {
+    options.depthStrength = depthStrength.value
+  } else if (mode.value === 'gif') {
+    options.durationSeconds = gifDuration.value
+  }
+  return options
+})
 
 watch(prompt, (value) => store.setActivePrompt(value))
 watch(() => store.activePrompt, (value) => {
@@ -233,6 +257,7 @@ async function generate(): Promise<void> {
       seed: seed.value,
       style: style.value,
       referenceImage: referenceImage.value,
+      modeOptions: modeOptions.value,
     })
     currentTask.value = task
     selectedAsset.value = task.assets[0] ?? null
@@ -538,6 +563,44 @@ async function chooseWorkspaceExportDir(): Promise<void> {
             <label>Seed</label>
             <input v-model.number="seed" type="number" />
           </div>
+        </div>
+
+        <div class="block">
+          <div class="title-row">
+            <strong>模式专属</strong>
+            <span>{{ currentModeLabel }}</span>
+          </div>
+          <template v-if="mode === 'txt2img'">
+            <div class="range-row"><label for="workspace-creativity">创意度</label><input id="workspace-creativity" v-model.number="creativity" type="range" min="0" max="100" /><b>{{ creativity }}</b></div>
+            <div class="range-row"><label for="workspace-detail-level">细节</label><input id="workspace-detail-level" v-model.number="detailLevel" type="range" min="0" max="100" /><b>{{ detailLevel }}</b></div>
+          </template>
+          <template v-else-if="mode === 'img2img'">
+            <div class="range-row"><label for="workspace-image-strength">图片强度</label><input id="workspace-image-strength" v-model.number="imageStrength" type="range" min="0" max="100" /><b>{{ imageStrength }}</b></div>
+            <div class="field">
+              <label for="workspace-resize-mode">Resize Mode</label>
+              <select id="workspace-resize-mode" v-model="resizeMode">
+                <option value="just-resize">Just resize</option>
+                <option value="crop-resize">Crop and resize</option>
+                <option value="resize-fill">Resize and fill</option>
+              </select>
+            </div>
+          </template>
+          <template v-else-if="mode === 'icon'">
+            <div class="chip-grid">
+              <button class="chip-button" :class="{ active: iconBackground === 'transparent' }" type="button" @click="iconBackground = 'transparent'">透明底</button>
+              <button class="chip-button" :class="{ active: iconBackground === 'rounded' }" type="button" @click="iconBackground = 'rounded'">圆角底</button>
+              <button class="chip-button" :class="{ active: iconBackground === 'solid' }" type="button" @click="iconBackground = 'solid'">纯色底</button>
+            </div>
+          </template>
+          <template v-else-if="mode === '3d'">
+            <div class="range-row"><label for="workspace-depth-strength">立体感</label><input id="workspace-depth-strength" v-model.number="depthStrength" type="range" min="0" max="100" /><b>{{ depthStrength }}</b></div>
+          </template>
+          <template v-else-if="mode === 'gif'">
+            <div class="range-row"><label for="workspace-gif-duration">时长</label><input id="workspace-gif-duration" v-model.number="gifDuration" type="range" min="2" max="8" /><b>{{ gifDuration }}s</b></div>
+          </template>
+          <template v-else>
+            <p class="muted">封面图使用输出尺寸和风格预设控制平台效果。</p>
+          </template>
         </div>
 
         <div class="block mode-flow-block">

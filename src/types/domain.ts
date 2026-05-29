@@ -43,6 +43,7 @@ export interface GenerationInput {
   seed: number
   style: string
   referenceImage?: string
+  modeOptions?: Record<string, string | number | boolean>
 }
 
 export interface GeneratedAsset {
@@ -69,6 +70,7 @@ export interface GenerationTask {
   steps: number
   seed: number
   style: string
+  modeOptions?: Record<string, string | number | boolean>
   status: TaskStatus
   error?: string
   isFavorite?: boolean

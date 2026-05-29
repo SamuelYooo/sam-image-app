@@ -551,6 +551,7 @@ export const useAppStore = defineStore('app', () => {
         steps: task.steps,
         seed: task.seed,
         style: task.style,
+        modeOptions: task.modeOptions ?? {},
         status: task.status,
         createdAt: task.createdAt,
         asset: {

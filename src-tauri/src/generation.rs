@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -44,6 +45,8 @@ pub struct GenerationInput {
     pub seed: u64,
     pub style: String,
     pub reference_image: Option<String>,
+    #[serde(default, rename = "modeOptions")]
+    pub mode_options: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +77,8 @@ pub struct GenerationTask {
     pub steps: u8,
     pub seed: u64,
     pub style: String,
+    #[serde(default, rename = "modeOptions")]
+    pub mode_options: Value,
     pub status: String,
     pub error: Option<String>,
     pub is_favorite: Option<bool>,
@@ -131,6 +136,7 @@ pub fn create_local_generation(input: GenerationInput) -> Result<GenerationTask,
         steps: input.steps,
         seed: input.seed,
         style: input.style,
+        mode_options: input.mode_options,
         status: "completed".into(),
         error: None,
         is_favorite: Some(false),

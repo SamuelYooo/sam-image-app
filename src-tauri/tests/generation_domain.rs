@@ -15,6 +15,7 @@ fn valid_input() -> GenerationInput {
         seed: 128409,
         style: "赛博".into(),
         reference_image: None,
+        mode_options: serde_json::Value::Null,
     }
 }
 
@@ -52,4 +53,20 @@ fn local_generation_creates_gif_assets_for_gif_mode() {
     assert_eq!(task.assets.len(), 1);
     assert_eq!(task.assets[0].format, "gif");
     assert!(task.assets[0].data_url.starts_with("data:image/gif"));
+}
+
+#[test]
+fn local_generation_keeps_mode_specific_options() {
+    let mut input = valid_input();
+    input.mode = GenerationMode::Img2Img;
+    input.reference_image = Some("data:image/png;base64,AAAA".into());
+    input.mode_options = serde_json::json!({
+        "imageStrength": 68,
+        "resizeMode": "crop-resize"
+    });
+
+    let task = create_local_generation(input).expect("mode options should be preserved");
+
+    assert_eq!(task.mode_options["imageStrength"], 68);
+    assert_eq!(task.mode_options["resizeMode"], "crop-resize");
 }

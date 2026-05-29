@@ -68,4 +68,29 @@ describe('generation task domain', () => {
     )
     expect(task.assets[0].dataUrl).toContain('data:image/gif')
   })
+
+  it('keeps mode-specific options on generated tasks', () => {
+    const task = createLocalGeneration({
+      mode: 'img2img',
+      prompt: '图生图强度回归测试',
+      negativePrompt: '低清晰度',
+      modelId: 'local-preview',
+      width: 768,
+      height: 768,
+      batchSize: 1,
+      steps: 24,
+      seed: 42,
+      style: '摄影',
+      referenceImage: 'data:image/png;base64,AAAA',
+      modeOptions: {
+        imageStrength: 68,
+        resizeMode: 'crop-resize',
+      },
+    })
+
+    expect(task.modeOptions).toEqual({
+      imageStrength: 68,
+      resizeMode: 'crop-resize',
+    })
+  })
 })
