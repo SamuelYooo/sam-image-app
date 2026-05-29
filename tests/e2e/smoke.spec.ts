@@ -81,6 +81,27 @@ test('default export format from settings is used by workspace export', async ({
   expect(content.subarray(8, 12).toString('ascii')).toBe('WEBP')
 })
 
+test('workspace export scale produces a larger png download', async ({ page }) => {
+  await page.goto('/workspace?mode=cover&prompt=导出倍率回归测试封面')
+  await page.getByLabel('宽度').fill('320')
+  await page.getByLabel('高度').fill('240')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await page.getByLabel('格式').selectOption('png')
+  await page.getByLabel('倍率').selectOption('2')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: '导出图片' }).click()
+  const download = await downloadPromise
+  const path = await download.path()
+  expect(path).toBeTruthy()
+  const content = await readFile(path!)
+  expect(content.readUInt32BE(16)).toBe(640)
+  expect(content.readUInt32BE(20)).toBe(480)
+})
+
 test('history detail export confirms format before browser download', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=历史导出弹窗回归测试封面')
   await page.getByRole('button', { name: '生成新结果' }).click()

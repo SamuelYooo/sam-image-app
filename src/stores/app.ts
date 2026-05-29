@@ -307,8 +307,8 @@ export const useAppStore = defineStore('app', () => {
     notify(`已导出 ${assets.length} 个结果`)
   }
 
-  async function downloadAsset(asset: GeneratedAsset, format: ExportFormat = settings.value.defaultExportFormat): Promise<void> {
-    const exportData = await prepareExportAsset(asset, format)
+  async function downloadAsset(asset: GeneratedAsset, format: ExportFormat = settings.value.defaultExportFormat, scale = 1): Promise<void> {
+    const exportData = await prepareExportAsset(asset, format, scale)
     const result = await invokeOptional<{ path: string }>('export_generated_asset', {
       request: {
         dataUrl: exportData.dataUrl,
@@ -332,10 +332,10 @@ export const useAppStore = defineStore('app', () => {
     notify('已导出到浏览器下载目录')
   }
 
-  async function prepareExportAsset(asset: GeneratedAsset, format: ExportFormat): Promise<{ dataUrl: string; format: ExportFormat }> {
-    if (format === asset.format) return { dataUrl: asset.dataUrl, format }
+  async function prepareExportAsset(asset: GeneratedAsset, format: ExportFormat, scale = 1): Promise<{ dataUrl: string; format: ExportFormat }> {
+    if (format === asset.format && scale === 1) return { dataUrl: asset.dataUrl, format }
     if (format === 'svg' || format === 'gif') return { dataUrl: asset.dataUrl, format: asset.format }
-    return { dataUrl: await rasterizeDataUrl(asset.dataUrl, asset.width, asset.height, format), format }
+    return { dataUrl: await rasterizeDataUrl(asset.dataUrl, asset.width * scale, asset.height * scale, format), format }
   }
 
   return {

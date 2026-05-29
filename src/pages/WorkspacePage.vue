@@ -29,6 +29,7 @@ const libraryOpen = ref(false)
 const exportOpen = ref(false)
 const promptSearch = ref('')
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
+const exportScale = ref(1)
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
 const defaultModel = computed(() => store.defaultImageModel)
@@ -222,12 +223,13 @@ async function downloadSelected(): Promise<void> {
     store.notify('请先选择结果', 'error')
     return
   }
-  await store.downloadAsset(selectedAsset.value, exportFormat.value)
+  await store.downloadAsset(selectedAsset.value, exportFormat.value, exportScale.value)
   exportOpen.value = false
 }
 
 function openExportDialog(): void {
   exportFormat.value = store.settings.defaultExportFormat
+  exportScale.value = 1
   exportOpen.value = true
 }
 </script>
@@ -495,6 +497,14 @@ function openExportDialog(): void {
             <label for="workspace-export-format">格式</label>
             <select id="workspace-export-format" v-model="exportFormat">
               <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="workspace-export-scale">倍率</label>
+            <select id="workspace-export-scale" v-model.number="exportScale">
+              <option :value="1">1x 原尺寸</option>
+              <option :value="2">2x 高清</option>
+              <option :value="4">4x 超清</option>
             </select>
           </div>
         </div>
