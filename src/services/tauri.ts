@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 declare global {
   interface Window {
     __TAURI_INTERNALS__?: unknown
+    samimageE2eDirectory?: string
   }
 }
 
@@ -16,6 +17,27 @@ export async function invokeOptional<T>(command: string, args?: Record<string, u
     return await invoke<T>(command, args)
   } catch (error) {
     console.warn(`Tauri command failed: ${command}`, error)
+    return null
+  }
+}
+
+export async function pickDirectory(defaultPath?: string): Promise<string | null> {
+  const browserFallback = typeof window !== 'undefined' ? window.samimageE2eDirectory : undefined
+  if (!isTauriRuntime()) return browserFallback ?? null
+
+  try {
+    return await invoke<string | null>('plugin:dialog|open', {
+      options: {
+        title: '选择输出目录',
+        directory: true,
+        multiple: false,
+        defaultPath: defaultPath?.trim() || undefined,
+        recursive: true,
+        canCreateDirectories: true,
+      },
+    })
+  } catch (error) {
+    console.warn('Tauri directory picker failed', error)
     return null
   }
 }

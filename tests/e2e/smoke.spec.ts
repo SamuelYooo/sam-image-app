@@ -95,6 +95,24 @@ test('default export format from settings is used by workspace export', async ({
   expect(content.subarray(8, 12).toString('ascii')).toBe('WEBP')
 })
 
+test('settings can pick and persist the default output directory', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.samimageE2eDirectory = 'D:\\SamImage\\Picked'
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+  await page.getByRole('button', { name: '重新选择目录' }).click()
+
+  await expect(page.getByLabel('默认输出目录')).toHaveValue('D:\\SamImage\\Picked')
+  await page.getByRole('button', { name: '保存系统设置' }).click()
+  await expect(page.getByText('设置已保存')).toBeVisible()
+
+  await page.reload()
+  await page.getByRole('button', { name: '系统设置' }).click()
+  await expect(page.getByLabel('默认输出目录')).toHaveValue('D:\\SamImage\\Picked')
+})
+
 test('workspace export scale produces a larger png download', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=导出倍率回归测试封面')
   await page.getByLabel('宽度').fill('320')

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Download, Plus, RotateCcw, Save, Star, TestTube2, Trash2, Upload } from 'lucide-vue-next'
+import { Download, FolderOpen, Plus, RotateCcw, Save, Star, TestTube2, Trash2, Upload } from 'lucide-vue-next'
 import { exportFormatOptions, stylePresets } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
+import { pickDirectory } from '@/services/tauri'
 import type { ModelProfile, PromptItem } from '@/types/domain'
 import { createId } from '@/domain/ids'
 
@@ -141,6 +142,14 @@ async function copyPrompt(item: PromptItem): Promise<void> {
 function toggleCoverPreset(id: string, event: Event): void {
   const input = event.target as HTMLInputElement
   store.setCoverPresetEnabled(id, input.checked)
+}
+
+async function chooseDefaultOutputDir(): Promise<void> {
+  const directory = await pickDirectory(store.settings.defaultOutputDir)
+  if (!directory) return
+
+  store.settings.defaultOutputDir = directory
+  store.notify('默认输出目录已更新')
 }
 </script>
 
@@ -353,7 +362,13 @@ function toggleCoverPreset(id: string, event: Event): void {
           <h2>系统设置</h2>
           <div class="field">
             <label for="default-output-dir">默认输出目录</label>
-            <input id="default-output-dir" v-model="store.settings.defaultOutputDir" />
+            <div class="directory-picker">
+              <input id="default-output-dir" v-model="store.settings.defaultOutputDir" />
+              <button class="btn-soft" type="button" @click="chooseDefaultOutputDir">
+                <FolderOpen :size="16" />
+                重新选择目录
+              </button>
+            </div>
           </div>
           <div class="field">
             <label for="default-export-format">默认导出格式</label>
@@ -686,6 +701,16 @@ function toggleCoverPreset(id: string, event: Event): void {
   font-size: 11px;
 }
 
+.directory-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.directory-picker .btn-soft {
+  white-space: nowrap;
+}
+
 .builtin-note {
   color: var(--muted);
   font-family: var(--font-mono);
@@ -703,6 +728,10 @@ function toggleCoverPreset(id: string, event: Event): void {
   }
 
   .model-fetch-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .directory-picker {
     grid-template-columns: 1fr;
   }
 }
