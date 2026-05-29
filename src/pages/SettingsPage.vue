@@ -19,6 +19,7 @@ const coverPresetModalOpen = ref(false)
 const coverPresetName = ref('')
 const coverPresetWidth = ref(1080)
 const coverPresetHeight = ref(608)
+const coverPresetEnabled = ref(true)
 const draft = ref<ModelProfile>({
   id: '',
   name: '',
@@ -177,6 +178,7 @@ function openCoverPresetModal(): void {
   coverPresetName.value = ''
   coverPresetWidth.value = 1080
   coverPresetHeight.value = 608
+  coverPresetEnabled.value = true
   coverPresetModalOpen.value = true
 }
 
@@ -191,7 +193,7 @@ function addCoverPresetFromSettings(): void {
     name,
     width: coverPresetWidth.value,
     height: coverPresetHeight.value,
-    enabled: true,
+    enabled: coverPresetEnabled.value,
   })
   coverPresetModalOpen.value = false
 }
@@ -515,6 +517,10 @@ function addCoverPresetFromSettings(): void {
               <input id="settings-cover-preset-height" v-model.number="coverPresetHeight" type="number" min="128" max="4096" />
             </div>
           </div>
+          <label class="toggle-line">
+            <input v-model="coverPresetEnabled" type="checkbox" aria-label="启用新预设" />
+            启用
+          </label>
         </div>
         <div class="modal-foot">
           <button class="btn-soft" type="button" @click="coverPresetModalOpen = false">取消</button>

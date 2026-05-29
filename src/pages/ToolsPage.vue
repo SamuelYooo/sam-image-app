@@ -13,7 +13,7 @@ const modalOpen = ref(false)
 const presetName = ref('')
 const presetWidth = ref<number | ''>('')
 const presetHeight = ref<number | ''>('')
-const customCoverPresets = computed(() => store.coverPresets.filter((preset) => preset.custom))
+const customCoverPresets = computed(() => store.coverPresets.filter((preset) => preset.custom && preset.enabled))
 const presetRatio = computed(() => {
   const width = Math.round(Number(presetWidth.value))
   const height = Math.round(Number(presetHeight.value))

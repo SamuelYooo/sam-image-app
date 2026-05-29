@@ -1335,6 +1335,34 @@ test('settings can add a custom cover preset for tools and workspace', async ({ 
   await expect(page.getByLabel('高度')).toHaveValue('1200')
 })
 
+test('settings can save a custom cover preset disabled before publishing to tools', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+
+  await page.getByRole('button', { name: '新增预设' }).click()
+  await page.getByLabel('名称').fill('设置页停用封面')
+  await page.getByLabel('宽度').fill('1600')
+  await page.getByLabel('高度').fill('900')
+  await page.getByLabel('启用新预设').uncheck()
+  await page.getByRole('button', { name: '添加预设' }).click()
+
+  const presetRow = page.locator('.cover-row').filter({ hasText: '设置页停用封面' })
+  await expect(presetRow).toContainText('1600 x 900')
+  await expect(page.getByText('4 个启用')).toBeVisible()
+  await expect(page.getByLabel('启用 设置页停用封面')).not.toBeChecked()
+
+  await page.goto('/tools')
+  await expect(page.locator('.cover-preset').filter({ hasText: '设置页停用封面' })).toHaveCount(0)
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+  await page.getByLabel('启用 设置页停用封面').check()
+  await expect(page.getByText('5 个启用')).toBeVisible()
+
+  await page.goto('/tools')
+  await expect(page.locator('.cover-preset').filter({ hasText: '设置页停用封面' })).toBeVisible()
+})
+
 test('tools page manages custom cover presets', async ({ page }) => {
   await page.goto('/tools')
 
