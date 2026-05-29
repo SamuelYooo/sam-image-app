@@ -30,6 +30,17 @@ fn rejects_non_data_url_exports() {
 }
 
 #[test]
+fn rejects_unsupported_export_formats() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let data_url = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==";
+
+    let error = export_asset_data_url(data_url, temp_dir.path(), "bad", "html")
+        .expect_err("unsupported export formats should fail");
+
+    assert!(error.to_string().contains("不支持的导出格式"));
+}
+
+#[test]
 fn exports_metadata_json_sidecar_to_requested_directory() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
 

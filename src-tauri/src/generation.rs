@@ -157,7 +157,7 @@ pub fn export_asset_data_url(
     std::fs::create_dir_all(output_dir)
         .map_err(|error| GenerationError::Validation(format!("创建导出目录失败: {error}")))?;
 
-    let extension = sanitize_extension(format);
+    let extension = normalize_export_format(format)?;
     let file_name = format!("{}.{}", sanitize_export_name(title), extension);
     let path = output_dir.join(file_name);
     std::fs::write(&path, bytes)
@@ -203,17 +203,23 @@ pub fn sanitize_export_name(value: &str) -> String {
     }
 }
 
-fn sanitize_extension(value: &str) -> String {
+fn normalize_export_format(value: &str) -> Result<&'static str, GenerationError> {
     let extension: String = value
         .trim()
         .trim_start_matches('.')
         .chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
         .collect();
-    if extension.is_empty() {
-        "svg".into()
-    } else {
-        extension.to_ascii_lowercase()
+    match extension.to_ascii_lowercase().as_str() {
+        "svg" => Ok("svg"),
+        "png" => Ok("png"),
+        "jpg" | "jpeg" => Ok("jpg"),
+        "webp" => Ok("webp"),
+        "gif" => Ok("gif"),
+        _ => Err(GenerationError::Validation(format!(
+            "不支持的导出格式: {}",
+            value.trim()
+        ))),
     }
 }
 
