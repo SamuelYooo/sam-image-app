@@ -886,6 +886,38 @@ test('prompt market syncs open source prompt repositories safely', async ({ page
   await expect(page.getByText('远程 Glidea 封面提示词')).toBeVisible()
 })
 
+test('prompt market sync parses markdown readme prompt blocks', async ({ page }) => {
+  await page.addInitScript(() => {
+    const markdownPayload = [
+      '# Awesome GPT Image Prompts',
+      '## 封面',
+      '### 霓虹封面',
+      '```',
+      '小红书封面，赛博霓虹标题，清晰信息层级',
+      '```',
+    ].join('\n')
+    window.fetch = async () => new Response(markdownPayload, { status: 200, headers: { 'Content-Type': 'text/markdown' } })
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+  await page.getByRole('button', { name: '同步-EvoLinkAI' }).click()
+
+  await expect(page.getByText('EvoLinkAI 已同步 1 条提示词')).toBeVisible()
+  await expect(page.getByText('霓虹封面')).toBeVisible()
+  await page.getByLabel('来源筛选').selectOption('EvoLinkAI')
+  await page.getByLabel('分类筛选').selectOption('封面')
+  await expect(page.getByText('小红书封面，赛博霓虹标题，清晰信息层级')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    const prompt = state.prompts?.find((item: { source: string; title: string }) => item.source === 'EvoLinkAI' && item.title === '霓虹封面')
+    return {
+      category: prompt?.category,
+      syncCount: state.promptSync?.EvoLinkAI?.count,
+    }
+  })).toEqual({ category: '封面', syncCount: 1 })
+})
+
 test('settings cover presets control the tools catalog', async ({ page }) => {
   await page.goto('/settings')
   await page.getByRole('button', { name: '系统设置' }).click()

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { createLocalGeneration } from '@/domain/generation'
-import { mergePromptItems, normalizePromptImport } from '@/domain/promptImport'
+import { mergePromptItems, normalizePromptImport, normalizePromptSync } from '@/domain/promptImport'
 import {
   defaultCoverPresets,
   defaultModels,
@@ -93,6 +93,8 @@ const promptSyncSources: PromptSyncSource[] = [
     candidates: [
       'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/main/prompts.json',
       'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/master/prompts.json',
+      'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/main/public/prompts.json',
+      'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/main/data/prompts.json',
     ],
   },
   {
@@ -102,6 +104,8 @@ const promptSyncSources: PromptSyncSource[] = [
     candidates: [
       'https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts/main/prompts.json',
       'https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts/master/prompts.json',
+      'https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts/main/README.md',
+      'https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts/master/README.md',
     ],
   },
   {
@@ -111,6 +115,8 @@ const promptSyncSources: PromptSyncSource[] = [
     candidates: [
       'https://raw.githubusercontent.com/freestylefly/awesome-gpt-image-2/main/prompts.json',
       'https://raw.githubusercontent.com/freestylefly/awesome-gpt-image-2/master/prompts.json',
+      'https://raw.githubusercontent.com/freestylefly/awesome-gpt-image-2/main/README.md',
+      'https://raw.githubusercontent.com/freestylefly/awesome-gpt-image-2/master/README.md',
     ],
   },
 ]
@@ -289,7 +295,7 @@ export const useAppStore = defineStore('app', () => {
         }
 
         const content = await response.text()
-        const imported = normalizePromptImport(content, `${key}-prompts.json`)
+        const imported = normalizePromptSync(content, key, url)
         if (!imported.length) {
           lastError = new Error('未解析到提示词')
           continue

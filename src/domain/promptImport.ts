@@ -34,6 +34,34 @@ function detectSource(filename: string): PromptItem['source'] {
   return 'custom'
 }
 
+function normalizeKnownSource(value: PromptItem['source']): PromptItem['source'] {
+  return KNOWN_SOURCES.includes(value as (typeof KNOWN_SOURCES)[number]) ? value : 'custom'
+}
+
+function createPromptItem(
+  source: PromptItem['source'],
+  sourceId: string,
+  title: string,
+  prompt: string,
+  category = '',
+): PromptItem {
+  const now = new Date().toISOString()
+  return {
+    id: stableId('prompt', `${source}-${sourceId}-${prompt}`),
+    title,
+    prompt,
+    source: normalizeKnownSource(source),
+    sourceId,
+    category,
+    subCategory: '',
+    author: '',
+    tags: category ? [category] : [],
+    preview: '',
+    refImages: [],
+    createdAt: now,
+  }
+}
+
 export function normalizePromptImport(content: string, filename: string): PromptItem[] {
   let parsed: unknown
   try {
@@ -64,7 +92,7 @@ export function normalizePromptImport(content: string, filename: string): Prompt
         id: stableId('prompt', `${source}-${sourceId}-${prompt}`),
         title,
         prompt,
-        source: KNOWN_SOURCES.includes(source as (typeof KNOWN_SOURCES)[number]) ? source : 'custom',
+        source: normalizeKnownSource(source),
         sourceId,
         category: rawCategory,
         subCategory: asString(item.sub_category),
@@ -76,6 +104,81 @@ export function normalizePromptImport(content: string, filename: string): Prompt
       }
     })
     .filter((item): item is PromptItem => item !== null)
+}
+
+export function normalizePromptSync(content: string, source: PromptItem['source'], sourceUrl: string): PromptItem[] {
+  try {
+    return normalizePromptImport(content, `${source}-prompts.json`)
+  } catch {
+    return normalizePromptMarkdown(content, source, sourceUrl)
+  }
+}
+
+function normalizePromptMarkdown(content: string, source: PromptItem['source'], sourceUrl: string): PromptItem[] {
+  const items: PromptItem[] = []
+  const lines = content.split(/\r?\n/)
+  let category = ''
+  let title = ''
+  let codeLines: string[] = []
+  let codeCategory = ''
+  let codeTitle = ''
+  let inCodeBlock = false
+
+  function pushPrompt(prompt: string, itemTitle: string, itemCategory: string): void {
+    if (prompt.length < 8) return
+    const index = items.length
+    const fallbackTitle = prompt.split(/\r?\n/).find(Boolean)?.slice(0, 48) || `${source} Prompt ${index + 1}`
+    items.push(createPromptItem(
+      source,
+      stableId(source, `${sourceUrl}-${prompt}-${index}`),
+      itemTitle || fallbackTitle,
+      prompt,
+      itemCategory,
+    ))
+  }
+
+  for (const line of lines) {
+    if (line.trim().startsWith('```')) {
+      if (!inCodeBlock) {
+        inCodeBlock = true
+        codeLines = []
+        codeCategory = category
+        codeTitle = title
+      } else {
+        inCodeBlock = false
+        pushPrompt(codeLines.join('\n').trim(), codeTitle, codeCategory)
+      }
+      continue
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line)
+      continue
+    }
+
+    const categoryMatch = line.match(/^##\s+(.+?)\s*$/)
+    const titleMatch = line.match(/^###\s+(.+?)\s*$/)
+    if (categoryMatch) {
+      category = categoryMatch[1].trim()
+      title = ''
+    } else if (titleMatch) {
+      title = titleMatch[1].trim()
+    }
+  }
+
+  if (items.length) return items
+
+  const promptLines = Array.from(content.matchAll(/(?:^|\n)\s*(?:Prompt|提示词)[:：]\s*(.+)/gi))
+    .map((match) => match[1]?.trim())
+    .filter((prompt): prompt is string => Boolean(prompt && prompt.length >= 8))
+
+  return promptLines.map((prompt, index) => createPromptItem(
+    source,
+    stableId(source, `${sourceUrl}-${prompt}-${index}`),
+    title || prompt.slice(0, 48),
+    prompt,
+    category,
+  ))
 }
 
 export function mergePromptItems(existing: PromptItem[], incoming: PromptItem[]): PromptItem[] {

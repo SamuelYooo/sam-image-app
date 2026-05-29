@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergePromptItems, normalizePromptImport } from '../promptImport'
+import { mergePromptItems, normalizePromptImport, normalizePromptSync } from '../promptImport'
 
 describe('prompt import normalization', () => {
   it('normalizes array, wrapped, and loose prompt fields into one stable shape', () => {
@@ -44,5 +44,29 @@ describe('prompt import normalization', () => {
     )
 
     expect(mergePromptItems(existing, incoming)).toHaveLength(2)
+  })
+
+  it('extracts prompt code blocks from synced markdown readmes', () => {
+    const imported = normalizePromptSync(
+      [
+        '# Awesome prompts',
+        '## 封面',
+        '### 霓虹封面',
+        '```',
+        '小红书封面，赛博霓虹标题，清晰信息层级',
+        '```',
+      ].join('\n'),
+      'EvoLinkAI',
+      'https://example.test/README.md',
+    )
+
+    expect(imported).toEqual([
+      expect.objectContaining({
+        title: '霓虹封面',
+        prompt: '小红书封面，赛博霓虹标题，清晰信息层级',
+        source: 'EvoLinkAI',
+        category: '封面',
+      }),
+    ])
   })
 })
