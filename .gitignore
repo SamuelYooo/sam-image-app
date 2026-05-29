@@ -2,6 +2,7 @@ design/
 docs/
 .omx/
 .codegraph/
+.tmp/
 node_modules/
 dist/
 .cargo-target*/

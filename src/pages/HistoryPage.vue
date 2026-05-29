@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Download, Eye, Search, Trash2 } from 'lucide-vue-next'
+import { Download, Eye, Search, Star, Trash2 } from 'lucide-vue-next'
 import { exportFormatOptions, modeLabels } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
@@ -42,7 +42,7 @@ const hasMoreTasks = computed(() => visibleTasks.value.length < sortedTasks.valu
 const stats = computed(() => ({
   total: store.tasks.reduce((sum, task) => sum + task.assets.length, 0),
   today: store.tasks.filter((task) => new Date(task.createdAt).toDateString() === new Date().toDateString()).reduce((sum, task) => sum + task.assets.length, 0),
-  prompts: store.prompts.length,
+  favorites: store.favoriteTasks.length,
 }))
 
 watch([search, filter, sortMode], () => {
@@ -131,12 +131,22 @@ async function confirmHistoryExport(): Promise<void> {
     <div class="stats-row">
       <div class="stat-card"><strong>{{ stats.total }} 张</strong><span>共生成</span></div>
       <div class="stat-card"><strong>{{ stats.today }} 张</strong><span>今日生成</span></div>
-      <div class="stat-card"><strong>{{ stats.prompts }} 条</strong><span>提示词库</span></div>
+      <div class="stat-card"><strong>{{ stats.favorites }} 条</strong><span>已收藏</span></div>
     </div>
 
     <div v-if="sortedTasks.length">
       <div class="image-grid">
         <article v-for="task in visibleTasks" :key="task.id" class="history-card">
+          <button
+            class="favorite-button"
+            :class="{ active: task.isFavorite }"
+            type="button"
+            :aria-label="task.isFavorite ? '取消收藏' : '收藏'"
+            :title="`${task.isFavorite ? '取消收藏' : '收藏'} ${task.prompt}`"
+            @click="store.toggleTaskFavorite(task.id)"
+          >
+            <Star :size="15" :fill="task.isFavorite ? 'currentColor' : 'none'" />
+          </button>
           <button
             v-for="asset in task.assets"
             :key="asset.id"
@@ -181,6 +191,14 @@ async function confirmHistoryExport(): Promise<void> {
           </div>
         </div>
         <div class="modal-foot">
+          <button
+            class="btn-soft"
+            type="button"
+            @click="store.toggleTaskFavorite(selected.task.id)"
+          >
+            <Star :size="15" :fill="selected.task.isFavorite ? 'currentColor' : 'none'" />
+            {{ selected.task.isFavorite ? '取消收藏' : '收藏' }}
+          </button>
           <button class="btn-soft" type="button" @click="reusePrompt(selected.task)">
             <Eye :size="15" />
             复用提示词
@@ -318,15 +336,45 @@ async function confirmHistoryExport(): Promise<void> {
 }
 
 .history-card {
-  display: contents;
+  position: relative;
+  min-width: 0;
 }
 
 .image-card {
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   text-align: left;
+}
+
+.favorite-button {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--fg-2);
+  background: rgba(6, 10, 18, .76);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--elev-subtle);
+}
+
+.favorite-button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.favorite-button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .thumb {

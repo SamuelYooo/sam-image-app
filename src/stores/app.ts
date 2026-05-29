@@ -144,6 +144,7 @@ export const useAppStore = defineStore('app', () => {
   const recentTasks = computed(() => tasks.value.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8))
   const allAssets = computed(() => tasks.value.flatMap((task) => task.assets.map((asset) => ({ task, asset }))))
   const completedAssets = computed(() => allAssets.value.filter(({ task }) => task.status === 'completed'))
+  const favoriteTasks = computed(() => tasks.value.filter((task) => task.isFavorite))
 
   function persist(): void {
     browserStorage.write(STORAGE_KEY, {
@@ -343,6 +344,14 @@ export const useAppStore = defineStore('app', () => {
     notify('历史记录已清空')
   }
 
+  function toggleTaskFavorite(id: string): void {
+    const task = tasks.value.find((item) => item.id === id)
+    if (!task) return
+    task.isFavorite = !task.isFavorite
+    persist()
+    notify(task.isFavorite ? `已收藏：${task.prompt}` : `已取消收藏：${task.prompt}`, task.isFavorite ? 'success' : 'info')
+  }
+
   async function downloadAllAssets(): Promise<void> {
     const taskAssets = completedAssets.value
     if (!taskAssets.length) {
@@ -459,6 +468,7 @@ export const useAppStore = defineStore('app', () => {
     enabledCoverPresets,
     recentTasks,
     completedAssets,
+    favoriteTasks,
     resolveMode,
     setMode,
     setActivePrompt,
@@ -478,6 +488,7 @@ export const useAppStore = defineStore('app', () => {
     resetCoverPresets,
     resetDemoData,
     clearHistory,
+    toggleTaskFavorite,
     downloadAllAssets,
     downloadAsset,
     notify,

@@ -71,6 +71,7 @@ export interface GenerationTask {
   style: string
   status: TaskStatus
   error?: string
+  isFavorite?: boolean
   assets: GeneratedAsset[]
   createdAt: string
 }

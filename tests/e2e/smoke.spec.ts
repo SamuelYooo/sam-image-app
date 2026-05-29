@@ -260,6 +260,107 @@ test('history supports sorting and loading more records', async ({ page }) => {
   await expect(page.getByText('历史排序 10')).toBeVisible()
 })
 
+test('history can favorite records and persist the favorite count', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (localStorage.getItem('samimage.e2e.history-favorite-seeded')) return
+    localStorage.setItem('samimage.e2e.history-favorite-seeded', '1')
+    const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#f6c945"/></svg>')
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [],
+        tasks: [
+          {
+            id: 'history-favorite-task-a',
+            mode: 'cover',
+            prompt: '历史收藏回归测试封面 A',
+            negativePrompt: '',
+            modelId: 'local-preview',
+            width: 512,
+            height: 512,
+            batchSize: 1,
+            steps: 28,
+            seed: 101,
+            style: '自然',
+            status: 'completed',
+            isFavorite: false,
+            assets: [
+              {
+                id: 'history-favorite-asset-a',
+                taskId: 'history-favorite-task-a',
+                title: '历史收藏资源 A',
+                width: 512,
+                height: 512,
+                format: 'svg',
+                dataUrl: `data:image/svg+xml;charset=utf-8,${assetSvg}`,
+                createdAt: '2026-01-11T00:00:00.000Z',
+              },
+            ],
+            createdAt: '2026-01-11T00:00:00.000Z',
+          },
+          {
+            id: 'history-favorite-task-b',
+            mode: 'txt2img',
+            prompt: '历史收藏回归测试封面 B',
+            negativePrompt: '',
+            modelId: 'local-preview',
+            width: 512,
+            height: 512,
+            batchSize: 1,
+            steps: 28,
+            seed: 202,
+            style: '赛博',
+            status: 'completed',
+            isFavorite: true,
+            assets: [
+              {
+                id: 'history-favorite-asset-b',
+                taskId: 'history-favorite-task-b',
+                title: '历史收藏资源 B',
+                width: 512,
+                height: 512,
+                format: 'svg',
+                dataUrl: `data:image/svg+xml;charset=utf-8,${assetSvg}`,
+                createdAt: '2026-01-10T00:00:00.000Z',
+              },
+            ],
+            createdAt: '2026-01-10T00:00:00.000Z',
+          },
+        ],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/history')
+  await expect(page.getByText('1 条')).toBeVisible()
+  await expect(page.getByText('已收藏')).toBeVisible()
+
+  const card = page.locator('.history-card').filter({ hasText: '历史收藏回归测试封面 A' })
+  await card.getByRole('button', { name: '收藏', exact: true }).click()
+  await expect(page.getByText('已收藏：历史收藏回归测试封面 A')).toBeVisible()
+  await expect(page.getByText('2 条')).toBeVisible()
+
+  await page.reload()
+  await expect(page.getByText('2 条')).toBeVisible()
+  await expect(card.getByRole('button', { name: '取消收藏', exact: true })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return state.tasks?.find((task: { id: string }) => task.id === 'history-favorite-task-a')?.isFavorite
+  })).toBe(true)
+})
+
 test('home recent detail can reuse prompt in workspace', async ({ page }) => {
   await page.addInitScript(() => {
     const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#42d392"/></svg>')

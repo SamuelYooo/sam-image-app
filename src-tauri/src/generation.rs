@@ -72,6 +72,7 @@ pub struct GenerationTask {
     pub style: String,
     pub status: String,
     pub error: Option<String>,
+    pub is_favorite: Option<bool>,
     pub assets: Vec<GeneratedAsset>,
     pub created_at: String,
 }
@@ -128,6 +129,7 @@ pub fn create_local_generation(input: GenerationInput) -> Result<GenerationTask,
         style: input.style,
         status: "completed".into(),
         error: None,
+        is_favorite: Some(false),
         assets,
         created_at,
     })
