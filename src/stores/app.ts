@@ -414,7 +414,16 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function addCoverPreset(preset: Omit<CoverPreset, 'id' | 'custom'>): void {
-    coverPresets.value.push({ ...preset, id: createId('cover'), custom: true })
+    const rawWidth = Number(preset.width)
+    const rawHeight = Number(preset.height)
+    if (!Number.isFinite(rawWidth) || !Number.isFinite(rawHeight) || rawWidth < 128 || rawWidth > 4096 || rawHeight < 128 || rawHeight > 4096) {
+      notify('请输入 128 到 4096 之间的有效尺寸', 'error')
+      return
+    }
+    const width = Math.round(rawWidth)
+    const height = Math.round(rawHeight)
+
+    coverPresets.value.push({ ...preset, width, height, id: createId('cover'), custom: true })
     persist()
     notify('封面预设已添加')
   }

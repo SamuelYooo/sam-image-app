@@ -1231,6 +1231,23 @@ test('tools page manages custom cover presets', async ({ page }) => {
   })).toBe(false)
 })
 
+test('custom cover presets reject invalid dimensions', async ({ page }) => {
+  await page.goto('/tools')
+
+  await page.getByRole('button', { name: '自定义尺寸' }).click()
+  await page.getByLabel('名称').fill('非法尺寸封面')
+  await page.getByLabel('宽度').fill('0')
+  await page.getByLabel('高度').fill('5000')
+  await page.getByRole('button', { name: '保存' }).click()
+
+  await expect(page.getByText('请输入 128 到 4096 之间的有效尺寸')).toBeVisible()
+  await expect(page.locator('.custom-preset-row').filter({ hasText: '非法尺寸封面' })).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return Boolean(state.coverPresets?.some((preset: { name: string }) => preset.name === '非法尺寸封面'))
+  })).toBe(false)
+})
+
 test('workspace generation uses the selected image model', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(
