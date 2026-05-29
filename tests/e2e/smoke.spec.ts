@@ -892,6 +892,28 @@ test('prompt market imports multiple json files at once', async ({ page }) => {
   await expect(page.getByText('批量导入提示词 B')).toBeVisible()
 })
 
+test('prompt market imports json files by drag and drop', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+
+  const payload = JSON.stringify([
+    { title: '拖拽导入提示词', prompt: '通过拖拽导入的提示词内容', category: '拖拽' },
+  ])
+  const dataTransfer = await page.evaluateHandle((content) => {
+    const dt = new DataTransfer()
+    dt.items.add(new File([content], 'drag-prompts.json', { type: 'application/json' }))
+    return dt
+  }, payload)
+
+  const dropZone = page.getByText('拖拽文件或点击导入')
+  await dropZone.dispatchEvent('dragover', { dataTransfer })
+  await dropZone.dispatchEvent('drop', { dataTransfer })
+
+  await expect(page.getByText('已导入 1 条提示词')).toBeVisible()
+  await expect(page.getByText('拖拽导入提示词')).toBeVisible()
+  await expect(page.getByText('通过拖拽导入的提示词内容')).toBeVisible()
+})
+
 test('prompt market filters prompts by source and category', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

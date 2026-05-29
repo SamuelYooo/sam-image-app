@@ -11,6 +11,7 @@ const store = useAppStore()
 const activeTab = ref<'models' | 'prompts' | 'generation' | 'system'>('models')
 const promptSourceFilter = ref('all')
 const promptCategoryFilter = ref('all')
+const promptImportDragging = ref(false)
 const modelCatalogOpen = ref(false)
 const modelCatalogSearch = ref('')
 const selectedCatalogModelId = ref('')
@@ -106,16 +107,17 @@ function applyCatalogModel(): void {
 
 function importFile(event: Event): void {
   const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? [])
+  importPromptFiles(Array.from(input.files ?? []))
+  input.value = ''
+}
+
+function importPromptFiles(files: File[]): void {
   if (!files.length) return
 
   Promise.all(files.map(readPromptFile))
     .then((items) => store.importPromptBatch(items))
     .catch((error: unknown) => {
       store.notify(error instanceof Error ? error.message : '导入 Prompts 失败', 'error')
-    })
-    .finally(() => {
-      input.value = ''
     })
 }
 
@@ -126,6 +128,21 @@ function readPromptFile(file: File): Promise<{ content: string; filename: string
     reader.onerror = () => reject(new Error(`读取 ${file.name} 失败`))
     reader.readAsText(file)
   })
+}
+
+function handlePromptDragOver(event: DragEvent): void {
+  event.preventDefault()
+  promptImportDragging.value = true
+}
+
+function handlePromptDragLeave(): void {
+  promptImportDragging.value = false
+}
+
+function handlePromptDrop(event: DragEvent): void {
+  event.preventDefault()
+  promptImportDragging.value = false
+  importPromptFiles(Array.from(event.dataTransfer?.files ?? []))
 }
 
 function exportPrompts(): void {
@@ -281,17 +298,24 @@ function addCoverPresetFromSettings(): void {
       <div class="section-head">
         <h2>Prompts 市场</h2>
         <div class="btn-row">
-          <label class="btn-soft btn-sm">
-            <Upload :size="14" />
-            导入 JSON
-            <input type="file" accept="application/json,.json" multiple hidden @change="importFile" />
-          </label>
           <button class="btn-soft btn-sm" type="button" @click="exportPrompts">
             <Download :size="14" />
             导出
           </button>
         </div>
       </div>
+      <label
+        class="import-area"
+        :class="{ dragging: promptImportDragging }"
+        @dragover="handlePromptDragOver"
+        @dragleave="handlePromptDragLeave"
+        @drop="handlePromptDrop"
+      >
+        <Upload :size="22" />
+        <span class="big">拖拽文件或点击导入</span>
+        <span>支持多个 JSON 文件，自动去重并合并到 Prompts 市场。</span>
+        <input type="file" accept="application/json,.json" multiple hidden @change="importFile" />
+      </label>
       <div class="prompt-summary">
         <div class="stat-card"><strong>{{ store.prompts.length }}</strong><span>提示词总数</span></div>
         <div class="stat-card"><strong>{{ promptSources.length }}</strong><span>来源</span></div>
@@ -642,6 +666,33 @@ function addCoverPresetFromSettings(): void {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+.import-area {
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  min-height: 118px;
+  padding: 20px;
+  color: var(--muted);
+  text-align: center;
+  cursor: pointer;
+  background: rgba(6, 10, 18, 0.34);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.import-area:hover,
+.import-area.dragging {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.import-area .big {
+  color: var(--fg);
+  font-weight: 800;
 }
 
 .sync-grid {
