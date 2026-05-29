@@ -22,8 +22,9 @@
     "bundle:msi": "npm run tauri -- bundle --ci --bundles msi",
     "preview": "vite preview --host 127.0.0.1 --port 3031",
     "test": "vitest run",
+    "test:rust": "node scripts/cargo-cli.cjs test --manifest-path src-tauri/Cargo.toml",
     "test:e2e": "playwright test",
-    "check": "npm run test && npm run build",
+    "check": "npm run test && npm run test:rust && npm run build",
     "tauri:dev": "npm run tauri -- dev",
     "tauri:info": "npm run tauri -- info",
     "tauri": "node scripts/tauri-cli.cjs"
