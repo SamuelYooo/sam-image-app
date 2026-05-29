@@ -235,6 +235,20 @@ export const useAppStore = defineStore('app', () => {
     notify('模型配置已保存')
   }
 
+  function setPrimaryImageModel(id: string): void {
+    const target = models.value.find((model) => model.id === id && model.kind === 'image')
+    if (!target) {
+      notify('请选择有效的图像模型', 'error')
+      return
+    }
+    models.value = models.value.map((model) => (
+      model.kind === 'image' ? { ...model, isPrimary: model.id === id } : model
+    ))
+    settings.value.defaultImageModelId = id
+    persist()
+    notify(`已设为主模型：${target.name}`)
+  }
+
   async function testModel(id: string): Promise<void> {
     const model = models.value.find((item) => item.id === id)
     if (!model) return
@@ -454,6 +468,7 @@ export const useAppStore = defineStore('app', () => {
     importPromptBatch,
     usePrompt,
     saveModel,
+    setPrimaryImageModel,
     testModel,
     removeModel,
     saveSettings,

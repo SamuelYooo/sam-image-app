@@ -45,6 +45,11 @@ watch(prompt, (value) => store.setActivePrompt(value))
 watch(() => store.activePrompt, (value) => {
   if (value && value !== prompt.value) prompt.value = value
 })
+watch(defaultModel, (value) => {
+  if (!selectedModelId.value || !store.imageModels.some((model) => model.id === selectedModelId.value)) {
+    selectedModelId.value = value?.id ?? ''
+  }
+})
 
 function routeString(name: string): string {
   const value = route.query[name]

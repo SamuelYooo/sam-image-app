@@ -697,6 +697,82 @@ test('default image model from settings initializes a new workspace', async ({ p
   await expect(page.getByText('secondary-image')).toBeVisible()
 })
 
+test('settings model cards can set the primary image model directly', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (localStorage.getItem('samimage.e2e.primary-model-seeded')) return
+    localStorage.setItem('samimage.e2e.primary-model-seeded', '1')
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [
+          {
+            id: 'local-preview',
+            name: 'Local Preview',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'samimage-local-preview',
+            kind: 'image',
+            isPrimary: true,
+            status: 'connected',
+          },
+          {
+            id: 'secondary-image',
+            name: 'Secondary Image',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'secondary-image-model',
+            kind: 'image',
+            isPrimary: false,
+            status: 'connected',
+          },
+        ],
+        prompts: [],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultImageModelId: 'local-preview',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  const localCard = page.locator('.model-card').filter({ hasText: 'Local Preview' })
+  const secondaryCard = page.locator('.model-card').filter({ hasText: 'Secondary Image' })
+
+  await expect(localCard.getByText('主模型')).toBeVisible()
+  await secondaryCard.getByRole('button', { name: '设为主模型' }).click()
+
+  await expect(page.getByText('已设为主模型：Secondary Image')).toBeVisible()
+  await expect(secondaryCard.getByText('主模型')).toBeVisible()
+  await expect(localCard.getByRole('button', { name: '设为主模型' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return {
+      defaultImageModelId: state.settings?.defaultImageModelId,
+      localPrimary: state.models?.find((model: { id: string }) => model.id === 'local-preview')?.isPrimary,
+      secondaryPrimary: state.models?.find((model: { id: string }) => model.id === 'secondary-image')?.isPrimary,
+    }
+  })).toEqual({
+    defaultImageModelId: 'secondary-image',
+    localPrimary: false,
+    secondaryPrimary: true,
+  })
+
+  await page.goto('/workspace?mode=cover&prompt=主模型快捷切换回归测试封面')
+  await expect(page.getByLabel('图像模型')).toHaveValue('secondary-image')
+})
+
 test('workspace prompt polish uses the selected text model', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

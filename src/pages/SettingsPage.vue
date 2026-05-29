@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Download, Plus, RotateCcw, Save, TestTube2, Trash2, Upload } from 'lucide-vue-next'
+import { Download, Plus, RotateCcw, Save, Star, TestTube2, Trash2, Upload } from 'lucide-vue-next'
 import { exportFormatOptions, stylePresets } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { ModelProfile, PromptItem } from '@/types/domain'
@@ -138,10 +138,24 @@ function toggleCoverPreset(id: string, event: Event): void {
               <h3>{{ model.name }}</h3>
               <p class="muted">{{ model.provider }} · {{ model.model || '未设置模型 ID' }}</p>
             </div>
-            <span class="status-pill">
-              <span class="status-dot" :class="{ warn: model.status !== 'connected', error: model.status === 'failed' }" />
-              {{ model.status === 'connected' ? '已连接' : model.status === 'failed' ? '失败' : '待检测' }}
-            </span>
+            <div class="model-card-badges">
+              <span v-if="model.kind === 'image' && model.isPrimary" class="primary-badge">
+                <Star :size="12" fill="currentColor" />
+                主模型
+              </span>
+              <button
+                v-else-if="model.kind === 'image'"
+                class="set-primary-btn"
+                type="button"
+                @click="store.setPrimaryImageModel(model.id)"
+              >
+                设为主模型
+              </button>
+              <span class="status-pill">
+                <span class="status-dot" :class="{ warn: model.status !== 'connected', error: model.status === 'failed' }" />
+                {{ model.status === 'connected' ? '已连接' : model.status === 'failed' ? '失败' : '待检测' }}
+              </span>
+            </div>
           </div>
           <div class="btn-row">
             <button class="btn-soft btn-sm" type="button" @click="editModel(model)">编辑</button>
@@ -357,6 +371,43 @@ function toggleCoverPreset(id: string, event: Event): void {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.model-card-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.primary-badge,
+.set-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.primary-badge {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-glow);
+}
+
+.set-primary-btn {
+  color: var(--muted);
+  border: 1px solid var(--border);
+  background: rgba(11, 18, 32, 0.66);
+}
+
+.set-primary-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .model-card,
