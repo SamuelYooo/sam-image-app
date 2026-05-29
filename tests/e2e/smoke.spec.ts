@@ -1523,14 +1523,15 @@ test('settings can set the primary text model used by prompt polish', async ({ p
   await page.getByRole('button', { name: '新增模型' }).click()
   await page.getByLabel('模型名称').fill('Local Text Refiner')
   await page.getByLabel('类型').selectOption('text')
+  await expect(page.getByLabel('设为主文本模型')).toBeVisible()
+  await expect(page.getByLabel('设为主图像模型')).toHaveCount(0)
   await page.getByLabel('API 地址').fill('')
   await page.getByLabel('模型 ID').fill('local-text-refiner')
+  await page.getByLabel('设为主文本模型').check()
   await page.getByRole('button', { name: '保存模型' }).click()
 
   await expect(page.getByText('模型配置已保存')).toBeVisible()
   const textCard = page.locator('.model-card').filter({ hasText: 'Local Text Refiner' })
-  await textCard.getByRole('button', { name: '设为主文本模型' }).click()
-  await expect(page.getByText('已设为主文本模型：Local Text Refiner')).toBeVisible()
   await expect(textCard.getByText('主文本模型')).toBeVisible()
 
   await page.goto('/workspace?mode=txt2img&prompt=主文本模型回归测试')

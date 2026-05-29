@@ -284,7 +284,14 @@ function addCoverPresetFromSettings(): void {
             <div class="field"><label for="model-draft-endpoint">API 地址</label><input id="model-draft-endpoint" v-model="draft.endpoint" placeholder="https://..." /></div>
             <div class="field"><label for="model-draft-id">模型 ID</label><input id="model-draft-id" v-model="draft.model" placeholder="gpt-image-1" /></div>
             <div class="field"><label for="model-draft-api-key">API Key</label><input id="model-draft-api-key" v-model="draft.apiKey" type="password" placeholder="sk-..." /></div>
-            <label class="toggle-line"><input v-model="draft.isPrimary" type="checkbox" /> 设为主图像模型</label>
+            <label class="toggle-line">
+              <input
+                v-model="draft.isPrimary"
+                type="checkbox"
+                :aria-label="draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型'"
+              />
+              {{ draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型' }}
+            </label>
           </div>
           <div class="btn-row">
             <button class="btn-soft" type="button" @click="openModelCatalog">获取模型</button>
