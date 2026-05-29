@@ -7,6 +7,7 @@ use crate::generation::{
     export_asset_data_url, export_asset_metadata_json,
 };
 use crate::state::AppState;
+use crate::text::{TextPolishInput, TextPolishModel, TextPolishResult, polish_prompt_with_model};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +25,19 @@ pub struct ModelProfile {
 }
 
 impl From<ModelProfile> for RemoteImageModel {
+    fn from(value: ModelProfile) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            provider: value.provider,
+            endpoint: value.endpoint,
+            api_key: value.api_key,
+            model: value.model,
+        }
+    }
+}
+
+impl From<ModelProfile> for TextPolishModel {
     fn from(value: ModelProfile) -> Self {
         Self {
             id: value.id,
@@ -123,6 +137,16 @@ pub async fn export_generated_asset(
         path: path.to_string_lossy().into_owned(),
         metadata_path: metadata_path.map(|path| path.to_string_lossy().into_owned()),
     })
+}
+
+#[tauri::command]
+pub async fn polish_prompt(
+    input: TextPolishInput,
+    model: Option<ModelProfile>,
+) -> Result<TextPolishResult, AppError> {
+    polish_prompt_with_model(input, model.map(Into::into))
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]

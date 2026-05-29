@@ -5,6 +5,7 @@ pub mod error;
 pub mod generation;
 pub mod server;
 pub mod state;
+pub mod text;
 
 pub fn run() {
     tauri::Builder::default()
@@ -26,6 +27,7 @@ pub fn run() {
             commands::clear_generation_tasks,
             commands::export_generated_asset,
             commands::list_generation_tasks,
+            commands::polish_prompt,
             commands::test_model_profile,
             commands::save_app_settings,
         ])

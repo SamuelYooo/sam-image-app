@@ -220,7 +220,7 @@ function openPromptLibrary(): void {
   libraryOpen.value = true
 }
 
-function polishPrompt(): void {
+async function polishPrompt(): Promise<void> {
   const source = prompt.value.trim()
   if (!source) {
     prompt.value = `高质量${currentModeLabel.value}，主体明确，${style.value}风格，画面层次清晰，细节丰富。`
@@ -228,15 +228,19 @@ function polishPrompt(): void {
     return
   }
 
-  const modelName = selectedTextModel.value?.name ?? '本地文本润色'
-  prompt.value = [
-    source,
-    `${style.value}风格`,
-    '主体明确，构图稳定，光线层次清晰，材质细节丰富',
-    `适合${currentModeLabel.value}输出`,
-    `由 ${modelName} 润色`,
-  ].join('，')
-  store.notify(`已使用 ${modelName} 润色提示词`)
+  try {
+    const result = await store.polishPrompt(
+      {
+        prompt: source,
+        modeLabel: currentModeLabel.value,
+        style: style.value,
+      },
+      selectedTextModelId.value,
+    )
+    prompt.value = result.prompt
+  } catch (error) {
+    store.notify(error instanceof Error ? error.message : '润色提示词失败', 'error')
+  }
 }
 
 function clearPrompt(): void {

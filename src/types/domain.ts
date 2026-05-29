@@ -46,6 +46,17 @@ export interface GenerationInput {
   modeOptions?: Record<string, string | number | boolean>
 }
 
+export interface TextPolishInput {
+  prompt: string
+  modeLabel: string
+  style: string
+}
+
+export interface TextPolishResult {
+  prompt: string
+  modelName: string
+}
+
 export interface GeneratedAsset {
   id: string
   taskId: string

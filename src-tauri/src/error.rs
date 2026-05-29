@@ -34,6 +34,12 @@ impl From<crate::generation::GenerationError> for AppError {
     }
 }
 
+impl From<crate::text::TextPolishError> for AppError {
+    fn from(value: crate::text::TextPolishError) -> Self {
+        Self::Validation(value.to_string())
+    }
+}
+
 impl From<reqwest::Error> for AppError {
     fn from(value: reqwest::Error) -> Self {
         Self::Network(value.to_string())

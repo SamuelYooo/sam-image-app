@@ -22,6 +22,8 @@ import type {
   ExportFormat,
   ModelProfile,
   PromptItem,
+  TextPolishInput,
+  TextPolishResult,
 } from '@/types/domain'
 import { createId } from '@/domain/ids'
 
@@ -270,6 +272,30 @@ export const useAppStore = defineStore('app', () => {
       notify(`已生成 ${task.assets.length} 张${modeLabels[task.mode]}结果，未保存到历史`, 'info')
     }
     return task
+  }
+
+  async function polishPrompt(input: TextPolishInput, modelId?: string): Promise<TextPolishResult> {
+    const selectedTextModel = textModels.value.find((model) => model.id === modelId) ?? primaryTextModel.value
+    if (isTauriRuntime()) {
+      const result = await invokeOptional<TextPolishResult>('polish_prompt', { input, model: selectedTextModel })
+      if (!result) throw new Error('Tauri 润色命令不可用')
+      notify(`已使用 ${result.modelName} 润色提示词`)
+      return result
+    }
+
+    const modelName = selectedTextModel?.name ?? '本地文本润色'
+    const result = {
+      prompt: [
+        input.prompt.trim() || '一个高质量的本地 AI 图像生成工作台界面',
+        `${input.style}风格`,
+        '主体明确，构图稳定，光线层次清晰，材质细节丰富',
+        `适合${input.modeLabel}输出`,
+        `由 ${modelName} 润色`,
+      ].join('，'),
+      modelName,
+    }
+    notify(`已使用 ${result.modelName} 润色提示词`)
+    return result
   }
 
   function importPrompts(content: string, filename: string): number {
@@ -626,6 +652,7 @@ export const useAppStore = defineStore('app', () => {
     setActivePrompt,
     loadPersistedTasks,
     generate,
+    polishPrompt,
     importPrompts,
     importPromptBatch,
     syncPromptSource,

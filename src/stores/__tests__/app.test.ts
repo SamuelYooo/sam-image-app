@@ -76,4 +76,51 @@ describe('app store generation bridge', () => {
       }),
     )
   })
+
+  it('passes the selected text model configuration to the Tauri polish command', async () => {
+    const store = useAppStore()
+    store.saveModel({
+      id: 'remote-text',
+      name: 'Remote Text',
+      provider: 'openai-compatible',
+      endpoint: 'https://api.example.test/v1/chat/completions',
+      apiKey: 'sk-text',
+      model: 'gpt-4o-mini',
+      kind: 'text',
+      isPrimary: true,
+      status: 'connected',
+    })
+    mockedInvokeOptional.mockResolvedValueOnce({
+      prompt: '精修后的提示词',
+      modelName: 'Remote Text',
+    })
+
+    const result = await store.polishPrompt(
+      {
+        prompt: '产品海报',
+        modeLabel: '文生图',
+        style: '自然',
+      },
+      'remote-text',
+    )
+
+    expect(result.prompt).toBe('精修后的提示词')
+    expect(mockedInvokeOptional).toHaveBeenCalledWith(
+      'polish_prompt',
+      expect.objectContaining({
+        input: {
+          prompt: '产品海报',
+          modeLabel: '文生图',
+          style: '自然',
+        },
+        model: expect.objectContaining({
+          id: 'remote-text',
+          provider: 'openai-compatible',
+          endpoint: 'https://api.example.test/v1/chat/completions',
+          apiKey: 'sk-text',
+          model: 'gpt-4o-mini',
+        }),
+      }),
+    )
+  })
 })
