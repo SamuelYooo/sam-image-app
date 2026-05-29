@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RouterLink } from 'vue-router'
-import { ImagePlus, ShieldCheck, Sparkles, Settings, WandSparkles } from 'lucide-vue-next'
-import { defaultCoverPresets, modeLabels, toolGroups } from '@/data/catalog'
+import { computed, ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
+import { Download, Eye, ImagePlus, ShieldCheck, Sparkles, Settings, WandSparkles } from 'lucide-vue-next'
+import { defaultCoverPresets, exportFormatOptions, modeLabels, toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
-import type { GenerationMode } from '@/types/domain'
+import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
 
+const router = useRouter()
 const store = useAppStore()
+const selectedRecent = ref<{ task: GenerationTask; asset: GeneratedAsset } | null>(null)
+const exportOpen = ref(false)
+const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 const quickTools = computed(() => toolGroups.flatMap((group) => group.tools).slice(0, 6))
 const modelRows = computed(() => store.models.map((model) => ({
   id: model.id,
@@ -17,6 +21,42 @@ const modelRows = computed(() => store.models.map((model) => ({
 
 function workspaceLink(mode: GenerationMode) {
   return { path: '/workspace', query: { mode } }
+}
+
+function openRecentDetail(task: GenerationTask): void {
+  const asset = task.assets[0]
+  if (!asset) return
+  selectedRecent.value = { task, asset }
+}
+
+function reusePrompt(task: GenerationTask): void {
+  store.setActivePrompt(task.prompt)
+  router.push({
+    path: '/workspace',
+    query: {
+      mode: task.mode,
+      prompt: task.prompt,
+      negativePrompt: task.negativePrompt,
+      modelId: task.modelId,
+      width: String(task.width),
+      height: String(task.height),
+      batchSize: String(task.batchSize),
+      steps: String(task.steps),
+      seed: String(task.seed),
+      style: task.style,
+    },
+  })
+}
+
+function openRecentExport(): void {
+  exportFormat.value = store.settings.defaultExportFormat
+  exportOpen.value = true
+}
+
+async function confirmRecentExport(): Promise<void> {
+  if (!selectedRecent.value) return
+  await store.downloadAsset(selectedRecent.value.asset, exportFormat.value, 1, selectedRecent.value.task)
+  exportOpen.value = false
 }
 </script>
 
@@ -98,7 +138,13 @@ function workspaceLink(mode: GenerationMode) {
         <RouterLink class="mono" to="/history">查看全部 -></RouterLink>
       </div>
       <div v-if="store.recentTasks.length" class="recent-grid">
-        <button v-for="task in store.recentTasks.slice(0, 6)" :key="task.id" class="recent-card" type="button">
+        <button
+          v-for="task in store.recentTasks.slice(0, 6)"
+          :key="task.id"
+          class="recent-card"
+          type="button"
+          @click="openRecentDetail(task)"
+        >
           <div class="art-preview recent-thumb">
             <img :src="task.assets[0]?.dataUrl" :alt="task.prompt" />
           </div>
@@ -114,6 +160,67 @@ function workspaceLink(mode: GenerationMode) {
         <span>还没有生成记录，进入工作台创建第一张图。</span>
       </div>
     </section>
+
+    <div v-if="selectedRecent" class="modal-overlay" @click.self="selectedRecent = null">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <h2>生成详情</h2>
+            <p class="muted">查看最近生成结果，复用提示词或导出到本地。</p>
+          </div>
+          <button class="btn-icon" type="button" @click="selectedRecent = null">×</button>
+        </div>
+        <div class="modal-body home-detail-grid">
+          <img :src="selectedRecent.asset.dataUrl" :alt="selectedRecent.asset.title" />
+          <div class="stack">
+            <div class="detail-row"><span>生成类型</span><strong>{{ modeLabels[selectedRecent.task.mode] }}</strong></div>
+            <div class="detail-row"><span>模型</span><strong>{{ selectedRecent.task.modelId }}</strong></div>
+            <div class="detail-row"><span>尺寸</span><strong>{{ selectedRecent.asset.width }} x {{ selectedRecent.asset.height }}</strong></div>
+            <div class="detail-row"><span>状态</span><strong>{{ selectedRecent.task.status === 'completed' ? '已完成' : selectedRecent.task.status }}</strong></div>
+            <div class="prompt-box">{{ selectedRecent.task.prompt }}</div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-soft" type="button" @click="reusePrompt(selectedRecent.task)">
+            <Eye :size="15" />
+            复用提示词
+          </button>
+          <button class="btn-primary" type="button" @click="openRecentExport">
+            <Download :size="15" />
+            导出到本地
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="exportOpen && selectedRecent" class="modal-overlay" @click.self="exportOpen = false">
+      <div class="modal small">
+        <div class="modal-head">
+          <div>
+            <h2>导出到本地</h2>
+            <p class="muted">默认读取设置中的输出目录，也可以临时调整格式。</p>
+          </div>
+          <button class="btn-icon" type="button" @click="exportOpen = false">×</button>
+        </div>
+        <div class="modal-body stack">
+          <div class="field">
+            <label for="home-export-dir">导出目录</label>
+            <input id="home-export-dir" v-model="store.settings.defaultOutputDir" />
+          </div>
+          <div class="field">
+            <label for="home-export-format">格式</label>
+            <select id="home-export-format" v-model="exportFormat">
+              <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </div>
+          <p class="muted">导出将使用最近生成结果并保留可用的提示词元数据。</p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-soft" type="button" @click="exportOpen = false">取消</button>
+          <button class="btn-primary" type="button" @click="confirmRecentExport">确认导出</button>
+        </div>
+      </div>
+    </div>
 
     <section class="privacy-card">
       <ShieldCheck :size="20" />
@@ -226,6 +333,13 @@ function workspaceLink(mode: GenerationMode) {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  transition: border-color 160ms, box-shadow 160ms, transform 160ms;
+}
+
+.recent-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34), 0 0 0 1px var(--border-glow);
+  transform: translateY(-2px);
 }
 
 .recent-thumb {
@@ -262,5 +376,53 @@ function workspaceLink(mode: GenerationMode) {
   background: rgba(66, 211, 146, 0.08);
   border: 1px solid rgba(66, 211, 146, 0.24);
   border-radius: var(--radius-md);
+}
+
+.home-detail-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 18px;
+}
+
+.home-detail-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 10px;
+}
+
+.detail-row span {
+  color: var(--muted);
+}
+
+.prompt-box {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(6, 10, 18, .42);
+  line-height: 1.7;
+}
+
+@media (max-width: 760px) {
+  .home-hero,
+  .section-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .grid-3,
+  .preset-grid,
+  .recent-grid,
+  .home-detail-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

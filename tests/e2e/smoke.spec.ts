@@ -260,6 +260,77 @@ test('history supports sorting and loading more records', async ({ page }) => {
   await expect(page.getByText('历史排序 10')).toBeVisible()
 })
 
+test('home recent detail can reuse prompt in workspace', async ({ page }) => {
+  await page.addInitScript(() => {
+    const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#42d392"/></svg>')
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [],
+        tasks: [
+          {
+            id: 'home-recent-task',
+            mode: 'cover',
+            prompt: '首页最近生成详情回归测试封面',
+            negativePrompt: '低清晰度',
+            modelId: 'local-preview',
+            width: 640,
+            height: 360,
+            batchSize: 1,
+            steps: 32,
+            seed: 13579,
+            style: '赛博',
+            status: 'completed',
+            assets: [
+              {
+                id: 'home-recent-asset',
+                taskId: 'home-recent-task',
+                title: '首页最近生成详情资源',
+                width: 640,
+                height: 360,
+                format: 'svg',
+                dataUrl: `data:image/svg+xml;charset=utf-8,${assetSvg}`,
+                createdAt: '2026-01-10T00:00:00.000Z',
+              },
+            ],
+            createdAt: '2026-01-10T00:00:00.000Z',
+          },
+        ],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/')
+  await page.getByRole('button', { name: /首页最近生成详情回归测试封面/ }).click()
+
+  await expect(page.getByRole('heading', { name: '生成详情' })).toBeVisible()
+  await expect(page.getByText('local-preview', { exact: true })).toBeVisible()
+  await expect(page.getByText('640 x 360')).toBeVisible()
+  await expect(page.getByText('首页最近生成详情回归测试封面').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '复用提示词' }).click()
+
+  await expect(page).toHaveURL(/\/workspace/)
+  await expect(page.locator('.prompt-preview')).toContainText('首页最近生成详情回归测试封面')
+  await expect(page.getByRole('button', { name: '赛博' })).toHaveClass(/active/)
+  await expect(page.getByLabel('宽度')).toHaveValue('640')
+  await expect(page.getByLabel('高度')).toHaveValue('360')
+  await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('32')
+  await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('13579')
+})
+
 test('workspace keyboard shortcuts run documented actions', async ({ page }) => {
   await page.goto('/workspace?mode=txt2img&prompt=快捷键回归测试')
 
