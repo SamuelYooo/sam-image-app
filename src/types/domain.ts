@@ -87,6 +87,7 @@ export interface CoverPreset {
 export interface AppSettings {
   defaultOutputDir: string
   defaultExportFormat: ExportFormat
+  defaultImageModelId: string
   defaultGenerationSize: number
   defaultBatchSize: number
   defaultStyle: string

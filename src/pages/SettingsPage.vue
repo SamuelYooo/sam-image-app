@@ -191,6 +191,12 @@ function exportPrompts(): void {
                 <option v-for="item in stylePresets" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
+            <div class="field">
+              <label for="default-img-model">默认生图模型</label>
+              <select id="default-img-model" v-model="store.settings.defaultImageModelId">
+                <option v-for="model in store.imageModels" :key="model.id" :value="model.id">{{ model.name }} / {{ model.model }}</option>
+              </select>
+            </div>
           </div>
           <label class="toggle-line"><input v-model="store.settings.autoSaveHistory" type="checkbox" /> 自动保存生成历史</label>
           <label class="toggle-line"><input v-model="store.settings.includePromptMetadata" type="checkbox" /> 导出时包含提示词元数据</label>

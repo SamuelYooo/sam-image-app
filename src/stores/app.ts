@@ -48,6 +48,7 @@ const defaultState: PersistedState = {
   settings: {
     defaultOutputDir: 'D:\\SamImage\\Exports',
     defaultExportFormat: 'svg',
+    defaultImageModelId: 'local-preview',
     defaultGenerationSize: 1024,
     defaultBatchSize: 4,
     defaultStyle: '自然',
@@ -73,6 +74,12 @@ function normalizeInteger(value: unknown, fallback: number, min: number, max: nu
 
 function normalizeStyle(value: unknown): string {
   return typeof value === 'string' && stylePresets.includes(value) ? value : '自然'
+}
+
+function normalizeDefaultImageModelId(value: unknown, modelList: ModelProfile[]): string {
+  const imageModels = modelList.filter((model) => model.kind === 'image')
+  if (typeof value === 'string' && imageModels.some((model) => model.id === value)) return value
+  return imageModels.find((model) => model.isPrimary)?.id ?? imageModels[0]?.id ?? ''
 }
 
 async function rasterizeDataUrl(dataUrl: string, width: number, height: number, format: 'png' | 'jpg' | 'webp'): Promise<string> {
@@ -101,12 +108,14 @@ async function rasterizeDataUrl(dataUrl: string, width: number, height: number, 
 
 export const useAppStore = defineStore('app', () => {
   const initial = browserStorage.read<PersistedState>(STORAGE_KEY, cloneDefault())
+  const initialModels = initial.models.length ? initial.models : defaultModels
   const initialSettings = { ...defaultState.settings, ...initial.settings }
   initialSettings.defaultExportFormat = normalizeDefaultExportFormat(initialSettings.defaultExportFormat)
+  initialSettings.defaultImageModelId = normalizeDefaultImageModelId(initialSettings.defaultImageModelId, initialModels)
   initialSettings.defaultGenerationSize = normalizeInteger(initialSettings.defaultGenerationSize, defaultState.settings.defaultGenerationSize, 128, 4096)
   initialSettings.defaultBatchSize = normalizeInteger(initialSettings.defaultBatchSize, defaultState.settings.defaultBatchSize, 1, 4)
   initialSettings.defaultStyle = normalizeStyle(initialSettings.defaultStyle)
-  const models = ref<ModelProfile[]>(initial.models.length ? initial.models : defaultModels)
+  const models = ref<ModelProfile[]>(initialModels)
   const prompts = ref<PromptItem[]>(initial.prompts.length ? initial.prompts : defaultPrompts)
   const tasks = ref<GenerationTask[]>(initial.tasks)
   const coverPresets = ref<CoverPreset[]>(initial.coverPresets.length ? initial.coverPresets : defaultCoverPresets)
@@ -118,6 +127,7 @@ export const useAppStore = defineStore('app', () => {
   const imageModels = computed(() => models.value.filter((model) => model.kind === 'image'))
   const textModels = computed(() => models.value.filter((model) => model.kind === 'text'))
   const primaryImageModel = computed(() => imageModels.value.find((model) => model.isPrimary) ?? imageModels.value[0])
+  const defaultImageModel = computed(() => imageModels.value.find((model) => model.id === settings.value.defaultImageModelId) ?? primaryImageModel.value)
   const recentTasks = computed(() => tasks.value.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8))
   const allAssets = computed(() => tasks.value.flatMap((task) => task.assets.map((asset) => ({ task, asset }))))
   const completedAssets = computed(() => allAssets.value.filter(({ task }) => task.status === 'completed'))
@@ -137,6 +147,10 @@ export const useAppStore = defineStore('app', () => {
     window.setTimeout(() => {
       if (toast.value?.message === message) toast.value = null
     }, 2400)
+  }
+
+  function repairDefaultImageModel(): void {
+    settings.value.defaultImageModelId = normalizeDefaultImageModelId(settings.value.defaultImageModelId, models.value)
   }
 
   function resolveMode(value: string | null | undefined): GenerationMode {
@@ -199,6 +213,7 @@ export const useAppStore = defineStore('app', () => {
     const index = models.value.findIndex((model) => model.id === next.id)
     if (index >= 0) models.value[index] = next
     else models.value.push(next)
+    repairDefaultImageModel()
     persist()
     notify('模型配置已保存')
   }
@@ -230,12 +245,18 @@ export const useAppStore = defineStore('app', () => {
       const first = imageModels.value[0]
       if (first) first.isPrimary = true
     }
+    repairDefaultImageModel()
     persist()
     notify('模型已删除')
   }
 
   function saveSettings(next: Partial<AppSettings>): void {
     settings.value = { ...settings.value, ...next }
+    settings.value.defaultExportFormat = normalizeDefaultExportFormat(settings.value.defaultExportFormat)
+    settings.value.defaultImageModelId = normalizeDefaultImageModelId(settings.value.defaultImageModelId, models.value)
+    settings.value.defaultGenerationSize = normalizeInteger(settings.value.defaultGenerationSize, defaultState.settings.defaultGenerationSize, 128, 4096)
+    settings.value.defaultBatchSize = normalizeInteger(settings.value.defaultBatchSize, defaultState.settings.defaultBatchSize, 1, 4)
+    settings.value.defaultStyle = normalizeStyle(settings.value.defaultStyle)
     persist()
     notify('设置已保存')
   }
@@ -328,6 +349,7 @@ export const useAppStore = defineStore('app', () => {
     imageModels,
     textModels,
     primaryImageModel,
+    defaultImageModel,
     recentTasks,
     completedAssets,
     resolveMode,

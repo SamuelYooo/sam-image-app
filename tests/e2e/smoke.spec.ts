@@ -151,6 +151,66 @@ test('workspace generation uses the selected image model', async ({ page }) => {
   await expect(page.getByText('secondary-image')).toBeVisible()
 })
 
+test('default image model from settings initializes a new workspace', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    localStorage.setItem('samimage.v3.state', JSON.stringify({
+      models: [
+        {
+          id: 'local-preview',
+          name: 'Local Preview',
+          provider: 'local-preview',
+          endpoint: '',
+          apiKey: '',
+          model: 'samimage-local-preview',
+          kind: 'image',
+          isPrimary: true,
+          status: 'connected',
+        },
+        {
+          id: 'secondary-image',
+          name: 'Secondary Image',
+          provider: 'local-preview',
+          endpoint: '',
+          apiKey: '',
+          model: 'secondary-image-model',
+          kind: 'image',
+          isPrimary: false,
+          status: 'connected',
+        },
+      ],
+      prompts: [],
+      tasks: [],
+      coverPresets: [],
+      settings: {
+        defaultOutputDir: 'D:\\SamImage\\Exports',
+        defaultExportFormat: 'svg',
+        defaultGenerationSize: 1024,
+        defaultBatchSize: 1,
+        defaultStyle: '自然',
+        autoSaveHistory: true,
+        includePromptMetadata: true,
+        theme: 'dark',
+      },
+    }))
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '生成参数' }).click()
+  await page.getByLabel('默认生图模型').selectOption('secondary-image')
+  await page.getByRole('button', { name: '保存生成参数' }).click()
+  await expect(page.getByText('设置已保存')).toBeVisible()
+
+  await page.goto('/workspace?mode=cover&prompt=默认生图模型回归测试封面')
+  await expect(page.getByLabel('图像模型')).toHaveValue('secondary-image')
+
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('button', { name: /默认生图模型回归测试封面/ }).first().click()
+  await expect(page.getByText('secondary-image')).toBeVisible()
+})
+
 test('generation defaults from settings initialize a new workspace', async ({ page }) => {
   await page.goto('/settings')
 

@@ -30,8 +30,8 @@ const promptSearch = ref('')
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
-const primaryModel = computed(() => store.primaryImageModel)
-const selectedModel = computed(() => store.imageModels.find((model) => model.id === selectedModelId.value) ?? primaryModel.value)
+const defaultModel = computed(() => store.defaultImageModel)
+const selectedModel = computed(() => store.imageModels.find((model) => model.id === selectedModelId.value) ?? defaultModel.value)
 const visiblePrompts = computed(() => {
   const keyword = promptSearch.value.trim().toLowerCase()
   return store.prompts.filter((item) => !keyword || `${item.title} ${item.prompt} ${item.category}`.toLowerCase().includes(keyword)).slice(0, 24)
@@ -44,7 +44,7 @@ watch(() => store.activePrompt, (value) => {
 })
 
 onMounted(() => {
-  selectedModelId.value = primaryModel.value?.id ?? ''
+  selectedModelId.value = defaultModel.value?.id ?? ''
   mode.value = store.resolveMode(String(route.query.mode ?? 'txt2img'))
   store.setMode(mode.value)
   const toolId = typeof route.query.tool === 'string' ? route.query.tool : ''
