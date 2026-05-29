@@ -183,7 +183,7 @@ export const useAppStore = defineStore('app', () => {
   initialSettings.defaultBatchSize = normalizeInteger(initialSettings.defaultBatchSize, defaultState.settings.defaultBatchSize, 1, 4)
   initialSettings.defaultStyle = normalizeStyle(initialSettings.defaultStyle)
   const models = ref<ModelProfile[]>(initialModels)
-  const prompts = ref<PromptItem[]>(initial.prompts.length ? initial.prompts : defaultPrompts)
+  const prompts = ref<PromptItem[]>(initial.prompts ?? defaultPrompts)
   const tasks = ref<GenerationTask[]>(initial.tasks)
   const coverPresets = ref<CoverPreset[]>(initial.coverPresets.length ? initial.coverPresets : cloneDefaultCoverPresets())
   const promptSync = ref<PromptSyncState>(initial.promptSync ?? {})

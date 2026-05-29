@@ -1047,6 +1047,37 @@ test('prompt market imports multiple json files at once', async ({ page }) => {
   await expect(page.getByText('批量导入提示词 B')).toBeVisible()
 })
 
+test('prompt market shows an empty state when no prompts are available', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+
+  await expect(page.getByText('暂无 Prompts')).toBeVisible()
+  await expect(page.getByText('请从上方拖拽或点击导入文件')).toBeVisible()
+  await expect(page.locator('.prompt-card')).toHaveCount(0)
+})
+
 test('prompt market imports json files by drag and drop', async ({ page }) => {
   await page.goto('/settings')
   await page.getByRole('button', { name: 'Prompts 市场' }).click()

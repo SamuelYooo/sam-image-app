@@ -375,6 +375,10 @@ function addCoverPresetFromSettings(): void {
             <button class="btn-soft btn-sm" type="button" @click="copyPrompt(item)">复制</button>
           </div>
         </article>
+        <div v-if="!filteredPrompts.length" class="empty-state">
+          <strong>暂无 Prompts</strong>
+          <span>请从上方拖拽或点击导入文件</span>
+        </div>
       </div>
     </section>
 
@@ -731,6 +735,23 @@ function addCoverPresetFromSettings(): void {
 .prompt-list {
   display: grid;
   gap: 10px;
+}
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 140px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+  background: rgba(6, 10, 18, 0.24);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.empty-state strong {
+  color: var(--fg);
 }
 
 .prompt-card {
