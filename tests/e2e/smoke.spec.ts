@@ -376,6 +376,18 @@ test('global numeric shortcuts navigate between primary pages', async ({ page })
   }
 })
 
+test('about page documents complete keyboard shortcuts', async ({ page }) => {
+  await page.goto('/about')
+  await page.getByRole('button', { name: '快捷键' }).click()
+
+  await expect(page.getByText('生成图像')).toBeVisible()
+  await expect(page.getByText('Ctrl + Enter')).toBeVisible()
+  await expect(page.getByText('AI 润色')).toBeVisible()
+  await expect(page.getByText('Ctrl + Shift + R')).toBeVisible()
+  await expect(page.getByRole('main').getByText('关于帮助')).toBeVisible()
+  await expect(page.getByText('Ctrl + 6')).toBeVisible()
+})
+
 test('generation can run without saving to history when auto-save is disabled', async ({ page }) => {
   await page.goto('/settings')
 

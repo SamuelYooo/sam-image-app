@@ -12,6 +12,23 @@ const faqs = [
   ['提示词如何导入？', '在设置的 Prompts 市场中导入 JSON，支持数组、{prompts:[]}、{items:[]} 等常见结构。'],
   ['图片保存在哪里？', '浏览器预览会保存到下载目录；桌面版会使用设置里的默认输出目录。'],
 ]
+
+const workspaceShortcuts = [
+  { action: '生成图像', keys: 'Ctrl + Enter' },
+  { action: '清空提示词', keys: 'Ctrl + D' },
+  { action: 'AI 润色', keys: 'Ctrl + Shift + R' },
+  { action: '打开提示词库', keys: 'Ctrl + L' },
+  { action: '导出结果', keys: 'Ctrl + S' },
+]
+
+const navigationShortcuts = [
+  { action: '首页', keys: 'Ctrl + 1' },
+  { action: '工作台', keys: 'Ctrl + 2' },
+  { action: '工具库', keys: 'Ctrl + 3' },
+  { action: '历史', keys: 'Ctrl + 4' },
+  { action: '设置', keys: 'Ctrl + 5' },
+  { action: '关于帮助', keys: 'Ctrl + 6' },
+]
 </script>
 
 <template>
@@ -71,11 +88,25 @@ const faqs = [
       </article>
     </section>
 
-    <section v-else class="about-panel shortcut-grid">
-      <div v-for="item in ['Ctrl + Enter 生成图像', 'Ctrl + D 清空提示词', 'Ctrl + L 打开提示词库', 'Ctrl + S 导出结果', 'Ctrl + 1 首页', 'Ctrl + 2 工作台']" :key="item" class="shortcut-row">
-        <span><Keyboard :size="15" /> {{ item.split(' ').slice(2).join(' ') }}</span>
-        <kbd>{{ item.split(' ').slice(0, 2).join(' ') }}</kbd>
-      </div>
+    <section v-else class="about-panel shortcut-panel">
+      <article class="shortcut-section">
+        <h2>工作台快捷键</h2>
+        <div class="shortcut-grid">
+          <div v-for="item in workspaceShortcuts" :key="item.keys" class="shortcut-row">
+            <span><Keyboard :size="15" /> {{ item.action }}</span>
+            <kbd>{{ item.keys }}</kbd>
+          </div>
+        </div>
+      </article>
+      <article class="shortcut-section">
+        <h2>页面导航</h2>
+        <div class="shortcut-grid">
+          <div v-for="item in navigationShortcuts" :key="item.keys" class="shortcut-row">
+            <span><Keyboard :size="15" /> {{ item.action }}</span>
+            <kbd>{{ item.keys }}</kbd>
+          </div>
+        </div>
+      </article>
     </section>
   </div>
 </template>
@@ -228,8 +259,24 @@ const faqs = [
   line-height: 1.7;
 }
 
+.shortcut-panel {
+  gap: 18px;
+}
+
+.shortcut-section {
+  display: grid;
+  gap: 12px;
+}
+
+.shortcut-section h2 {
+  font-size: 14px;
+  color: var(--muted);
+}
+
 .shortcut-grid {
+  display: grid;
   grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
 }
 
 kbd {
