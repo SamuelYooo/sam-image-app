@@ -2,15 +2,17 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Download, Eye, Search, Trash2 } from 'lucide-vue-next'
-import { modeLabels } from '@/data/catalog'
+import { exportFormatOptions, modeLabels } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
-import type { GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
+import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
 
 const router = useRouter()
 const store = useAppStore()
 const search = ref('')
 const filter = ref<'all' | GenerationMode>('all')
 const selected = ref<{ task: GenerationTask; asset: GeneratedAsset } | null>(null)
+const exportOpen = ref(false)
+const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 
 const filteredTasks = computed(() => {
   const keyword = search.value.trim().toLowerCase()
@@ -35,6 +37,17 @@ function reusePrompt(task: GenerationTask): void {
 function clearHistory(): void {
   if (!window.confirm('确定清空所有历史记录？此操作不可恢复。')) return
   store.clearHistory()
+}
+
+function openHistoryExport(): void {
+  exportFormat.value = store.settings.defaultExportFormat
+  exportOpen.value = true
+}
+
+async function confirmHistoryExport(): Promise<void> {
+  if (!selected.value) return
+  await store.downloadAsset(selected.value.asset, exportFormat.value)
+  exportOpen.value = false
 }
 </script>
 
@@ -121,10 +134,39 @@ function clearHistory(): void {
             <Eye :size="15" />
             复用提示词
           </button>
-          <button class="btn-primary" type="button" @click="store.downloadAsset(selected.asset)">
+          <button class="btn-primary" type="button" @click="openHistoryExport">
             <Download :size="15" />
             导出到本地
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="exportOpen && selected" class="modal-overlay" @click.self="exportOpen = false">
+      <div class="modal small">
+        <div class="modal-head">
+          <div>
+            <h2>导出到本地</h2>
+            <p class="muted">默认读取设置中的输出目录，也可以临时调整格式。</p>
+          </div>
+          <button class="btn-icon" type="button" @click="exportOpen = false">×</button>
+        </div>
+        <div class="modal-body stack">
+          <div class="field">
+            <label for="history-export-dir">导出目录</label>
+            <input id="history-export-dir" v-model="store.settings.defaultOutputDir" />
+          </div>
+          <div class="field">
+            <label for="history-export-format">格式</label>
+            <select id="history-export-format" v-model="exportFormat">
+              <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </div>
+          <p class="muted">导出将使用当前结果并保留可用的提示词元数据。</p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-soft" type="button" @click="exportOpen = false">取消</button>
+          <button class="btn-primary" type="button" @click="confirmHistoryExport">确认导出</button>
         </div>
       </div>
     </div>

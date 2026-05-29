@@ -81,6 +81,25 @@ test('default export format from settings is used by workspace export', async ({
   expect(content.subarray(8, 12).toString('ascii')).toBe('WEBP')
 })
 
+test('history detail export confirms format before browser download', async ({ page }) => {
+  await page.goto('/workspace?mode=cover&prompt=历史导出弹窗回归测试封面')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('button', { name: /历史导出弹窗回归测试封面/ }).first().click()
+  await page.getByRole('button', { name: '导出到本地' }).click()
+
+  await expect(page.getByRole('heading', { name: '导出到本地' })).toBeVisible()
+  await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\Exports')
+  await page.getByLabel('格式').selectOption('webp')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: '确认导出' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/\.webp$/)
+})
+
 test('generation can run without saving to history when auto-save is disabled', async ({ page }) => {
   await page.goto('/settings')
 
