@@ -100,6 +100,31 @@ test('history detail export confirms format before browser download', async ({ p
   expect(download.suggestedFilename()).toMatch(/\.webp$/)
 })
 
+test('history reuse restores generation parameters in workspace', async ({ page }) => {
+  await page.goto('/workspace?mode=txt2img&prompt=历史复用参数回归测试')
+  await page.getByRole('button', { name: '赛博' }).click()
+  await page.getByLabel('宽度').fill('1536')
+  await page.getByLabel('高度').fill('1024')
+  await page.getByText('批量').locator('..').getByRole('slider').fill('2')
+  await page.getByText('步数').locator('..').getByRole('slider').fill('44')
+  await page.getByText('Seed').locator('..').getByRole('spinbutton').fill('987654')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample')).toHaveCount(2)
+
+  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('button', { name: /历史复用参数回归测试/ }).first().click()
+  await page.getByRole('button', { name: '复用提示词' }).click()
+
+  await expect(page).toHaveURL(/\/workspace/)
+  await expect(page.locator('.prompt-preview')).toContainText('历史复用参数回归测试')
+  await expect(page.getByRole('button', { name: '赛博' })).toHaveClass(/active/)
+  await expect(page.getByLabel('宽度')).toHaveValue('1536')
+  await expect(page.getByLabel('高度')).toHaveValue('1024')
+  await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('2')
+  await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('44')
+  await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('987654')
+})
+
 test('generation can run without saving to history when auto-save is disabled', async ({ page }) => {
   await page.goto('/settings')
 

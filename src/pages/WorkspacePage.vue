@@ -45,28 +45,53 @@ watch(() => store.activePrompt, (value) => {
   if (value && value !== prompt.value) prompt.value = value
 })
 
+function routeString(name: string): string {
+  const value = route.query[name]
+  return typeof value === 'string' ? value : ''
+}
+
+function routeInteger(name: string, fallback: number, min: number, max: number): number {
+  const raw = routeString(name)
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, Math.round(parsed)))
+}
+
 onMounted(() => {
   selectedModelId.value = defaultModel.value?.id ?? ''
   selectedTextModelId.value = selectedTextModel.value?.id ?? ''
-  mode.value = store.resolveMode(String(route.query.mode ?? 'txt2img'))
+  mode.value = store.resolveMode(routeString('mode') || 'txt2img')
   store.setMode(mode.value)
-  const toolId = typeof route.query.tool === 'string' ? route.query.tool : ''
+  const toolId = routeString('tool')
   const selectedTool = toolEntries.find((item) => item.id === toolId)
-  const queryPrompt = typeof route.query.prompt === 'string' ? route.query.prompt : ''
+  const queryPrompt = routeString('prompt')
   if (queryPrompt) prompt.value = queryPrompt
   else if (selectedTool) prompt.value = selectedTool.promptSeed
   else if (store.activePrompt) prompt.value = store.activePrompt
 
-  const queryStyle = typeof route.query.style === 'string' ? route.query.style : ''
+  const queryNegativePrompt = routeString('negativePrompt')
+  if (queryNegativePrompt) negativePrompt.value = queryNegativePrompt
+
+  const queryStyle = routeString('style')
   if (queryStyle && stylePresets.includes(queryStyle)) style.value = queryStyle
   else if (selectedTool?.style && stylePresets.includes(selectedTool.style)) style.value = selectedTool.style
 
-  const presetId = typeof route.query.preset === 'string' ? route.query.preset : selectedTool?.preset ?? ''
+  const queryModelId = routeString('modelId')
+  if (queryModelId && store.imageModels.some((model) => model.id === queryModelId)) selectedModelId.value = queryModelId
+
+  const presetId = routeString('preset') || selectedTool?.preset || ''
   const preset = [...defaultCoverPresets, ...store.coverPresets].find((item) => item.id === presetId)
   if (preset) {
     width.value = preset.width
     height.value = preset.height
   }
+
+  width.value = routeInteger('width', width.value, 128, 4096)
+  height.value = routeInteger('height', height.value, 128, 4096)
+  batchSize.value = routeInteger('batchSize', batchSize.value, 1, 4)
+  steps.value = routeInteger('steps', steps.value, 1, 80)
+  seed.value = routeInteger('seed', seed.value, 0, 999999999)
 })
 
 function setMode(next: GenerationMode): void {

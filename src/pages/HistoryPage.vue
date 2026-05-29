@@ -31,7 +31,21 @@ const stats = computed(() => ({
 
 function reusePrompt(task: GenerationTask): void {
   store.setActivePrompt(task.prompt)
-  router.push({ path: '/workspace', query: { mode: task.mode, prompt: task.prompt } })
+  router.push({
+    path: '/workspace',
+    query: {
+      mode: task.mode,
+      prompt: task.prompt,
+      negativePrompt: task.negativePrompt,
+      modelId: task.modelId,
+      width: String(task.width),
+      height: String(task.height),
+      batchSize: String(task.batchSize),
+      steps: String(task.steps),
+      seed: String(task.seed),
+      style: task.style,
+    },
+  })
 }
 
 function clearHistory(): void {
