@@ -1009,6 +1009,18 @@ test('workspace keyboard shortcuts run documented actions', async ({ page }) => 
   await expect(page.locator('.prompt-preview')).toContainText('点击打开大编辑器')
 })
 
+test('workspace shortcut toggles between text and image reference modes', async ({ page }) => {
+  await page.goto('/workspace?mode=txt2img&prompt=模式切换快捷键回归测试')
+
+  await page.keyboard.press('Control+Tab')
+  await expect(page.getByRole('button', { name: /图生图/ })).toHaveClass(/active/)
+  await expect(page.getByText('图生图读取参考图、正向提示词与图片强度')).toBeVisible()
+
+  await page.keyboard.press('Control+Tab')
+  await expect(page.getByRole('button', { name: /文生图/ })).toHaveClass(/active/)
+  await expect(page.getByText('文生图读取正向/反向提示词与风格预设')).toBeVisible()
+})
+
 test('workspace can copy the selected result image with shortcut', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'clipboard', {

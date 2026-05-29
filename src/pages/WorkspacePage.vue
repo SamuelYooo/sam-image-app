@@ -251,6 +251,11 @@ function handleShortcut(event: KeyboardEvent): void {
   if (!event.ctrlKey) return
 
   const key = event.key.toLowerCase()
+  if (key === 'tab') {
+    event.preventDefault()
+    setMode(mode.value === 'img2img' ? 'txt2img' : 'img2img')
+    return
+  }
   if (key === 'enter') {
     event.preventDefault()
     void generate()
