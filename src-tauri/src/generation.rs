@@ -163,6 +163,22 @@ pub fn export_asset_data_url(
     Ok(path)
 }
 
+pub fn export_asset_metadata_json(
+    output_dir: impl AsRef<Path>,
+    title: &str,
+    metadata_json: &str,
+) -> Result<PathBuf, GenerationError> {
+    let output_dir = output_dir.as_ref();
+    std::fs::create_dir_all(output_dir)
+        .map_err(|error| GenerationError::Validation(format!("创建导出目录失败: {error}")))?;
+
+    let file_name = format!("{}.metadata.json", sanitize_export_name(title));
+    let path = output_dir.join(file_name);
+    std::fs::write(&path, metadata_json)
+        .map_err(|error| GenerationError::Validation(format!("写入元数据文件失败: {error}")))?;
+    Ok(path)
+}
+
 pub fn sanitize_export_name(value: &str) -> String {
     let mut output = String::new();
     let mut last_was_separator = false;

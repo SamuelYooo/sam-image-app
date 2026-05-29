@@ -4,6 +4,7 @@ use tauri::State;
 use crate::error::AppError;
 use crate::generation::{
     GenerationInput, GenerationTask, create_local_generation, export_asset_data_url,
+    export_asset_metadata_json,
 };
 use crate::state::AppState;
 
@@ -36,12 +37,14 @@ pub struct ExportAssetRequest {
     pub output_dir: String,
     pub title: String,
     pub format: String,
+    pub metadata_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportAssetResult {
     pub path: String,
+    pub metadata_path: Option<String>,
 }
 
 #[tauri::command]
@@ -93,9 +96,18 @@ pub async fn export_generated_asset(
         &request.title,
         &request.format,
     )?;
+    let metadata_path = match request.metadata_json.as_deref() {
+        Some(metadata_json) => Some(export_asset_metadata_json(
+            request.output_dir.trim(),
+            &request.title,
+            metadata_json,
+        )?),
+        None => None,
+    };
 
     Ok(ExportAssetResult {
         path: path.to_string_lossy().into_owned(),
+        metadata_path: metadata_path.map(|path| path.to_string_lossy().into_owned()),
     })
 }
 

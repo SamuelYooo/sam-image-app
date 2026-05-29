@@ -40,6 +40,13 @@ interface PersistedState {
   settings: AppSettings
 }
 
+interface ExportAssetData {
+  dataUrl: string
+  format: ExportFormat
+  width: number
+  height: number
+}
+
 const defaultState: PersistedState = {
   models: defaultModels,
   prompts: defaultPrompts,
@@ -295,47 +302,102 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function downloadAllAssets(): Promise<void> {
-    const assets = completedAssets.value.map(({ asset }) => asset)
-    if (!assets.length) {
+    const taskAssets = completedAssets.value
+    if (!taskAssets.length) {
       notify('暂无可导出的结果', 'info')
       return
     }
 
-    for (const asset of assets) {
-      await downloadAsset(asset)
+    for (const { task, asset } of taskAssets) {
+      await downloadAsset(asset, settings.value.defaultExportFormat, 1, task)
     }
-    notify(`已导出 ${assets.length} 个结果`)
+    notify(`已导出 ${taskAssets.length} 个结果`)
   }
 
-  async function downloadAsset(asset: GeneratedAsset, format: ExportFormat = settings.value.defaultExportFormat, scale = 1): Promise<void> {
+  async function downloadAsset(
+    asset: GeneratedAsset,
+    format: ExportFormat = settings.value.defaultExportFormat,
+    scale = 1,
+    task?: GenerationTask,
+  ): Promise<void> {
     const exportData = await prepareExportAsset(asset, format, scale)
-    const result = await invokeOptional<{ path: string }>('export_generated_asset', {
+    const metadataJson = settings.value.includePromptMetadata && task ? createExportMetadataJson(task, asset, exportData, scale) : undefined
+    const result = await invokeOptional<{ path: string; metadataPath?: string }>('export_generated_asset', {
       request: {
         dataUrl: exportData.dataUrl,
         outputDir: settings.value.defaultOutputDir,
         title: asset.title,
         format: exportData.format,
+        metadataJson,
       },
     })
 
     if (result?.path) {
       asset.localPath = result.path
       persist()
-      notify(`已导出到 ${result.path}`)
+      notify(result.metadataPath ? `已导出到 ${result.path}，元数据已保存` : `已导出到 ${result.path}`)
       return
     }
 
-    const link = document.createElement('a')
-    link.href = exportData.dataUrl
-    link.download = `${asset.title}.${exportData.format}`
-    link.click()
-    notify('已导出到浏览器下载目录')
+    triggerBrowserDownload(exportData.dataUrl, `${asset.title}.${exportData.format}`)
+    if (metadataJson) {
+      const metadataUrl = URL.createObjectURL(new Blob([metadataJson], { type: 'application/json' }))
+      triggerBrowserDownload(metadataUrl, `${asset.title}.metadata.json`)
+      URL.revokeObjectURL(metadataUrl)
+    }
+    notify(metadataJson ? '已导出图片和提示词元数据到浏览器下载目录' : '已导出到浏览器下载目录')
   }
 
-  async function prepareExportAsset(asset: GeneratedAsset, format: ExportFormat, scale = 1): Promise<{ dataUrl: string; format: ExportFormat }> {
-    if (format === asset.format && scale === 1) return { dataUrl: asset.dataUrl, format }
-    if (format === 'svg' || format === 'gif') return { dataUrl: asset.dataUrl, format: asset.format }
-    return { dataUrl: await rasterizeDataUrl(asset.dataUrl, asset.width * scale, asset.height * scale, format), format }
+  async function prepareExportAsset(asset: GeneratedAsset, format: ExportFormat, scale = 1): Promise<ExportAssetData> {
+    if (format === asset.format && scale === 1) return { dataUrl: asset.dataUrl, format, width: asset.width, height: asset.height }
+    if (format === 'svg' || format === 'gif') return { dataUrl: asset.dataUrl, format: asset.format, width: asset.width, height: asset.height }
+    const width = asset.width * scale
+    const height = asset.height * scale
+    return { dataUrl: await rasterizeDataUrl(asset.dataUrl, width, height, format), format, width, height }
+  }
+
+  function createExportMetadataJson(task: GenerationTask, asset: GeneratedAsset, exportData: ExportAssetData, scale: number): string {
+    return JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        taskId: task.id,
+        mode: task.mode,
+        prompt: task.prompt,
+        negativePrompt: task.negativePrompt,
+        modelId: task.modelId,
+        width: task.width,
+        height: task.height,
+        batchSize: task.batchSize,
+        steps: task.steps,
+        seed: task.seed,
+        style: task.style,
+        status: task.status,
+        createdAt: task.createdAt,
+        asset: {
+          id: asset.id,
+          title: asset.title,
+          format: exportData.format,
+          width: exportData.width,
+          height: exportData.height,
+          originalFormat: asset.format,
+          originalWidth: asset.width,
+          originalHeight: asset.height,
+          exportScale: scale,
+          createdAt: asset.createdAt,
+        },
+      },
+      null,
+      2,
+    )
+  }
+
+  function triggerBrowserDownload(href: string, filename: string): void {
+    const link = document.createElement('a')
+    link.href = href
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
   }
 
   return {

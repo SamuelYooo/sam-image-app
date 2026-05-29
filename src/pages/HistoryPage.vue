@@ -60,7 +60,7 @@ function openHistoryExport(): void {
 
 async function confirmHistoryExport(): Promise<void> {
   if (!selected.value) return
-  await store.downloadAsset(selected.value.asset, exportFormat.value)
+  await store.downloadAsset(selected.value.asset, exportFormat.value, 1, selected.value.task)
   exportOpen.value = false
 }
 </script>

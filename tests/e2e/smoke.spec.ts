@@ -1,5 +1,20 @@
 import { expect, test } from '@playwright/test'
+import type { Download, Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+
+async function collectDownloads(page: Page, action: () => Promise<void>, count: number): Promise<Download[]> {
+  const downloads: Download[] = []
+  page.on('download', (download) => downloads.push(download))
+  await action()
+  await expect.poll(() => downloads.length).toBe(count)
+  return downloads
+}
+
+function findDownload(downloads: Download[], suffix: string): Download {
+  const download = downloads.find((item) => item.suggestedFilename().endsWith(suffix))
+  expect(download, `expected a ${suffix} download`).toBeTruthy()
+  return download!
+}
 
 test('workspace can generate a local preview and show it in history', async ({ page }) => {
   await page.goto('/workspace?mode=cover')
@@ -70,9 +85,8 @@ test('default export format from settings is used by workspace export', async ({
   await page.getByRole('button', { name: '导出', exact: true }).click()
   await expect(page.getByLabel('格式')).toHaveValue('webp')
 
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: '导出图片' }).click()
-  const download = await downloadPromise
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 2)
+  const download = findDownload(downloads, '.webp')
   expect(download.suggestedFilename()).toMatch(/\.webp$/)
   const downloadedPath = await download.path()
   expect(downloadedPath).toBeTruthy()
@@ -92,14 +106,47 @@ test('workspace export scale produces a larger png download', async ({ page }) =
   await page.getByLabel('格式').selectOption('png')
   await page.getByLabel('倍率').selectOption('2')
 
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: '导出图片' }).click()
-  const download = await downloadPromise
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 2)
+  const download = findDownload(downloads, '.png')
   const path = await download.path()
   expect(path).toBeTruthy()
   const content = await readFile(path!)
   expect(content.readUInt32BE(16)).toBe(640)
   expect(content.readUInt32BE(20)).toBe(480)
+})
+
+test('workspace export includes prompt metadata when enabled', async ({ page }) => {
+  await page.goto('/workspace?mode=cover&prompt=导出元数据回归测试封面')
+  await page.getByRole('button', { name: '赛博' }).click()
+  await page.getByLabel('宽度').fill('512')
+  await page.getByLabel('高度').fill('768')
+  await page.getByText('批量').locator('..').getByRole('slider').fill('2')
+  await page.getByText('步数').locator('..').getByRole('slider').fill('36')
+  await page.getByText('Seed').locator('..').getByRole('spinbutton').fill('246810')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await page.getByLabel('格式').selectOption('png')
+
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 2)
+  const metadataDownload = findDownload(downloads, '.metadata.json')
+
+  const metadataPath = await metadataDownload.path()
+  expect(metadataPath).toBeTruthy()
+  const metadata = JSON.parse(await readFile(metadataPath!, 'utf8'))
+  expect(metadata.prompt).toBe('导出元数据回归测试封面')
+  expect(metadata.mode).toBe('cover')
+  expect(metadata.modelId).toBe('local-preview')
+  expect(metadata.width).toBe(512)
+  expect(metadata.height).toBe(768)
+  expect(metadata.batchSize).toBe(2)
+  expect(metadata.steps).toBe(36)
+  expect(metadata.seed).toBe(246810)
+  expect(metadata.style).toBe('赛博')
+  expect(metadata.asset.format).toBe('png')
+  expect(metadata.asset.width).toBe(512)
+  expect(metadata.asset.height).toBe(768)
 })
 
 test('history detail export confirms format before browser download', async ({ page }) => {
@@ -115,9 +162,8 @@ test('history detail export confirms format before browser download', async ({ p
   await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\Exports')
   await page.getByLabel('格式').selectOption('webp')
 
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: '确认导出' }).click()
-  const download = await downloadPromise
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '确认导出' }).click(), 2)
+  const download = findDownload(downloads, '.webp')
   expect(download.suggestedFilename()).toMatch(/\.webp$/)
 })
 

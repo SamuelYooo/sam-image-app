@@ -223,7 +223,7 @@ async function downloadSelected(): Promise<void> {
     store.notify('请先选择结果', 'error')
     return
   }
-  await store.downloadAsset(selectedAsset.value, exportFormat.value, exportScale.value)
+  await store.downloadAsset(selectedAsset.value, exportFormat.value, exportScale.value, currentTask.value ?? undefined)
   exportOpen.value = false
 }
 
