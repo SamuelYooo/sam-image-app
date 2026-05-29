@@ -102,6 +102,15 @@ test('workspace explains the active generation mode data flow', async ({ page })
   await expect(page.getByText('GIF 动图读取提示词、时长和循环动作描述')).toBeVisible()
 })
 
+test('workspace export requires a selected generated result', async ({ page }) => {
+  await page.goto('/workspace?mode=cover')
+
+  await page.getByRole('button', { name: '导出', exact: true }).click()
+
+  await expect(page.getByText('请先生成或选择结果')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '导出结果' })).toHaveCount(0)
+})
+
 test('default export format from settings is used by workspace export', async ({ page }) => {
   await page.goto('/settings')
 

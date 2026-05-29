@@ -401,6 +401,10 @@ async function downloadSelected(): Promise<void> {
 }
 
 function openExportDialog(): void {
+  if (!selectedAsset.value) {
+    store.notify('请先生成或选择结果', 'error')
+    return
+  }
   exportFormat.value = store.settings.defaultExportFormat
   exportScale.value = 1
   exportOpen.value = true
