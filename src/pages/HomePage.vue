@@ -5,7 +5,7 @@ import { Download, Eye, FolderOpen, ImagePlus, RotateCcw, ShieldCheck, Sparkles,
 import { exportFormatOptions, modeLabels, toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
-import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
+import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask, ModelProfile } from '@/types/domain'
 
 const router = useRouter()
 const store = useAppStore()
@@ -13,12 +13,61 @@ const selectedRecent = ref<{ task: GenerationTask; asset: GeneratedAsset } | nul
 const exportOpen = ref(false)
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 const quickTools = computed(() => toolGroups.flatMap((group) => group.tools).slice(0, 6))
-const modelRows = computed(() => store.models.map((model) => ({
-  id: model.id,
-  name: model.name,
-  tag: model.model || (model.provider === 'local-preview' ? '本地预览' : '未设置'),
-  status: model.status,
-})))
+type ModelSummaryTone = 'ok' | 'warn' | 'error'
+
+interface ModelSummaryRow {
+  id: string
+  label: string
+  tag: string
+  statusLabel: string
+  tone: ModelSummaryTone
+}
+
+function modelTag(model: ModelProfile | undefined): string {
+  if (!model) return '未配置'
+  return model.model || (model.provider === 'local-preview' ? '本地预览' : '未设置')
+}
+
+function isModelConfigured(model: ModelProfile | undefined): boolean {
+  if (!model) return false
+  if (model.provider === 'local-preview') return true
+  return Boolean(model.endpoint.trim() && model.apiKey.trim() && model.model.trim())
+}
+
+function modelStatus(model: ModelProfile | undefined): Pick<ModelSummaryRow, 'statusLabel' | 'tone'> {
+  if (!isModelConfigured(model)) return { statusLabel: '未配置', tone: 'warn' }
+  if (model?.status === 'failed') return { statusLabel: '失败', tone: 'error' }
+  if (model?.status === 'connected') return { statusLabel: '已连接', tone: 'ok' }
+  return { statusLabel: '待检测', tone: 'warn' }
+}
+
+const modelRows = computed<ModelSummaryRow[]>(() => {
+  const imageModel = store.primaryImageModel
+  const textModel = store.primaryTextModel
+  const apiKeyReady = store.models.some((model) => model.provider === 'openai-compatible' && model.apiKey.trim())
+
+  return [
+    {
+      id: 'primary-image',
+      label: '主图像模型',
+      tag: modelTag(imageModel),
+      ...modelStatus(imageModel),
+    },
+    {
+      id: 'primary-text',
+      label: '文本润色模型',
+      tag: modelTag(textModel),
+      ...modelStatus(textModel),
+    },
+    {
+      id: 'api-key',
+      label: 'API Key',
+      tag: apiKeyReady ? '本地已保存' : '未设置',
+      statusLabel: apiKeyReady ? '已设置' : '未设置',
+      tone: apiKeyReady ? 'ok' : 'warn',
+    },
+  ]
+})
 
 function workspaceLink(mode: GenerationMode) {
   return { path: '/workspace', query: { mode } }
@@ -131,12 +180,12 @@ async function chooseRecentExportDir(): Promise<void> {
         <div class="card-body model-detail">
           <div v-for="model in modelRows" :key="model.id" class="model-row">
             <div>
-              <strong>{{ model.name }}</strong>
+              <strong>{{ model.label }}</strong>
               <span class="model-tag">{{ model.tag }}</span>
             </div>
             <span class="status-pill">
-              <span class="status-dot" :class="{ warn: model.status !== 'connected', error: model.status === 'failed' }" />
-              {{ model.status === 'connected' ? '已连接' : model.status === 'failed' ? '失败' : '待检测' }}
+              <span class="status-dot" :class="{ warn: model.tone === 'warn', error: model.tone === 'error' }" />
+              {{ model.statusLabel }}
             </span>
           </div>
         </div>

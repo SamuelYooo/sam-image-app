@@ -710,6 +710,79 @@ test('home recent detail can retry a failed generation with original parameters'
   await expect(page.getByText('已载入失败任务参数，可重新生成')).toBeVisible()
 })
 
+test('home model status summarizes primary models and api key readiness', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [
+          {
+            id: 'primary-image',
+            name: 'Primary Image',
+            provider: 'openai-compatible',
+            endpoint: 'https://api.example.test/v1',
+            apiKey: 'sk-image-test',
+            model: 'qwen-image-v3',
+            kind: 'image',
+            isPrimary: true,
+            status: 'connected',
+          },
+          {
+            id: 'backup-image',
+            name: 'Backup Image',
+            provider: 'openai-compatible',
+            endpoint: 'https://api.example.test/v1',
+            apiKey: '',
+            model: 'backup-image-model',
+            kind: 'image',
+            isPrimary: false,
+            status: 'untested',
+          },
+          {
+            id: 'primary-text',
+            name: 'Primary Text',
+            provider: 'openai-compatible',
+            endpoint: '',
+            apiKey: '',
+            model: 'gpt-polish-v1',
+            kind: 'text',
+            isPrimary: true,
+            status: 'untested',
+          },
+        ],
+        prompts: [],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultImageModelId: 'primary-image',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/')
+
+  const modelSection = page.locator('.home-section').filter({ hasText: '本地模型状态' })
+  const imageRow = modelSection.locator('.model-row').filter({ hasText: '主图像模型' })
+  const textRow = modelSection.locator('.model-row').filter({ hasText: '文本润色模型' })
+  const apiKeyRow = modelSection.locator('.model-row').filter({ hasText: 'API Key' })
+
+  await expect(imageRow).toContainText('qwen-image-v3')
+  await expect(imageRow).toContainText('已连接')
+  await expect(textRow).toContainText('gpt-polish-v1')
+  await expect(textRow).toContainText('未配置')
+  await expect(apiKeyRow).toContainText('已设置')
+  await expect(modelSection.getByText('Backup Image')).toHaveCount(0)
+})
+
 test('workspace keyboard shortcuts run documented actions', async ({ page }) => {
   await page.goto('/workspace?mode=txt2img&prompt=快捷键回归测试')
 
