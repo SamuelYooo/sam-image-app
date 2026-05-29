@@ -192,6 +192,74 @@ test('history reuse restores generation parameters in workspace', async ({ page 
   await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('987654')
 })
 
+test('history supports sorting and loading more records', async ({ page }) => {
+  await page.addInitScript(() => {
+    const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="#1f6bff"/></svg>')
+    const tasks = Array.from({ length: 10 }, (_, index) => {
+      const order = index + 1
+      const createdAt = new Date(Date.UTC(2026, 0, order)).toISOString()
+      return {
+        id: `history-sort-task-${order}`,
+        mode: 'txt2img',
+        prompt: `历史排序 ${String(order).padStart(2, '0')}`,
+        negativePrompt: '',
+        modelId: order % 2 === 0 ? 'zeta-model' : 'alpha-model',
+        width: 512,
+        height: 512,
+        batchSize: 1,
+        steps: 28,
+        seed: order,
+        style: '自然',
+        status: 'completed',
+        assets: [
+          {
+            id: `history-sort-asset-${order}`,
+            taskId: `history-sort-task-${order}`,
+            title: `历史排序资源 ${order}`,
+            width: 512,
+            height: 512,
+            format: 'svg',
+            dataUrl: `data:image/svg+xml;charset=utf-8,${assetSvg}`,
+            createdAt,
+          },
+        ],
+        createdAt,
+      }
+    })
+
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [],
+        tasks,
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/history')
+  await expect(page.getByText('历史排序 10')).toBeVisible()
+  await expect(page.getByText('历史排序 01')).toHaveCount(0)
+
+  await page.getByLabel('排序').selectOption('oldest')
+  await expect(page.getByText('历史排序 01')).toBeVisible()
+  await expect(page.getByText('历史排序 10')).toHaveCount(0)
+
+  await page.getByRole('button', { name: '加载更多' }).click()
+  await expect(page.getByText('历史排序 10')).toBeVisible()
+})
+
 test('workspace keyboard shortcuts run documented actions', async ({ page }) => {
   await page.goto('/workspace?mode=txt2img&prompt=快捷键回归测试')
 

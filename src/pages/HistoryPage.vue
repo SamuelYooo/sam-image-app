@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Download, Eye, Search, Trash2 } from 'lucide-vue-next'
 import { exportFormatOptions, modeLabels } from '@/data/catalog'
@@ -10,6 +10,8 @@ const router = useRouter()
 const store = useAppStore()
 const search = ref('')
 const filter = ref<'all' | GenerationMode>('all')
+const sortMode = ref<'newest' | 'oldest' | 'model'>('newest')
+const visibleCount = ref(8)
 const selected = ref<{ task: GenerationTask; asset: GeneratedAsset } | null>(null)
 const exportOpen = ref(false)
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
@@ -23,11 +25,29 @@ const filteredTasks = computed(() => {
   })
 })
 
+const sortedTasks = computed(() => {
+  return filteredTasks.value.slice().sort((a, b) => {
+    if (sortMode.value === 'oldest') return a.createdAt.localeCompare(b.createdAt)
+    if (sortMode.value === 'model') {
+      const modelOrder = a.modelId.localeCompare(b.modelId)
+      return modelOrder || b.createdAt.localeCompare(a.createdAt)
+    }
+    return b.createdAt.localeCompare(a.createdAt)
+  })
+})
+
+const visibleTasks = computed(() => sortedTasks.value.slice(0, visibleCount.value))
+const hasMoreTasks = computed(() => visibleTasks.value.length < sortedTasks.value.length)
+
 const stats = computed(() => ({
   total: store.tasks.reduce((sum, task) => sum + task.assets.length, 0),
   today: store.tasks.filter((task) => new Date(task.createdAt).toDateString() === new Date().toDateString()).reduce((sum, task) => sum + task.assets.length, 0),
   prompts: store.prompts.length,
 }))
+
+watch([search, filter, sortMode], () => {
+  visibleCount.value = 8
+})
 
 function reusePrompt(task: GenerationTask): void {
   store.setActivePrompt(task.prompt)
@@ -56,6 +76,10 @@ function clearHistory(): void {
 function openHistoryExport(): void {
   exportFormat.value = store.settings.defaultExportFormat
   exportOpen.value = true
+}
+
+function loadMore(): void {
+  visibleCount.value += 8
 }
 
 async function confirmHistoryExport(): Promise<void> {
@@ -94,6 +118,14 @@ async function confirmHistoryExport(): Promise<void> {
       <button v-for="(label, key) in modeLabels" :key="key" class="filter-chip" :class="{ active: filter === key }" type="button" @click="filter = key as GenerationMode">
         {{ label }}
       </button>
+      <div class="sort-box">
+        <label for="history-sort">排序</label>
+        <select id="history-sort" v-model="sortMode">
+          <option value="newest">最新优先</option>
+          <option value="oldest">最早优先</option>
+          <option value="model">按模型</option>
+        </select>
+      </div>
     </div>
 
     <div class="stats-row">
@@ -102,23 +134,28 @@ async function confirmHistoryExport(): Promise<void> {
       <div class="stat-card"><strong>{{ stats.prompts }} 条</strong><span>提示词库</span></div>
     </div>
 
-    <div v-if="filteredTasks.length" class="image-grid">
-      <article v-for="task in filteredTasks" :key="task.id" class="history-card">
-        <button
-          v-for="asset in task.assets"
-          :key="asset.id"
-          class="image-card"
-          type="button"
-          @click="selected = { task, asset }"
-        >
-          <span class="art-preview thumb"><img :src="asset.dataUrl" :alt="asset.title" /></span>
-          <span class="image-info">
-            <span class="mode-chip">{{ modeLabels[task.mode] }}</span>
-            <strong>{{ task.prompt }}</strong>
-            <small>{{ new Date(task.createdAt).toLocaleString() }} · {{ task.width }} x {{ task.height }}</small>
-          </span>
-        </button>
-      </article>
+    <div v-if="sortedTasks.length">
+      <div class="image-grid">
+        <article v-for="task in visibleTasks" :key="task.id" class="history-card">
+          <button
+            v-for="asset in task.assets"
+            :key="asset.id"
+            class="image-card"
+            type="button"
+            @click="selected = { task, asset }"
+          >
+            <span class="art-preview thumb"><img :src="asset.dataUrl" :alt="asset.title" /></span>
+            <span class="image-info">
+              <span class="mode-chip">{{ modeLabels[task.mode] }}</span>
+              <strong>{{ task.prompt }}</strong>
+              <small>{{ new Date(task.createdAt).toLocaleString() }} · {{ task.width }} x {{ task.height }}</small>
+            </span>
+          </button>
+        </article>
+      </div>
+      <div v-if="hasMoreTasks" class="load-more-row">
+        <button class="btn-soft" type="button" @click="loadMore">加载更多</button>
+      </div>
     </div>
     <div v-else class="empty-state card">
       <strong>暂无历史记录</strong>
@@ -228,6 +265,19 @@ async function confirmHistoryExport(): Promise<void> {
   border-color: var(--accent);
 }
 
+.sort-box {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sort-box select {
+  width: 122px;
+}
+
 .stats-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -259,6 +309,12 @@ async function confirmHistoryExport(): Promise<void> {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  padding: 22px 0 4px;
 }
 
 .history-card {
@@ -350,6 +406,12 @@ async function confirmHistoryExport(): Promise<void> {
 @media (max-width: 980px) {
   .image-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sort-box {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 </style>
