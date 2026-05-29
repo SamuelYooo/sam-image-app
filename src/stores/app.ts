@@ -205,15 +205,42 @@ export const useAppStore = defineStore('app', () => {
   const completedAssets = computed(() => allAssets.value.filter(({ task }) => task.status === 'completed'))
   const favoriteTasks = computed(() => tasks.value.filter((task) => task.isFavorite))
 
-  function persist(): void {
-    browserStorage.write(STORAGE_KEY, {
+  function snapshotState(): PersistedState {
+    return {
       models: models.value,
       prompts: prompts.value,
       tasks: tasks.value,
       coverPresets: coverPresets.value,
       promptSync: promptSync.value,
       settings: settings.value,
-    })
+    }
+  }
+
+  function applyPersistedState(next: PersistedState): void {
+    const nextModels = next.models?.length ? next.models : defaultModels
+    const nextSettings = { ...defaultState.settings, ...next.settings }
+    nextSettings.defaultExportFormat = normalizeDefaultExportFormat(nextSettings.defaultExportFormat)
+    nextSettings.defaultImageModelId = normalizeDefaultImageModelId(nextSettings.defaultImageModelId, nextModels)
+    nextSettings.defaultGenerationSize = normalizeInteger(nextSettings.defaultGenerationSize, defaultState.settings.defaultGenerationSize, 128, 4096)
+    nextSettings.defaultBatchSize = normalizeInteger(nextSettings.defaultBatchSize, defaultState.settings.defaultBatchSize, 1, 4)
+    nextSettings.defaultStyle = normalizeStyle(nextSettings.defaultStyle)
+
+    models.value = nextModels
+    prompts.value = next.prompts ?? defaultPrompts
+    tasks.value = next.tasks ?? []
+    coverPresets.value = next.coverPresets?.length ? next.coverPresets : cloneDefaultCoverPresets()
+    promptSync.value = next.promptSync ?? {}
+    settings.value = nextSettings
+  }
+
+  function persist(): void {
+    const snapshot = snapshotState()
+    browserStorage.write(STORAGE_KEY, snapshot)
+    if (isTauriRuntime()) {
+      void invokeOptional('save_app_state', { value: snapshot }).catch((error: unknown) => {
+        console.warn('Failed to persist app state to Tauri', error)
+      })
+    }
   }
 
   function notify(message: string, type: 'success' | 'error' | 'info' = 'success'): void {
@@ -242,6 +269,15 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function loadPersistedTasks(): Promise<void> {
+    const backendState = await invokeOptional<PersistedState>('load_app_state').catch((error: unknown) => {
+      console.warn('Failed to load app state from Tauri', error)
+      return null
+    })
+    if (backendState) {
+      applyPersistedState(backendState)
+      browserStorage.write(STORAGE_KEY, snapshotState())
+    }
+
     const backendTasks = await invokeOptional<GenerationTask[]>('list_generation_tasks', { limit: 500 }).catch((error: unknown) => {
       console.warn('Failed to load persisted tasks from Tauri', error)
       return null

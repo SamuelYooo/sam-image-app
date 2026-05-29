@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::str::FromStr;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
@@ -7,6 +8,8 @@ use tauri::{AppHandle, Manager};
 use crate::error::AppError;
 use crate::generation::GenerationTask;
 use crate::server;
+
+const APP_STATE_KEY: &str = "frontend-state";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,7 +23,12 @@ impl AppState {
             .path()
             .app_data_dir()
             .map_err(|error| AppError::Io(error.to_string()))?;
-        std::fs::create_dir_all(&app_dir)?;
+        Self::initialize_for_path(app_dir).await
+    }
+
+    pub async fn initialize_for_path(app_dir: impl AsRef<Path>) -> Result<Self, AppError> {
+        let app_dir = app_dir.as_ref();
+        std::fs::create_dir_all(app_dir)?;
 
         let db_path = app_dir.join("samimage-v3.sqlite3");
         let db_path = db_path
@@ -89,6 +97,26 @@ impl AppState {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    pub async fn save_app_state(&self, value: &serde_json::Value) -> Result<(), AppError> {
+        let payload =
+            serde_json::to_string(value).map_err(|error| AppError::Unknown(error.to_string()))?;
+        self.save_setting(APP_STATE_KEY, &payload).await
+    }
+
+    pub async fn load_app_state(&self) -> Result<Option<serde_json::Value>, AppError> {
+        let row = sqlx::query("SELECT value FROM app_settings WHERE key = ?1")
+            .bind(APP_STATE_KEY)
+            .fetch_optional(&self.pool)
+            .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let payload: String = row.try_get("value")?;
+        serde_json::from_str(&payload)
+            .map(Some)
+            .map_err(|error| AppError::Unknown(error.to_string()))
     }
 }
 

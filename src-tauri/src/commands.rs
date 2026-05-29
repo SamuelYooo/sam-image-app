@@ -111,6 +111,24 @@ pub async fn save_app_settings(
 }
 
 #[tauri::command]
+pub async fn load_app_state(
+    state: State<'_, AppState>,
+) -> Result<Option<serde_json::Value>, AppError> {
+    state.load_app_state().await
+}
+
+#[tauri::command]
+pub async fn save_app_state(
+    value: serde_json::Value,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    if !value.is_object() {
+        return Err(AppError::Validation("应用状态必须是对象".into()));
+    }
+    state.save_app_state(&value).await
+}
+
+#[tauri::command]
 pub async fn export_generated_asset(
     request: ExportAssetRequest,
 ) -> Result<ExportAssetResult, AppError> {

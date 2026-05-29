@@ -15,6 +15,7 @@ describe('app store generation bridge', () => {
     localStorage.clear()
     setActivePinia(createPinia())
     mockedInvokeOptional.mockReset()
+    mockedInvokeOptional.mockResolvedValue(null)
   })
 
   it('passes the selected image model configuration to the Tauri generation command', async () => {
@@ -122,5 +123,83 @@ describe('app store generation bridge', () => {
         }),
       }),
     )
+  })
+
+  it('persists model configuration to the Tauri app state store', async () => {
+    const store = useAppStore()
+
+    store.saveModel({
+      id: 'persisted-image',
+      name: 'Persisted Image',
+      provider: 'openai-compatible',
+      endpoint: 'https://api.example.test/v1/images/generations',
+      apiKey: 'sk-persisted',
+      model: 'gpt-image-1',
+      kind: 'image',
+      isPrimary: true,
+      status: 'connected',
+    })
+
+    expect(mockedInvokeOptional).toHaveBeenCalledWith(
+      'save_app_state',
+      expect.objectContaining({
+        value: expect.objectContaining({
+          models: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'persisted-image',
+              apiKey: 'sk-persisted',
+            }),
+          ]),
+        }),
+      }),
+    )
+  })
+
+  it('loads full app state from Tauri before merging persisted tasks', async () => {
+    mockedInvokeOptional.mockImplementation(async (command) => {
+      if (command === 'load_app_state') {
+        return {
+          models: [
+            {
+              id: 'sqlite-image',
+              name: 'SQLite Image',
+              provider: 'openai-compatible',
+              endpoint: 'https://api.example.test/v1/images/generations',
+              apiKey: 'sk-sqlite',
+              model: 'gpt-image-1',
+              kind: 'image',
+              isPrimary: true,
+              status: 'connected',
+            },
+          ],
+          prompts: [],
+          tasks: [],
+          coverPresets: [],
+          settings: {
+            defaultOutputDir: 'D:\\SamImage\\Exports',
+            defaultExportFormat: 'png',
+            defaultImageModelId: 'sqlite-image',
+            defaultGenerationSize: 1024,
+            defaultBatchSize: 1,
+            defaultStyle: '自然',
+            autoSaveHistory: true,
+            includePromptMetadata: true,
+            theme: 'dark',
+          },
+        }
+      }
+      if (command === 'list_generation_tasks') return []
+      return null
+    })
+    const store = useAppStore()
+
+    await store.loadPersistedTasks()
+
+    expect(store.models[0]).toEqual(expect.objectContaining({
+      id: 'sqlite-image',
+      apiKey: 'sk-sqlite',
+    }))
+    expect(store.settings.defaultExportFormat).toBe('png')
+    expect(JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}').models[0].id).toBe('sqlite-image')
   })
 })
