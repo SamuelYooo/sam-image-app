@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+const MAX_EXPORT_NAME_CHARS: usize = 80;
+
 #[derive(Debug, Error)]
 pub enum GenerationError {
     #[error("{0}")]
@@ -195,6 +197,15 @@ pub fn sanitize_export_name(value: &str) -> String {
         }
     }
 
+    let output = output.trim_matches('_');
+    if output.is_empty() {
+        return "samimage-export".into();
+    }
+
+    let output = output
+        .chars()
+        .take(MAX_EXPORT_NAME_CHARS)
+        .collect::<String>();
     let output = output.trim_matches('_');
     if output.is_empty() {
         "samimage-export".into()

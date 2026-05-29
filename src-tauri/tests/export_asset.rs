@@ -65,3 +65,11 @@ fn exports_metadata_json_sidecar_to_requested_directory() {
 fn sanitizes_empty_export_name() {
     assert_eq!(sanitize_export_name("  : / ? *  "), "samimage-export");
 }
+
+#[test]
+fn truncates_long_export_names_to_keep_paths_writable() {
+    let name = sanitize_export_name(&"超长导出标题".repeat(80));
+
+    assert!(name.chars().count() <= 80);
+    assert!(name.starts_with("超长导出标题"));
+}
