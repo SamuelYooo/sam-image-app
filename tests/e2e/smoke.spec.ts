@@ -715,6 +715,27 @@ test('workspace can load a reference image with shortcut', async ({ page }) => {
   await expect(page.locator('.sample').first()).toBeVisible()
 })
 
+test('workspace switches to img2img when a reference image is dropped', async ({ page }) => {
+  await page.goto('/workspace?mode=txt2img&prompt=拖拽参考图回归测试')
+
+  const dataTransfer = await page.evaluateHandle(() => {
+    const dt = new DataTransfer()
+    dt.items.add(new File(['reference'], 'dropped-reference.png', { type: 'image/png' }))
+    return dt
+  })
+
+  const dropZone = page.locator('.upload-box')
+  await dropZone.dispatchEvent('dragover', { dataTransfer })
+  await dropZone.dispatchEvent('drop', { dataTransfer })
+
+  await expect(page.getByText('参考图已加载')).toBeVisible()
+  await expect(page.getByRole('button', { name: /图生图/ })).toHaveClass(/active/)
+  await expect(page.getByAltText('参考图预览')).toBeVisible()
+
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toContainText('图生图 1')
+})
+
 test('workspace can reuse a generated result as an image reference', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=结果作为参考图回归测试封面')
   await page.getByRole('button', { name: '生成新结果' }).click()

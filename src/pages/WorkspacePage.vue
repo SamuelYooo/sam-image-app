@@ -260,8 +260,13 @@ function handleReference(event: Event): void {
 
 function handleReferenceDrop(event: DragEvent): void {
   const file = Array.from(event.dataTransfer?.files ?? []).find((item) => item.type.startsWith('image/'))
-  if (file) loadReferenceFile(file)
-  else store.notify('请拖入图片文件作为参考图', 'error')
+  if (!file) {
+    store.notify('请拖入图片文件作为参考图', 'error')
+    return
+  }
+
+  setMode('img2img')
+  loadReferenceFile(file)
 }
 
 function handlePaste(event: ClipboardEvent): void {
