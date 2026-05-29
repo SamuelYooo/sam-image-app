@@ -146,6 +146,30 @@ test('workspace keyboard shortcuts run documented actions', async ({ page }) => 
   await expect(page.locator('.prompt-preview')).toContainText('点击打开大编辑器')
 })
 
+test('global numeric shortcuts navigate between primary pages', async ({ page }) => {
+  await page.goto('/about')
+
+  const shortcuts = [
+    ['1', /\/$/],
+    ['2', /\/workspace$/],
+    ['3', /\/tools$/],
+    ['4', /\/history$/],
+    ['5', /\/settings$/],
+    ['6', /\/about$/],
+  ] as const
+
+  for (const [key, url] of shortcuts) {
+    await page.dispatchEvent('body', 'keydown', {
+      key,
+      code: `Digit${key}`,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    await expect(page).toHaveURL(url)
+  }
+})
+
 test('generation can run without saving to history when auto-save is disabled', async ({ page }) => {
   await page.goto('/settings')
 

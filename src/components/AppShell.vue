@@ -10,11 +10,12 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-vue-next'
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 
 const route = useRoute()
+const router = useRouter()
 const store = useAppStore()
 
 const navItems = [
@@ -28,6 +29,23 @@ const navItems = [
 
 const imageStatus = computed(() => store.primaryImageModel?.status ?? 'untested')
 const textStatus = computed(() => store.textModels.some((model) => model.status === 'connected') ? 'connected' : 'untested')
+
+function handleGlobalShortcut(event: KeyboardEvent): void {
+  if (!event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return
+  const index = Number(event.key) - 1
+  const item = Number.isInteger(index) ? navItems[index] : undefined
+  if (!item) return
+  event.preventDefault()
+  void router.push(item.to)
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalShortcut)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalShortcut)
+})
 </script>
 
 <template>
