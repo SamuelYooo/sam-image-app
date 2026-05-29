@@ -34,15 +34,19 @@ const draft = ref<ModelProfile>({
   status: 'untested',
 })
 
-const modelCatalog = [
-  { name: 'gpt-image-2', model: 'openai/gpt-image-2', provider: 'openai-compatible' },
-  { name: 'dall-e-3', model: 'openai/dall-e-3', provider: 'openai-compatible' },
-  { name: 'flux-1-dev', model: 'black-forest-labs/flux-1-dev', provider: 'openai-compatible' },
-  { name: 'flux-1-schnell', model: 'black-forest-labs/flux-1-schnell', provider: 'openai-compatible' },
-  { name: 'stable-diffusion-xl', model: 'stabilityai/sdxl', provider: 'openai-compatible' },
-  { name: 'qwen2.5-vl', model: 'alibaba/qwen2.5-vl', provider: 'openai-compatible' },
-  { name: 'ideogram-3', model: 'ideogram/ideogram-3', provider: 'openai-compatible' },
-  { name: 'recraft-v3', model: 'recraft/recraft-v3', provider: 'openai-compatible' },
+const modelCatalog: Array<{ name: string; model: string; provider: 'openai-compatible'; kind: 'image' | 'text'; endpoint: string }> = [
+  { name: 'gpt-image-2', model: 'openai/gpt-image-2', provider: 'openai-compatible', kind: 'image', endpoint: 'https://api.openai.com/v1/images/generations' },
+  { name: 'dall-e-3', model: 'openai/dall-e-3', provider: 'openai-compatible', kind: 'image', endpoint: 'https://api.openai.com/v1/images/generations' },
+  { name: 'flux-1-dev', model: 'black-forest-labs/flux-1-dev', provider: 'openai-compatible', kind: 'image', endpoint: 'https://api.openai.com/v1/images/generations' },
+  { name: 'flux-1-schnell', model: 'black-forest-labs/flux-1-schnell', provider: 'openai-compatible', kind: 'image', endpoint: 'https://api.openai.com/v1/images/generations' },
+  { name: 'stable-diffusion-xl', model: 'stabilityai/sdxl', provider: 'openai-compatible', kind: 'image', endpoint: 'https://api.openai.com/v1/images/generations' },
+  { name: 'qwen2.5-vl', model: 'alibaba/qwen2.5-vl', provider: 'openai-compatible', kind: 'image', endpoint: 'https://api.openai.com/v1/images/generations' },
+  { name: 'ideogram-3', model: 'ideogram/ideogram-3', provider: 'openai-compatible', kind: 'image', endpoint: 'https://api.openai.com/v1/images/generations' },
+  { name: 'recraft-v3', model: 'recraft/recraft-v3', provider: 'openai-compatible', kind: 'image', endpoint: 'https://api.openai.com/v1/images/generations' },
+  { name: 'gpt-4o-mini', model: 'gpt-4o-mini', provider: 'openai-compatible', kind: 'text', endpoint: 'https://api.openai.com/v1/chat/completions' },
+  { name: 'gpt-4o', model: 'gpt-4o', provider: 'openai-compatible', kind: 'text', endpoint: 'https://api.openai.com/v1/chat/completions' },
+  { name: 'qwen-plus', model: 'qwen-plus', provider: 'openai-compatible', kind: 'text', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions' },
+  { name: 'deepseek-chat', model: 'deepseek-chat', provider: 'openai-compatible', kind: 'text', endpoint: 'https://api.deepseek.com/v1/chat/completions' },
 ] as const
 
 const promptSources = computed(() => Array.from(new Set(store.prompts.map((item) => item.source))))
@@ -55,7 +59,9 @@ const filteredPrompts = computed(() => store.prompts.filter((item) => {
 const enabledCoverPresetCount = computed(() => store.coverPresets.filter((preset) => preset.enabled).length)
 const filteredModelCatalog = computed(() => {
   const keyword = modelCatalogSearch.value.trim().toLowerCase()
-  return modelCatalog.filter((item) => !keyword || `${item.name} ${item.model}`.toLowerCase().includes(keyword))
+  return modelCatalog
+    .filter((item) => item.kind === draft.value.kind)
+    .filter((item) => !keyword || `${item.name} ${item.model}`.toLowerCase().includes(keyword))
 })
 
 function newModel(): void {
@@ -108,7 +114,8 @@ function applyCatalogModel(): void {
     name: item.name,
     model: item.model,
     provider: item.provider,
-    kind: 'image',
+    endpoint: item.endpoint,
+    kind: item.kind,
     status: 'untested',
   }
   modelCatalogOpen.value = false
@@ -579,7 +586,7 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
         <div class="modal-head">
           <div>
             <h2>获取模型</h2>
-            <p class="muted">从本地目录选择常用图像模型，自动填入当前模型草稿。</p>
+            <p class="muted">从本地目录选择常用{{ draft.kind === 'text' ? '文本润色' : '图像生成' }}模型，自动填入当前模型草稿。</p>
           </div>
           <button class="btn-icon" type="button" @click="modelCatalogOpen = false">×</button>
         </div>

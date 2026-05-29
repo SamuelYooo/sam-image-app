@@ -2146,6 +2146,28 @@ test('settings model editor can fetch a model from the local catalog', async ({ 
   await expect(page.getByLabel('模型 ID')).toHaveValue('black-forest-labs/flux-1-dev')
 })
 
+test('settings model catalog supports text polish models', async ({ page }) => {
+  await page.goto('/settings')
+
+  await page.getByRole('button', { name: '新增模型' }).click()
+  await page.getByLabel('类型').selectOption('text')
+  await page.getByRole('button', { name: '获取模型' }).click()
+  await expect(page.getByRole('heading', { name: '获取模型' })).toBeVisible()
+
+  await page.getByPlaceholder('搜索模型…').fill('gpt-4o')
+  await expect(page.getByRole('button', { name: 'gpt-4o-mini gpt-4o-mini' })).toBeVisible()
+  await expect(page.getByText('flux-1-dev', { exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: /gpt-4o-mini/ }).click()
+  await page.getByRole('button', { name: '确认选择' }).click()
+
+  await expect(page.getByText('已选择模型：gpt-4o-mini')).toBeVisible()
+  await expect(page.getByLabel('模型名称')).toHaveValue('gpt-4o-mini')
+  await expect(page.getByLabel('模型 ID')).toHaveValue('gpt-4o-mini')
+  await expect(page.getByLabel('API 地址')).toHaveValue('https://api.openai.com/v1/chat/completions')
+  await expect(page.getByLabel('类型')).toHaveValue('text')
+})
+
 test('settings can set the primary text model used by prompt polish', async ({ page }) => {
   await page.goto('/settings')
 
