@@ -874,6 +874,25 @@ test('settings model cards can set the primary image model directly', async ({ p
   await expect(page.getByLabel('图像模型')).toHaveValue('secondary-image')
 })
 
+test('settings model editor can fetch a model from the local catalog', async ({ page }) => {
+  await page.goto('/settings')
+
+  await page.getByRole('button', { name: '新增模型' }).click()
+  await page.getByRole('button', { name: '获取模型' }).click()
+  await expect(page.getByRole('heading', { name: '获取模型' })).toBeVisible()
+
+  await page.getByPlaceholder('搜索模型…').fill('flux')
+  await expect(page.getByText('flux-1-dev', { exact: true })).toBeVisible()
+  await expect(page.getByText('gpt-image-2', { exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: /flux-1-dev/ }).click()
+  await page.getByRole('button', { name: '确认选择' }).click()
+
+  await expect(page.getByText('已选择模型：flux-1-dev')).toBeVisible()
+  await expect(page.getByLabel('模型名称')).toHaveValue('flux-1-dev')
+  await expect(page.getByLabel('模型 ID')).toHaveValue('black-forest-labs/flux-1-dev')
+})
+
 test('workspace prompt polish uses the selected text model', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

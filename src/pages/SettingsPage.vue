@@ -10,6 +10,9 @@ const store = useAppStore()
 const activeTab = ref<'models' | 'prompts' | 'generation' | 'system'>('models')
 const promptSourceFilter = ref('all')
 const promptCategoryFilter = ref('all')
+const modelCatalogOpen = ref(false)
+const modelCatalogSearch = ref('')
+const selectedCatalogModelId = ref('')
 const draft = ref<ModelProfile>({
   id: '',
   name: '',
@@ -22,6 +25,17 @@ const draft = ref<ModelProfile>({
   status: 'untested',
 })
 
+const modelCatalog = [
+  { name: 'gpt-image-2', model: 'openai/gpt-image-2', provider: 'openai-compatible' },
+  { name: 'dall-e-3', model: 'openai/dall-e-3', provider: 'openai-compatible' },
+  { name: 'flux-1-dev', model: 'black-forest-labs/flux-1-dev', provider: 'openai-compatible' },
+  { name: 'flux-1-schnell', model: 'black-forest-labs/flux-1-schnell', provider: 'openai-compatible' },
+  { name: 'stable-diffusion-xl', model: 'stabilityai/sdxl', provider: 'openai-compatible' },
+  { name: 'qwen2.5-vl', model: 'alibaba/qwen2.5-vl', provider: 'openai-compatible' },
+  { name: 'ideogram-3', model: 'ideogram/ideogram-3', provider: 'openai-compatible' },
+  { name: 'recraft-v3', model: 'recraft/recraft-v3', provider: 'openai-compatible' },
+] as const
+
 const promptSources = computed(() => Array.from(new Set(store.prompts.map((item) => item.source))))
 const promptCategories = computed(() => Array.from(new Set(store.prompts.map((item) => item.category).filter(Boolean))))
 const filteredPrompts = computed(() => store.prompts.filter((item) => {
@@ -30,6 +44,10 @@ const filteredPrompts = computed(() => store.prompts.filter((item) => {
   return true
 }))
 const enabledCoverPresetCount = computed(() => store.coverPresets.filter((preset) => preset.enabled).length)
+const filteredModelCatalog = computed(() => {
+  const keyword = modelCatalogSearch.value.trim().toLowerCase()
+  return modelCatalog.filter((item) => !keyword || `${item.name} ${item.model}`.toLowerCase().includes(keyword))
+})
 
 function newModel(): void {
   draft.value = {
@@ -55,6 +73,30 @@ function saveDraft(): void {
     return
   }
   store.saveModel({ ...draft.value })
+}
+
+function openModelCatalog(): void {
+  modelCatalogSearch.value = ''
+  selectedCatalogModelId.value = ''
+  modelCatalogOpen.value = true
+}
+
+function applyCatalogModel(): void {
+  const item = modelCatalog.find((model) => model.model === selectedCatalogModelId.value)
+  if (!item) {
+    store.notify('请选择一个模型', 'error')
+    return
+  }
+  draft.value = {
+    ...draft.value,
+    name: item.name,
+    model: item.model,
+    provider: item.provider,
+    kind: 'image',
+    status: 'untested',
+  }
+  modelCatalogOpen.value = false
+  store.notify(`已选择模型：${item.name}`)
 }
 
 function importFile(event: Event): void {
@@ -172,14 +214,17 @@ function toggleCoverPreset(id: string, event: Event): void {
         <div class="card-body stack">
           <h3>模型编辑</h3>
           <div class="grid grid-2">
-            <div class="field"><label>模型名称</label><input v-model="draft.name" /></div>
-            <div class="field"><label>类型</label><select v-model="draft.kind"><option value="image">图像</option><option value="text">文本</option></select></div>
-            <div class="field"><label>API 地址</label><input v-model="draft.endpoint" placeholder="https://..." /></div>
-            <div class="field"><label>模型 ID</label><input v-model="draft.model" placeholder="gpt-image-1" /></div>
-            <div class="field"><label>API Key</label><input v-model="draft.apiKey" type="password" placeholder="sk-..." /></div>
+            <div class="field"><label for="model-draft-name">模型名称</label><input id="model-draft-name" v-model="draft.name" /></div>
+            <div class="field"><label for="model-draft-kind">类型</label><select id="model-draft-kind" v-model="draft.kind"><option value="image">图像</option><option value="text">文本</option></select></div>
+            <div class="field"><label for="model-draft-endpoint">API 地址</label><input id="model-draft-endpoint" v-model="draft.endpoint" placeholder="https://..." /></div>
+            <div class="field"><label for="model-draft-id">模型 ID</label><input id="model-draft-id" v-model="draft.model" placeholder="gpt-image-1" /></div>
+            <div class="field"><label for="model-draft-api-key">API Key</label><input id="model-draft-api-key" v-model="draft.apiKey" type="password" placeholder="sk-..." /></div>
             <label class="toggle-line"><input v-model="draft.isPrimary" type="checkbox" /> 设为主图像模型</label>
           </div>
-          <button class="btn-primary" type="button" @click="saveDraft">保存模型</button>
+          <div class="btn-row">
+            <button class="btn-soft" type="button" @click="openModelCatalog">获取模型</button>
+            <button class="btn-primary" type="button" @click="saveDraft">保存模型</button>
+          </div>
         </div>
       </div>
     </section>
@@ -338,6 +383,41 @@ function toggleCoverPreset(id: string, event: Event): void {
         </div>
       </div>
     </section>
+
+    <div v-if="modelCatalogOpen" class="modal-overlay" @click.self="modelCatalogOpen = false">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <h2>获取模型</h2>
+            <p class="muted">从本地目录选择常用图像模型，自动填入当前模型草稿。</p>
+          </div>
+          <button class="btn-icon" type="button" @click="modelCatalogOpen = false">×</button>
+        </div>
+        <div class="modal-body stack">
+          <input v-model="modelCatalogSearch" class="model-fetch-search" placeholder="搜索模型…" />
+          <div class="model-fetch-grid">
+            <button
+              v-for="item in filteredModelCatalog"
+              :key="item.model"
+              class="model-fetch-item"
+              :class="{ selected: selectedCatalogModelId === item.model }"
+              type="button"
+              @click="selectedCatalogModelId = item.model"
+            >
+              <span class="mf-dot" />
+              <span class="mf-info">
+                <strong class="mf-name">{{ item.name }}</strong>
+                <span class="mf-id">{{ item.model }}</span>
+              </span>
+            </button>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-soft" type="button" @click="modelCatalogOpen = false">取消</button>
+          <button class="btn-primary" type="button" @click="applyCatalogModel">确认选择</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -478,6 +558,62 @@ function toggleCoverPreset(id: string, event: Event): void {
   line-height: 1.6;
 }
 
+.model-fetch-search {
+  width: 100%;
+}
+
+.model-fetch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.model-fetch-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  color: var(--fg);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.model-fetch-item:hover,
+.model-fetch-item.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.mf-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.mf-info {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.mf-name,
+.mf-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mf-id {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 .cover-settings-list {
   display: grid;
   gap: 10px;
@@ -510,6 +646,10 @@ function toggleCoverPreset(id: string, event: Event): void {
   .cover-row {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .model-fetch-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
