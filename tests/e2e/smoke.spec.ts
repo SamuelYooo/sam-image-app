@@ -534,6 +534,28 @@ test('workspace keyboard shortcuts run documented actions', async ({ page }) => 
   await expect(page.locator('.prompt-preview')).toContainText('点击打开大编辑器')
 })
 
+test('workspace can copy the selected result image with shortcut', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        async writeText(value: string) {
+          localStorage.setItem('samimage.e2e.clipboard', value)
+        },
+      },
+      configurable: true,
+    })
+  })
+
+  await page.goto('/workspace?mode=cover&prompt=复制结果图回归测试封面')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.keyboard.press('Control+Shift+C')
+
+  await expect(page.getByText('结果图已复制')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('samimage.e2e.clipboard')?.startsWith('data:image/svg+xml'))).toBe(true)
+})
+
 test('global numeric shortcuts navigate between primary pages', async ({ page }) => {
   await page.goto('/about')
 
@@ -566,6 +588,8 @@ test('about page documents complete keyboard shortcuts', async ({ page }) => {
   await expect(page.getByText('Ctrl + Enter')).toBeVisible()
   await expect(page.getByText('AI 润色')).toBeVisible()
   await expect(page.getByText('Ctrl + Shift + R')).toBeVisible()
+  await expect(page.getByText('复制结果图')).toBeVisible()
+  await expect(page.getByText('Ctrl + Shift + C')).toBeVisible()
   await expect(page.getByRole('main').getByText('关于帮助')).toBeVisible()
   await expect(page.getByText('Ctrl + 6')).toBeVisible()
 })

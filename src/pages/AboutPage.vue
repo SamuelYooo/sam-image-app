@@ -17,6 +17,7 @@ const workspaceShortcuts = [
   { action: '生成图像', keys: 'Ctrl + Enter' },
   { action: '清空提示词', keys: 'Ctrl + D' },
   { action: 'AI 润色', keys: 'Ctrl + Shift + R' },
+  { action: '复制结果图', keys: 'Ctrl + Shift + C' },
   { action: '打开提示词库', keys: 'Ctrl + L' },
   { action: '导出结果', keys: 'Ctrl + S' },
 ]

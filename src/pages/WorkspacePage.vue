@@ -170,6 +170,11 @@ function handleShortcut(event: KeyboardEvent): void {
     polishPrompt()
     return
   }
+  if (event.shiftKey && key === 'c') {
+    event.preventDefault()
+    void copySelectedResult()
+    return
+  }
   if (key === 'l') {
     event.preventDefault()
     libraryOpen.value = true
@@ -220,9 +225,25 @@ function handleReference(event: Event): void {
   reader.readAsDataURL(file)
 }
 
-async function copyPrompt(): Promise<void> {
-  await navigator.clipboard?.writeText(prompt.value)
-  store.notify('提示词已复制')
+async function copySelectedResult(): Promise<void> {
+  const asset = selectedAsset.value ?? currentAssets.value[0]
+  if (!asset) {
+    store.notify('请先生成或选择结果', 'error')
+    return
+  }
+
+  const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard)
+  if (!writeText) {
+    store.notify('当前环境不支持复制结果图', 'error')
+    return
+  }
+
+  try {
+    await writeText(asset.dataUrl)
+    store.notify('结果图已复制')
+  } catch {
+    store.notify('复制结果图失败', 'error')
+  }
 }
 
 async function downloadSelected(): Promise<void> {
@@ -368,9 +389,9 @@ function openExportDialog(): void {
               <p class="muted">{{ width }} x {{ height }} · {{ style }} · {{ selectedModel?.name }}</p>
             </div>
             <div class="btn-row">
-              <button class="btn-soft" type="button" @click="copyPrompt">
+              <button class="btn-soft" type="button" @click="copySelectedResult">
                 <Copy :size="15" />
-                复制提示词
+                复制结果图
               </button>
               <button class="btn-soft" type="button" @click="mode = 'img2img'; referenceImage = selectedAsset?.dataUrl ?? referenceImage">作为参考图</button>
               <button class="btn-primary" type="button" @click="openExportDialog">
