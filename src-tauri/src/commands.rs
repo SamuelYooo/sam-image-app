@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::error::AppError;
-use crate::generation::{GenerationInput, GenerationTask, create_local_generation};
+use crate::generation::{
+    GenerationInput, GenerationTask, create_local_generation, export_asset_data_url,
+};
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +29,21 @@ pub struct ModelTestResult {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportAssetRequest {
+    pub data_url: String,
+    pub output_dir: String,
+    pub title: String,
+    pub format: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportAssetResult {
+    pub path: String,
+}
+
 #[tauri::command]
 pub async fn create_generation_task(
     input: GenerationInput,
@@ -46,6 +63,11 @@ pub async fn list_generation_tasks(
 }
 
 #[tauri::command]
+pub async fn clear_generation_tasks(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.clear_tasks().await
+}
+
+#[tauri::command]
 pub async fn save_app_settings(
     key: String,
     value: String,
@@ -55,6 +77,26 @@ pub async fn save_app_settings(
         return Err(AppError::Validation("设置项不能为空".into()));
     }
     state.save_setting(&key, &value).await
+}
+
+#[tauri::command]
+pub async fn export_generated_asset(
+    request: ExportAssetRequest,
+) -> Result<ExportAssetResult, AppError> {
+    if request.output_dir.trim().is_empty() {
+        return Err(AppError::Validation("请设置导出目录".into()));
+    }
+
+    let path = export_asset_data_url(
+        &request.data_url,
+        request.output_dir.trim(),
+        &request.title,
+        &request.format,
+    )?;
+
+    Ok(ExportAssetResult {
+        path: path.to_string_lossy().into_owned(),
+    })
 }
 
 #[tauri::command]

@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import AppShell from '@/components/AppShell.vue'
 import { useAppStore } from '@/stores/app'
 
 const store = useAppStore()
+
+onMounted(() => {
+  void store.loadPersistedTasks()
+})
 </script>
 
 <template>

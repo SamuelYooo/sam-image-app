@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -129,6 +131,72 @@ pub fn create_local_generation(input: GenerationInput) -> Result<GenerationTask,
         assets,
         created_at,
     })
+}
+
+pub fn export_asset_data_url(
+    data_url: &str,
+    output_dir: impl AsRef<Path>,
+    title: &str,
+    format: &str,
+) -> Result<PathBuf, GenerationError> {
+    let (_, payload) = data_url
+        .split_once(',')
+        .ok_or_else(|| GenerationError::Validation("导出内容必须是 data URL".into()))?;
+    if !data_url.starts_with("data:") {
+        return Err(GenerationError::Validation(
+            "导出内容必须是 data URL".into(),
+        ));
+    }
+
+    let bytes = STANDARD
+        .decode(payload)
+        .map_err(|error| GenerationError::Validation(format!("data URL 解码失败: {error}")))?;
+    let output_dir = output_dir.as_ref();
+    std::fs::create_dir_all(output_dir)
+        .map_err(|error| GenerationError::Validation(format!("创建导出目录失败: {error}")))?;
+
+    let extension = sanitize_extension(format);
+    let file_name = format!("{}.{}", sanitize_export_name(title), extension);
+    let path = output_dir.join(file_name);
+    std::fs::write(&path, bytes)
+        .map_err(|error| GenerationError::Validation(format!("写入导出文件失败: {error}")))?;
+    Ok(path)
+}
+
+pub fn sanitize_export_name(value: &str) -> String {
+    let mut output = String::new();
+    let mut last_was_separator = false;
+
+    for ch in value.trim().chars() {
+        if ch.is_alphanumeric() || ch == '-' || ch == '_' {
+            output.push(ch);
+            last_was_separator = false;
+        } else if !last_was_separator {
+            output.push('_');
+            last_was_separator = true;
+        }
+    }
+
+    let output = output.trim_matches('_');
+    if output.is_empty() {
+        "samimage-export".into()
+    } else {
+        output.into()
+    }
+}
+
+fn sanitize_extension(value: &str) -> String {
+    let extension: String = value
+        .trim()
+        .trim_start_matches('.')
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect();
+    if extension.is_empty() {
+        "svg".into()
+    } else {
+        extension.to_ascii_lowercase()
+    }
 }
 
 fn create_preview_asset(

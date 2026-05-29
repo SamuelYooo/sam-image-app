@@ -75,6 +75,13 @@ impl AppState {
             .collect()
     }
 
+    pub async fn clear_tasks(&self) -> Result<(), AppError> {
+        sqlx::query("DELETE FROM generation_tasks")
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn save_setting(&self, key: &str, value: &str) -> Result<(), AppError> {
         sqlx::query("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?1, ?2, datetime('now'))")
             .bind(key)

@@ -118,12 +118,12 @@ async function copyPrompt(): Promise<void> {
   store.notify('提示词已复制')
 }
 
-function downloadSelected(): void {
+async function downloadSelected(): Promise<void> {
   if (!selectedAsset.value) {
     store.notify('请先选择结果', 'error')
     return
   }
-  store.downloadAsset(selectedAsset.value)
+  await store.downloadAsset(selectedAsset.value)
   exportOpen.value = false
 }
 </script>

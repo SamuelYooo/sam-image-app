@@ -34,8 +34,7 @@ function reusePrompt(task: GenerationTask): void {
 
 function clearHistory(): void {
   if (!window.confirm('确定清空所有历史记录？此操作不可恢复。')) return
-  store.tasks.length = 0
-  store.notify('历史记录已清空')
+  store.clearHistory()
 }
 </script>
 
@@ -48,7 +47,7 @@ function clearHistory(): void {
         <p class="page-desc">查看所有本地生成结果，筛选、复用提示词或导出图片。</p>
       </div>
       <div class="btn-row">
-        <button class="btn-soft" type="button" @click="store.completedAssets.forEach(({ asset }) => store.downloadAsset(asset))">
+        <button class="btn-soft" type="button" @click="store.downloadAllAssets">
           <Download :size="16" />
           导出全部
         </button>

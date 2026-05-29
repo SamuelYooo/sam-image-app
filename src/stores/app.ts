@@ -99,6 +99,16 @@ export const useAppStore = defineStore('app', () => {
     activePrompt.value = prompt
   }
 
+  async function loadPersistedTasks(): Promise<void> {
+    const backendTasks = await invokeOptional<GenerationTask[]>('list_generation_tasks', { limit: 500 })
+    if (!backendTasks?.length) return
+
+    const existingIds = new Set(tasks.value.map((task) => task.id))
+    const merged = [...backendTasks.filter((task) => !existingIds.has(task.id)), ...tasks.value]
+    tasks.value = merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    persist()
+  }
+
   async function generate(input: GenerationInput): Promise<GenerationTask> {
     const commandResult = await invokeOptional<GenerationTask>('create_generation_task', { input })
     const task = commandResult ?? createLocalGeneration(input)
@@ -184,7 +194,7 @@ export const useAppStore = defineStore('app', () => {
     notify('封面预设已删除')
   }
 
-  function resetDemoData(): void {
+  async function resetDemoData(): Promise<void> {
     const fresh = cloneDefault()
     models.value = fresh.models
     prompts.value = fresh.prompts
@@ -192,11 +202,48 @@ export const useAppStore = defineStore('app', () => {
     settings.value = fresh.settings
     tasks.value = []
     activePrompt.value = ''
+    await invokeOptional('clear_generation_tasks')
     persist()
     notify('已恢复初始数据')
   }
 
-  function downloadAsset(asset: GeneratedAsset): void {
+  async function clearHistory(): Promise<void> {
+    tasks.value = []
+    await invokeOptional('clear_generation_tasks')
+    persist()
+    notify('历史记录已清空')
+  }
+
+  async function downloadAllAssets(): Promise<void> {
+    const assets = completedAssets.value.map(({ asset }) => asset)
+    if (!assets.length) {
+      notify('暂无可导出的结果', 'info')
+      return
+    }
+
+    for (const asset of assets) {
+      await downloadAsset(asset)
+    }
+    notify(`已导出 ${assets.length} 个结果`)
+  }
+
+  async function downloadAsset(asset: GeneratedAsset): Promise<void> {
+    const result = await invokeOptional<{ path: string }>('export_generated_asset', {
+      request: {
+        dataUrl: asset.dataUrl,
+        outputDir: settings.value.defaultOutputDir,
+        title: asset.title,
+        format: asset.format,
+      },
+    })
+
+    if (result?.path) {
+      asset.localPath = result.path
+      persist()
+      notify(`已导出到 ${result.path}`)
+      return
+    }
+
     const link = document.createElement('a')
     link.href = asset.dataUrl
     link.download = `${asset.title}.${asset.format}`
@@ -221,6 +268,7 @@ export const useAppStore = defineStore('app', () => {
     resolveMode,
     setMode,
     setActivePrompt,
+    loadPersistedTasks,
     generate,
     importPrompts,
     usePrompt,
@@ -231,6 +279,8 @@ export const useAppStore = defineStore('app', () => {
     addCoverPreset,
     removeCoverPreset,
     resetDemoData,
+    clearHistory,
+    downloadAllAssets,
     downloadAsset,
     notify,
   }

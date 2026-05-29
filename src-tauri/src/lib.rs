@@ -23,6 +23,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::create_generation_task,
+            commands::clear_generation_tasks,
+            commands::export_generated_asset,
             commands::list_generation_tasks,
             commands::test_model_profile,
             commands::save_app_settings,
