@@ -25,6 +25,7 @@
     "test:rust": "node scripts/cargo-cli.cjs test --manifest-path src-tauri/Cargo.toml",
     "test:e2e": "playwright test",
     "check": "npm run test && npm run test:rust && npm run build",
+    "check:release": "npm run check && npm run test:e2e && npm run build:app",
     "tauri:dev": "npm run tauri -- dev",
     "tauri:info": "npm run tauri -- info",
     "tauri": "node scripts/tauri-cli.cjs"
