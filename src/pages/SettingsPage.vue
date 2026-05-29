@@ -8,6 +8,8 @@ import { createId } from '@/domain/ids'
 
 const store = useAppStore()
 const activeTab = ref<'models' | 'prompts' | 'generation' | 'system'>('models')
+const promptSourceFilter = ref('all')
+const promptCategoryFilter = ref('all')
 const draft = ref<ModelProfile>({
   id: '',
   name: '',
@@ -21,6 +23,12 @@ const draft = ref<ModelProfile>({
 })
 
 const promptSources = computed(() => Array.from(new Set(store.prompts.map((item) => item.source))))
+const promptCategories = computed(() => Array.from(new Set(store.prompts.map((item) => item.category).filter(Boolean))))
+const filteredPrompts = computed(() => store.prompts.filter((item) => {
+  if (promptSourceFilter.value !== 'all' && item.source !== promptSourceFilter.value) return false
+  if (promptCategoryFilter.value !== 'all' && item.category !== promptCategoryFilter.value && item.subCategory !== promptCategoryFilter.value) return false
+  return true
+}))
 const enabledCoverPresetCount = computed(() => store.coverPresets.filter((preset) => preset.enabled).length)
 
 function newModel(): void {
@@ -175,9 +183,26 @@ function toggleCoverPreset(id: string, event: Event): void {
       <div class="prompt-summary">
         <div class="stat-card"><strong>{{ store.prompts.length }}</strong><span>提示词总数</span></div>
         <div class="stat-card"><strong>{{ promptSources.length }}</strong><span>来源</span></div>
+        <div class="stat-card"><strong>{{ filteredPrompts.length }}</strong><span>当前命中</span></div>
+      </div>
+      <div class="prompt-filters">
+        <div class="field">
+          <label for="prompt-source-filter">来源筛选</label>
+          <select id="prompt-source-filter" v-model="promptSourceFilter">
+            <option value="all">全部来源</option>
+            <option v-for="source in promptSources" :key="source" :value="source">{{ source }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="prompt-category-filter">分类筛选</label>
+          <select id="prompt-category-filter" v-model="promptCategoryFilter">
+            <option value="all">全部分类</option>
+            <option v-for="category in promptCategories" :key="category" :value="category">{{ category }}</option>
+          </select>
+        </div>
       </div>
       <div class="prompt-list">
-        <article v-for="item in store.prompts" :key="item.id" class="prompt-card">
+        <article v-for="item in filteredPrompts" :key="item.id" class="prompt-card">
           <div>
             <div class="inline"><strong>{{ item.title }}</strong><span class="chip">{{ item.source }}</span><span class="chip accent">{{ item.category }}</span></div>
             <p>{{ item.prompt }}</p>

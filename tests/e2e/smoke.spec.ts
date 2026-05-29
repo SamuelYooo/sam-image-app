@@ -427,6 +427,86 @@ test('prompt market imports multiple json files at once', async ({ page }) => {
   await expect(page.getByText('批量导入提示词 B')).toBeVisible()
 })
 
+test('prompt market filters prompts by source and category', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [
+          {
+            id: 'prompt-filter-builtin',
+            title: '内置封面提示词',
+            prompt: '内置封面提示词内容',
+            source: 'builtin',
+            sourceId: 'builtin-cover',
+            category: '封面',
+            subCategory: '',
+            author: 'SamImage',
+            tags: ['封面'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'prompt-filter-custom',
+            title: '自定义 ICON 提示词',
+            prompt: '自定义 ICON 提示词内容',
+            source: 'custom',
+            sourceId: 'custom-icon',
+            category: 'ICON',
+            subCategory: '',
+            author: 'User',
+            tags: ['ICON'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-02T00:00:00.000Z',
+          },
+          {
+            id: 'prompt-filter-glidea',
+            title: 'Glidea 摄影提示词',
+            prompt: 'Glidea 摄影提示词内容',
+            source: 'glidea',
+            sourceId: 'glidea-photo',
+            category: '摄影',
+            subCategory: '',
+            author: 'glidea',
+            tags: ['摄影'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-03T00:00:00.000Z',
+          },
+        ],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+
+  await page.getByLabel('来源筛选').selectOption('custom')
+  await expect(page.getByText('自定义 ICON 提示词', { exact: true })).toBeVisible()
+  await expect(page.getByText('内置封面提示词', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Glidea 摄影提示词', { exact: true })).toHaveCount(0)
+
+  await page.getByLabel('来源筛选').selectOption('all')
+  await page.getByLabel('分类筛选').selectOption('摄影')
+  await expect(page.getByText('Glidea 摄影提示词', { exact: true })).toBeVisible()
+  await expect(page.getByText('自定义 ICON 提示词', { exact: true })).toHaveCount(0)
+})
+
 test('settings cover presets control the tools catalog', async ({ page }) => {
   await page.goto('/settings')
   await page.getByRole('button', { name: '系统设置' }).click()
