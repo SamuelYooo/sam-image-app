@@ -834,6 +834,25 @@ test('about page documents complete keyboard shortcuts', async ({ page }) => {
   await expect(page.getByText('Ctrl + 6')).toBeVisible()
 })
 
+test('about faq documents prompt import and local preset workflows', async ({ page }) => {
+  await page.goto('/about')
+  await page.getByRole('button', { name: '常见问题' }).click()
+
+  await page.getByRole('button', { name: /提示词如何导入/ }).click()
+  await expect(page.getByText('glidea/banana-prompt-quicker')).toBeVisible()
+  await expect(page.getByText('EvoLinkAI/awesome-gpt-image')).toBeVisible()
+  await expect(page.getByText('{prompts:[]}')).toBeVisible()
+  await expect(page.getByText('content hash')).toBeVisible()
+
+  await page.getByRole('button', { name: /如何添加自定义封面预设/ }).click()
+  await expect(page.getByText('工具库的封面预设区域')).toBeVisible()
+  await expect(page.getByText('输入名称、宽度、高度')).toBeVisible()
+
+  await page.getByRole('button', { name: /数据安全吗/ }).click()
+  await expect(page.getByText('API Key 保存在本地')).toBeVisible()
+  await expect(page.getByText('不会上传到任何服务器')).toBeVisible()
+})
+
 test('generation can run without saving to history when auto-save is disabled', async ({ page }) => {
   await page.goto('/settings')
 

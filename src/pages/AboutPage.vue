@@ -8,9 +8,11 @@ const openFaq = ref(0)
 
 const faqs = [
   ['SamImage 需要联网吗？', '大部分功能不需要联网。只有在调用你配置的模型 API 生成图像时才需要网络连接。'],
-  ['支持哪些模型？', '支持本地预览模型，以及 OpenAI 兼容协议的图像和文本模型配置。'],
-  ['提示词如何导入？', '在设置的 Prompts 市场中导入 JSON，支持数组、{prompts:[]}、{items:[]} 等常见结构。'],
-  ['图片保存在哪里？', '浏览器预览会保存到下载目录；桌面版会使用设置里的默认输出目录。'],
+  ['支持哪些模型？', '支持本地预览模型、OpenAI 兼容协议的图像模型，以及用于 AI 润色的文本模型。可以配置多个模型并设置主模型。'],
+  ['提示词如何导入？', '在设置的 Prompts 市场中同步 glidea/banana-prompt-quicker、EvoLinkAI/awesome-gpt-image 等开源仓库，或导入自定义 JSON。支持数组、{prompts:[]}、{items:[]} 等常见结构，并按 source+sourceId 或 content hash 去重。'],
+  ['如何添加自定义封面预设？', '在工具库的封面预设区域点击「自定义」，或在设置的系统设置里点击「新增预设」，输入名称、宽度、高度后即可在列表中看到并使用。自定义预设保存在本地，支持随时删除。'],
+  ['图片保存在哪里？', '浏览器预览会保存到下载目录；桌面版会使用设置里的默认输出目录。历史记录可查看所有生成结果、提示词和参数，并支持重新导出。'],
+  ['数据安全吗？', 'SamImage 不收集任何用户数据。API Key 保存在本地，配置、提示词和历史记录不会上传到任何服务器。只有在生成图像时才会向你配置的模型 API 发送请求。'],
 ]
 
 const workspaceShortcuts = [
@@ -66,7 +68,7 @@ const navigationShortcuts = [
       </article>
       <article class="privacy-note">
         <LockKeyhole :size="18" />
-        <span><strong>隐私承诺</strong>：SamImage 不上传配置、提示词和历史记录。只有主动生成时才向配置的模型 API 发送请求。</span>
+        <span><strong>隐私承诺</strong>：SamImage 不上传配置、提示词和历史记录。API Key 保存在本地，只有主动生成时才向配置的模型 API 发送请求。</span>
       </article>
     </section>
 
