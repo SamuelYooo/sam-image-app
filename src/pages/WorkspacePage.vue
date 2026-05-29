@@ -18,6 +18,7 @@ const height = ref(1024)
 const batchSize = ref(4)
 const steps = ref(28)
 const seed = ref(128409)
+const selectedModelId = ref('')
 const referenceImage = ref('')
 const currentTask = ref<GenerationTask | null>(null)
 const selectedAsset = ref<GeneratedAsset | null>(null)
@@ -30,6 +31,7 @@ const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
 const primaryModel = computed(() => store.primaryImageModel)
+const selectedModel = computed(() => store.imageModels.find((model) => model.id === selectedModelId.value) ?? primaryModel.value)
 const visiblePrompts = computed(() => {
   const keyword = promptSearch.value.trim().toLowerCase()
   return store.prompts.filter((item) => !keyword || `${item.title} ${item.prompt} ${item.category}`.toLowerCase().includes(keyword)).slice(0, 24)
@@ -42,6 +44,7 @@ watch(() => store.activePrompt, (value) => {
 })
 
 onMounted(() => {
+  selectedModelId.value = primaryModel.value?.id ?? ''
   mode.value = store.resolveMode(String(route.query.mode ?? 'txt2img'))
   store.setMode(mode.value)
   const toolId = typeof route.query.tool === 'string' ? route.query.tool : ''
@@ -91,7 +94,7 @@ async function generate(): Promise<void> {
       mode: mode.value,
       prompt: prompt.value,
       negativePrompt: negativePrompt.value,
-      modelId: primaryModel.value?.id ?? 'local-preview',
+      modelId: selectedModel.value?.id ?? 'local-preview',
       width: width.value,
       height: height.value,
       batchSize: batchSize.value,
@@ -266,7 +269,7 @@ function openExportDialog(): void {
           <div class="result-foot">
             <div>
               <strong>{{ selectedAsset ? `已选择：${selectedAsset.title}` : '尚未选择结果' }}</strong>
-              <p class="muted">{{ width }} x {{ height }} · {{ style }} · {{ primaryModel?.name }}</p>
+              <p class="muted">{{ width }} x {{ height }} · {{ style }} · {{ selectedModel?.name }}</p>
             </div>
             <div class="btn-row">
               <button class="btn-soft" type="button" @click="copyPrompt">
@@ -290,8 +293,8 @@ function openExportDialog(): void {
             <span>{{ currentModeLabel }}</span>
           </div>
           <div class="field">
-            <label>图像模型</label>
-            <select :value="primaryModel?.id">
+            <label for="workspace-image-model">图像模型</label>
+            <select id="workspace-image-model" v-model="selectedModelId">
               <option v-for="model in store.imageModels" :key="model.id" :value="model.id">{{ model.name }} / {{ model.model }}</option>
             </select>
           </div>

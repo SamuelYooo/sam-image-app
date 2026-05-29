@@ -97,3 +97,56 @@ test('generation can run without saving to history when auto-save is disabled', 
   await expect(page.getByText('暂无历史记录')).toBeVisible()
   await expect(page.getByText('不保存历史回归测试封面')).toHaveCount(0)
 })
+
+test('workspace generation uses the selected image model', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [
+          {
+            id: 'local-preview',
+            name: 'Local Preview',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'samimage-local-preview',
+            kind: 'image',
+            isPrimary: true,
+            status: 'connected',
+          },
+          {
+            id: 'secondary-image',
+            name: 'Secondary Image',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'secondary-image-model',
+            kind: 'image',
+            isPrimary: false,
+            status: 'connected',
+          },
+        ],
+        prompts: [],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/workspace?mode=cover&prompt=模型选择回归测试封面')
+  await page.getByLabel('图像模型').selectOption('secondary-image')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('button', { name: /模型选择回归测试封面/ }).first().click()
+  await expect(page.getByText('secondary-image')).toBeVisible()
+})
