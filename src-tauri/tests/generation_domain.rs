@@ -1,6 +1,9 @@
 use sam_image_app_v3_lib::generation::{
-    GenerationInput, GenerationMode, create_local_generation, validate_generation_input,
+    GenerationInput, GenerationMode, RemoteImageModel, create_generation_with_model,
+    create_local_generation, validate_generation_input,
 };
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 fn valid_input() -> GenerationInput {
     GenerationInput {
@@ -17,6 +20,76 @@ fn valid_input() -> GenerationInput {
         reference_image: None,
         mode_options: serde_json::Value::Null,
     }
+}
+
+#[tokio::test]
+async fn openai_compatible_generation_uses_remote_image_response() {
+    let captured_payload = Arc::new(Mutex::new(serde_json::Value::Null));
+    let captured_auth = Arc::new(Mutex::new(String::new()));
+    let payload_state = Arc::clone(&captured_payload);
+    let auth_state = Arc::clone(&captured_auth);
+    let app = axum::Router::new().route(
+        "/v1/images/generations",
+        axum::routing::post(
+            move |headers: axum::http::HeaderMap,
+                  axum::Json(payload): axum::Json<serde_json::Value>| {
+                let payload_state = Arc::clone(&payload_state);
+                let auth_state = Arc::clone(&auth_state);
+                async move {
+                    *payload_state.lock().await = payload;
+                    *auth_state.lock().await = headers
+                        .get(axum::http::header::AUTHORIZATION)
+                        .and_then(|value| value.to_str().ok())
+                        .unwrap_or_default()
+                        .to_string();
+                    axum::Json(serde_json::json!({
+                        "data": [
+                            { "b64_json": "iVBORw0KGgo=" }
+                        ]
+                    }))
+                }
+            },
+        ),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("mock listener");
+    let endpoint = format!(
+        "http://{}/v1/images/generations",
+        listener.local_addr().expect("addr")
+    );
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("mock image server");
+    });
+
+    let mut input = valid_input();
+    input.model_id = "remote-image".into();
+    input.batch_size = 1;
+    let model = RemoteImageModel {
+        id: "remote-image".into(),
+        name: "Remote Image".into(),
+        provider: "openai-compatible".into(),
+        endpoint,
+        api_key: "sk-test".into(),
+        model: "gpt-image-1".into(),
+    };
+
+    let task = create_generation_with_model(input, Some(model))
+        .await
+        .expect("remote generation should use API image");
+
+    assert_eq!(task.assets.len(), 1);
+    assert_eq!(task.assets[0].format, "png");
+    assert_eq!(
+        task.assets[0].data_url,
+        "data:image/png;base64,iVBORw0KGgo="
+    );
+    assert_eq!(*captured_auth.lock().await, "Bearer sk-test");
+    let payload = captured_payload.lock().await;
+    assert_eq!(payload["model"], "gpt-image-1");
+    assert_eq!(payload["prompt"], "小红书 AI 工具合集封面");
+    assert_eq!(payload["n"], 1);
+    assert_eq!(payload["size"], "1080x1440");
 }
 
 #[test]

@@ -17,6 +17,17 @@ pub enum GenerationError {
     Validation(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteImageModel {
+    pub id: String,
+    pub name: String,
+    pub provider: String,
+    pub endpoint: String,
+    pub api_key: String,
+    pub model: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum GenerationMode {
@@ -142,6 +153,174 @@ pub fn create_local_generation(input: GenerationInput) -> Result<GenerationTask,
         is_favorite: Some(false),
         assets,
         created_at,
+    })
+}
+
+pub async fn create_generation_with_model(
+    input: GenerationInput,
+    model: Option<RemoteImageModel>,
+) -> Result<GenerationTask, GenerationError> {
+    let Some(model) = model else {
+        return create_local_generation(input);
+    };
+
+    if model.provider == "local-preview" {
+        return create_local_generation(input);
+    }
+
+    create_remote_generation(input, model).await
+}
+
+async fn create_remote_generation(
+    input: GenerationInput,
+    model: RemoteImageModel,
+) -> Result<GenerationTask, GenerationError> {
+    validate_generation_input(&input)?;
+    if model.provider != "openai-compatible" {
+        return Err(GenerationError::Validation("不支持的图像模型提供方".into()));
+    }
+    if model.endpoint.trim().is_empty() {
+        return Err(GenerationError::Validation(
+            "请填写图像模型 API 地址".into(),
+        ));
+    }
+    if model.api_key.trim().is_empty() {
+        return Err(GenerationError::Validation("请填写图像模型 API Key".into()));
+    }
+    if model.model.trim().is_empty() {
+        return Err(GenerationError::Validation("请填写图像模型 ID".into()));
+    }
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(model.endpoint.trim())
+        .bearer_auth(model.api_key.trim())
+        .json(&serde_json::json!({
+            "model": model.model.trim(),
+            "prompt": input.prompt.trim(),
+            "n": input.batch_size,
+            "size": format!("{}x{}", input.width, input.height),
+            "response_format": "b64_json",
+        }))
+        .send()
+        .await
+        .map_err(|error| GenerationError::Validation(format!("图像模型请求失败: {error}")))?;
+    let status = response.status();
+    if !status.is_success() {
+        let message = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "无法读取错误响应".into());
+        return Err(GenerationError::Validation(format!(
+            "图像模型响应失败: HTTP {} {}",
+            status.as_u16(),
+            message
+        )));
+    }
+
+    let payload: OpenAiImageResponse = response
+        .json()
+        .await
+        .map_err(|error| GenerationError::Validation(format!("解析图像模型响应失败: {error}")))?;
+    let id = format!("task-{}", Uuid::new_v4());
+    let created_at = Utc::now().to_rfc3339();
+    let mut assets = Vec::new();
+    for (index, image) in payload.data.into_iter().enumerate() {
+        assets.push(remote_response_asset(&client, &id, &input, index, &created_at, image).await?);
+    }
+    if assets.is_empty() {
+        return Err(GenerationError::Validation("图像模型未返回图片".into()));
+    }
+
+    Ok(GenerationTask {
+        id,
+        mode: input.mode,
+        prompt: input.prompt,
+        negative_prompt: input.negative_prompt,
+        model_id: input.model_id,
+        width: input.width,
+        height: input.height,
+        batch_size: input.batch_size,
+        steps: input.steps,
+        seed: input.seed,
+        style: input.style,
+        mode_options: input.mode_options,
+        status: "completed".into(),
+        error: None,
+        is_favorite: Some(false),
+        assets,
+        created_at,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiImageResponse {
+    data: Vec<OpenAiImageData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiImageData {
+    b64_json: Option<String>,
+    url: Option<String>,
+    mime_type: Option<String>,
+}
+
+async fn remote_response_asset(
+    client: &reqwest::Client,
+    task_id: &str,
+    input: &GenerationInput,
+    index: usize,
+    created_at: &str,
+    image: OpenAiImageData,
+) -> Result<GeneratedAsset, GenerationError> {
+    let (data_url, format) = match image.b64_json {
+        Some(payload) if !payload.trim().is_empty() => {
+            let mime = image.mime_type.unwrap_or_else(|| "image/png".into());
+            let format = mime
+                .strip_prefix("image/")
+                .unwrap_or("png")
+                .replace("jpeg", "jpg");
+            (format!("data:{mime};base64,{payload}"), format)
+        }
+        _ => {
+            let url = image
+                .url
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| GenerationError::Validation("图像模型返回缺少图片内容".into()))?;
+            let bytes = client
+                .get(url.trim())
+                .send()
+                .await
+                .map_err(|error| {
+                    GenerationError::Validation(format!("下载图像模型结果失败: {error}"))
+                })?
+                .bytes()
+                .await
+                .map_err(|error| {
+                    GenerationError::Validation(format!("读取图像模型结果失败: {error}"))
+                })?;
+            let mime = image.mime_type.unwrap_or_else(|| "image/png".into());
+            let format = mime
+                .strip_prefix("image/")
+                .unwrap_or("png")
+                .replace("jpeg", "jpg");
+            (
+                format!("data:{mime};base64,{}", STANDARD.encode(bytes)),
+                format,
+            )
+        }
+    };
+
+    Ok(GeneratedAsset {
+        id: format!("asset-{}", Uuid::new_v4()),
+        task_id: task_id.into(),
+        title: format!("{} {}", mode_title(&input.mode), index + 1),
+        width: input.width,
+        height: input.height,
+        format,
+        data_url,
+        local_path: None,
+        created_at: created_at.into(),
     })
 }
 

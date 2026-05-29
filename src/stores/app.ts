@@ -240,7 +240,10 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function loadPersistedTasks(): Promise<void> {
-    const backendTasks = await invokeOptional<GenerationTask[]>('list_generation_tasks', { limit: 500 })
+    const backendTasks = await invokeOptional<GenerationTask[]>('list_generation_tasks', { limit: 500 }).catch((error: unknown) => {
+      console.warn('Failed to load persisted tasks from Tauri', error)
+      return null
+    })
     if (!backendTasks?.length) return
 
     const existingIds = new Set(tasks.value.map((task) => task.id))
@@ -250,8 +253,15 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function generate(input: GenerationInput): Promise<GenerationTask> {
-    const commandResult = settings.value.autoSaveHistory ? await invokeOptional<GenerationTask>('create_generation_task', { input }) : null
-    const task = commandResult ?? createLocalGeneration(input)
+    const selectedImageModel = imageModels.value.find((model) => model.id === input.modelId)
+    let task: GenerationTask
+    if (settings.value.autoSaveHistory && isTauriRuntime()) {
+      const commandResult = await invokeOptional<GenerationTask>('create_generation_task', { input, model: selectedImageModel })
+      if (!commandResult) throw new Error('Tauri 生成命令不可用')
+      task = commandResult
+    } else {
+      task = createLocalGeneration(input)
+    }
     if (settings.value.autoSaveHistory) {
       tasks.value.unshift(task)
       persist()
@@ -380,7 +390,10 @@ export const useAppStore = defineStore('app', () => {
       notify('本地预览模型可用')
       return
     }
-    const result = await invokeOptional<{ ok: boolean; message: string }>('test_model_profile', { profile: model })
+    const result = await invokeOptional<{ ok: boolean; message: string }>('test_model_profile', { profile: model }).catch((error: unknown) => ({
+      ok: false,
+      message: error instanceof Error ? error.message : '模型连接检测失败',
+    }))
     model.status = result?.ok ? 'connected' : 'failed'
     model.lastCheckedAt = new Date().toISOString()
     persist()
@@ -461,14 +474,18 @@ export const useAppStore = defineStore('app', () => {
     settings.value = fresh.settings
     tasks.value = []
     activePrompt.value = ''
-    await invokeOptional('clear_generation_tasks')
+    await invokeOptional('clear_generation_tasks').catch((error: unknown) => {
+      console.warn('Failed to clear persisted tasks from Tauri', error)
+    })
     persist()
     notify('已恢复初始数据')
   }
 
   async function clearHistory(): Promise<void> {
     tasks.value = []
-    await invokeOptional('clear_generation_tasks')
+    await invokeOptional('clear_generation_tasks').catch((error: unknown) => {
+      console.warn('Failed to clear persisted tasks from Tauri', error)
+    })
     persist()
     notify('历史记录已清空')
   }
@@ -510,6 +527,9 @@ export const useAppStore = defineStore('app', () => {
         format: exportData.format,
         metadataJson,
       },
+    }).catch((error: unknown) => {
+      console.warn('Tauri export failed; using browser download fallback', error)
+      return null
     })
 
     if (result?.path) {

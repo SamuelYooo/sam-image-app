@@ -3,8 +3,8 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::generation::{
-    GenerationInput, GenerationTask, create_local_generation, export_asset_data_url,
-    export_asset_metadata_json,
+    GenerationInput, GenerationTask, RemoteImageModel, create_generation_with_model,
+    export_asset_data_url, export_asset_metadata_json,
 };
 use crate::state::AppState;
 
@@ -21,6 +21,19 @@ pub struct ModelProfile {
     pub is_primary: bool,
     pub status: String,
     pub last_checked_at: Option<String>,
+}
+
+impl From<ModelProfile> for RemoteImageModel {
+    fn from(value: ModelProfile) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            provider: value.provider,
+            endpoint: value.endpoint,
+            api_key: value.api_key,
+            model: value.model,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -50,9 +63,10 @@ pub struct ExportAssetResult {
 #[tauri::command]
 pub async fn create_generation_task(
     input: GenerationInput,
+    model: Option<ModelProfile>,
     state: State<'_, AppState>,
 ) -> Result<GenerationTask, AppError> {
-    let task = create_local_generation(input)?;
+    let task = create_generation_with_model(input, model.map(Into::into)).await?;
     state.insert_task(&task).await?;
     Ok(task)
 }

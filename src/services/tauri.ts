@@ -13,12 +13,7 @@ export function isTauriRuntime(): boolean {
 
 export async function invokeOptional<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
   if (!isTauriRuntime()) return null
-  try {
-    return await invoke<T>(command, args)
-  } catch (error) {
-    console.warn(`Tauri command failed: ${command}`, error)
-    return null
-  }
+  return await invoke<T>(command, args)
 }
 
 export async function pickDirectory(defaultPath?: string): Promise<string | null> {
