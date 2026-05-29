@@ -186,6 +186,13 @@ function toggleCoverPreset(id: string, event: Event): void {
   store.setCoverPresetEnabled(id, input.checked)
 }
 
+function removeCoverPresetWithConfirmation(preset: { id: string; name: string }): void {
+  const confirmed = window.confirm(`确定删除封面预设「${preset.name}」？此操作会移除这个自定义尺寸。`)
+  if (!confirmed) return
+
+  store.removeCoverPreset(preset.id)
+}
+
 async function chooseDefaultOutputDir(): Promise<void> {
   const directory = await pickDirectory(store.settings.defaultOutputDir)
   if (!directory) return
@@ -513,7 +520,7 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
                 class="btn-icon"
                 type="button"
                 :aria-label="`删除 ${preset.name}`"
-                @click="store.removeCoverPreset(preset.id)"
+                @click="removeCoverPresetWithConfirmation(preset)"
               >
                 <Trash2 :size="14" />
               </button>

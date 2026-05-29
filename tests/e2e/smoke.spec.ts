@@ -1569,6 +1569,11 @@ test('tools page manages custom cover presets', async ({ page }) => {
   await expect(page.getByLabel('高度')).toHaveValue('1280')
 
   await page.goto('/tools')
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('删除封面预设')
+    expect(dialog.message()).toContain('竖版课程封面')
+    await dialog.accept()
+  })
   await page.locator('.custom-preset-row').filter({ hasText: '竖版课程封面' }).getByRole('button', { name: '删除竖版课程封面' }).click()
 
   await expect(page.getByText('封面预设已删除')).toBeVisible()
@@ -1577,6 +1582,33 @@ test('tools page manages custom cover presets', async ({ page }) => {
     const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
     return state.coverPresets?.some((preset: { name: string }) => preset.name === '竖版课程封面')
   })).toBe(false)
+})
+
+test('tools custom cover preset deletion requires confirmation', async ({ page }) => {
+  await page.goto('/tools')
+
+  await page.getByRole('button', { name: '自定义尺寸' }).click()
+  await page.getByLabel('名称').fill('删除保护封面')
+  await page.getByLabel('宽度').fill('1080')
+  await page.getByLabel('高度').fill('1440')
+  await page.getByRole('button', { name: '保存' }).click()
+
+  await expect(page.getByText('封面预设已添加')).toBeVisible()
+  const customPreset = page.locator('.custom-preset-row').filter({ hasText: '删除保护封面' })
+  await expect(customPreset).toBeVisible()
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('删除封面预设')
+    expect(dialog.message()).toContain('删除保护封面')
+    await dialog.dismiss()
+  })
+  await customPreset.getByRole('button', { name: '删除删除保护封面' }).click()
+
+  await expect(customPreset).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return state.coverPresets?.some((preset: { name: string }) => preset.name === '删除保护封面')
+  })).toBe(true)
 })
 
 test('tools custom cover preset previews the entered aspect ratio', async ({ page }) => {
