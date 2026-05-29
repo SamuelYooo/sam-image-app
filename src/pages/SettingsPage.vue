@@ -185,6 +185,10 @@ function toggleCoverPreset(id: string, event: Event): void {
                 <Star :size="12" fill="currentColor" />
                 主模型
               </span>
+              <span v-else-if="model.kind === 'text' && model.isPrimary" class="primary-badge">
+                <Star :size="12" fill="currentColor" />
+                主文本模型
+              </span>
               <button
                 v-else-if="model.kind === 'image'"
                 class="set-primary-btn"
@@ -192,6 +196,14 @@ function toggleCoverPreset(id: string, event: Event): void {
                 @click="store.setPrimaryImageModel(model.id)"
               >
                 设为主模型
+              </button>
+              <button
+                v-else
+                class="set-primary-btn"
+                type="button"
+                @click="store.setPrimaryTextModel(model.id)"
+              >
+                设为主文本模型
               </button>
               <span class="status-pill">
                 <span class="status-dot" :class="{ warn: model.status !== 'connected', error: model.status === 'failed' }" />

@@ -1028,6 +1028,29 @@ test('settings model editor can fetch a model from the local catalog', async ({ 
   await expect(page.getByLabel('模型 ID')).toHaveValue('black-forest-labs/flux-1-dev')
 })
 
+test('settings can set the primary text model used by prompt polish', async ({ page }) => {
+  await page.goto('/settings')
+
+  await page.getByRole('button', { name: '新增模型' }).click()
+  await page.getByLabel('模型名称').fill('Local Text Refiner')
+  await page.getByLabel('类型').selectOption('text')
+  await page.getByLabel('API 地址').fill('')
+  await page.getByLabel('模型 ID').fill('local-text-refiner')
+  await page.getByRole('button', { name: '保存模型' }).click()
+
+  await expect(page.getByText('模型配置已保存')).toBeVisible()
+  const textCard = page.locator('.model-card').filter({ hasText: 'Local Text Refiner' })
+  await textCard.getByRole('button', { name: '设为主文本模型' }).click()
+  await expect(page.getByText('已设为主文本模型：Local Text Refiner')).toBeVisible()
+  await expect(textCard.getByText('主文本模型')).toBeVisible()
+
+  await page.goto('/workspace?mode=txt2img&prompt=主文本模型回归测试')
+  await expect(page.getByLabel('文本润色模型')).toHaveValue(/model-/)
+  await page.getByRole('button', { name: '润色' }).click()
+  await expect(page.locator('.prompt-preview')).toContainText('主文本模型回归测试')
+  await expect(page.locator('.prompt-preview')).toContainText('Local Text Refiner')
+})
+
 test('workspace prompt polish uses the selected text model', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

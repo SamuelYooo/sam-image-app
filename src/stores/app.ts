@@ -225,8 +225,8 @@ export const useAppStore = defineStore('app', () => {
 
   function saveModel(profile: ModelProfile): void {
     const next = profile.id ? profile : { ...profile, id: createId('model') }
-    if (next.isPrimary && next.kind === 'image') {
-      models.value = models.value.map((model) => (model.kind === 'image' ? { ...model, isPrimary: false } : model))
+    if (next.isPrimary) {
+      models.value = models.value.map((model) => (model.kind === next.kind ? { ...model, isPrimary: false } : model))
     }
     const index = models.value.findIndex((model) => model.id === next.id)
     if (index >= 0) models.value[index] = next
@@ -248,6 +248,19 @@ export const useAppStore = defineStore('app', () => {
     settings.value.defaultImageModelId = id
     persist()
     notify(`已设为主模型：${target.name}`)
+  }
+
+  function setPrimaryTextModel(id: string): void {
+    const target = models.value.find((model) => model.id === id && model.kind === 'text')
+    if (!target) {
+      notify('请选择有效的文本模型', 'error')
+      return
+    }
+    models.value = models.value.map((model) => (
+      model.kind === 'text' ? { ...model, isPrimary: model.id === id } : model
+    ))
+    persist()
+    notify(`已设为主文本模型：${target.name}`)
   }
 
   async function testModel(id: string): Promise<void> {
@@ -479,6 +492,7 @@ export const useAppStore = defineStore('app', () => {
     usePrompt,
     saveModel,
     setPrimaryImageModel,
+    setPrimaryTextModel,
     testModel,
     removeModel,
     saveSettings,
