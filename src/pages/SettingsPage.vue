@@ -210,6 +210,13 @@ function addCoverPresetFromSettings(): void {
   })
   coverPresetModalOpen.value = false
 }
+
+async function resetDemoDataWithConfirmation(): Promise<void> {
+  const confirmed = window.confirm('确定恢复初始数据？此操作会清空当前模型、提示词、历史记录和自定义封面预设。')
+  if (!confirmed) return
+
+  await store.resetDemoData()
+}
 </script>
 
 <template>
@@ -455,7 +462,7 @@ function addCoverPresetFromSettings(): void {
           </div>
           <div class="btn-row">
             <button class="btn-primary" type="button" @click="store.saveSettings(store.settings)">保存系统设置</button>
-            <button class="btn-danger" type="button" @click="store.resetDemoData">恢复初始数据</button>
+            <button class="btn-danger" type="button" @click="resetDemoDataWithConfirmation">恢复初始数据</button>
           </div>
         </div>
       </div>

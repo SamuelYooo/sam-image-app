@@ -144,6 +144,58 @@ test('settings can pick and persist the default output directory', async ({ page
   await expect(page.getByLabel('默认输出目录')).toHaveValue('D:\\SamImage\\Picked')
 })
 
+test('settings reset demo data requires confirmation before clearing user data', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [
+          {
+            id: 'reset-guard-prompt',
+            title: '恢复保护提示词',
+            prompt: '取消恢复时必须保留的提示词',
+            source: 'custom',
+            sourceId: 'reset-guard',
+            category: '封面',
+            subCategory: '',
+            author: 'User',
+            tags: ['保护'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-07T00:00:00.000Z',
+          },
+        ],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Custom',
+          defaultExportFormat: 'webp',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('恢复初始数据')
+    await dialog.dismiss()
+  })
+  await page.getByRole('button', { name: '恢复初始数据' }).click()
+
+  await expect(page.getByLabel('默认输出目录')).toHaveValue('D:\\SamImage\\Custom')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+  await expect(page.getByText('恢复保护提示词')).toBeVisible()
+})
+
 test('export dialogs can pick output directories from all result surfaces', async ({ page }) => {
   await page.addInitScript(() => {
     window.samimageE2eDirectory = 'D:\\SamImage\\WorkspacePicked'
