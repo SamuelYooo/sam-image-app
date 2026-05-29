@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { Download, Plus, RotateCcw, Save, TestTube2, Trash2, Upload } from 'lucide-vue-next'
 import { exportFormatOptions, stylePresets } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
-import type { ModelProfile } from '@/types/domain'
+import type { ModelProfile, PromptItem } from '@/types/domain'
 import { createId } from '@/domain/ids'
 
 const store = useAppStore()
@@ -89,6 +89,11 @@ function exportPrompts(): void {
   link.click()
   URL.revokeObjectURL(link.href)
   store.notify('Prompts 已导出')
+}
+
+async function copyPrompt(item: PromptItem): Promise<void> {
+  await navigator.clipboard?.writeText(item.prompt)
+  store.notify('提示词已复制')
 }
 
 function toggleCoverPreset(id: string, event: Event): void {
@@ -207,7 +212,10 @@ function toggleCoverPreset(id: string, event: Event): void {
             <div class="inline"><strong>{{ item.title }}</strong><span class="chip">{{ item.source }}</span><span class="chip accent">{{ item.category }}</span></div>
             <p>{{ item.prompt }}</p>
           </div>
-          <button class="btn-primary btn-sm" type="button" @click="store.usePrompt(item)">使用</button>
+          <div class="prompt-actions">
+            <button class="btn-primary btn-sm" type="button" @click="store.usePrompt(item)">使用</button>
+            <button class="btn-soft btn-sm" type="button" @click="copyPrompt(item)">复制</button>
+          </div>
         </article>
       </div>
     </section>
@@ -405,6 +413,12 @@ function toggleCoverPreset(id: string, event: Event): void {
 .prompt-card {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
+}
+
+.prompt-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .prompt-card p {

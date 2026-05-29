@@ -507,6 +507,62 @@ test('prompt market filters prompts by source and category', async ({ page }) =>
   await expect(page.getByText('自定义 ICON 提示词', { exact: true })).toHaveCount(0)
 })
 
+test('prompt market copies a prompt to clipboard', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        text: '',
+        async writeText(value: string) {
+          this.text = value
+          localStorage.setItem('samimage.e2e.clipboard', value)
+        },
+      },
+      configurable: true,
+    })
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [
+          {
+            id: 'prompt-copy-custom',
+            title: '复制提示词回归测试',
+            prompt: '复制到剪贴板的完整提示词内容',
+            source: 'custom',
+            sourceId: 'copy-custom',
+            category: '封面',
+            subCategory: '',
+            author: 'User',
+            tags: ['封面'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-04T00:00:00.000Z',
+          },
+        ],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+  await page.getByRole('button', { name: '复制' }).click()
+
+  await expect(page.getByText('提示词已复制')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('samimage.e2e.clipboard'))).toBe('复制到剪贴板的完整提示词内容')
+})
+
 test('settings cover presets control the tools catalog', async ({ page }) => {
   await page.goto('/settings')
   await page.getByRole('button', { name: '系统设置' }).click()
