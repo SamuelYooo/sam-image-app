@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Copy, Download, Library, RotateCcw, Sparkles, Upload, WandSparkles } from 'lucide-vue-next'
 import { aspectPresets, defaultCoverPresets, exportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
@@ -92,6 +92,11 @@ onMounted(() => {
   batchSize.value = routeInteger('batchSize', batchSize.value, 1, 4)
   steps.value = routeInteger('steps', steps.value, 1, 80)
   seed.value = routeInteger('seed', seed.value, 0, 999999999)
+  window.addEventListener('keydown', handleShortcut)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleShortcut)
 })
 
 function setMode(next: GenerationMode): void {
@@ -132,6 +137,40 @@ function polishPrompt(): void {
     `由 ${modelName} 润色`,
   ].join('，')
   store.notify(`已使用 ${modelName} 润色提示词`)
+}
+
+function clearPrompt(): void {
+  prompt.value = ''
+}
+
+function handleShortcut(event: KeyboardEvent): void {
+  if (!event.ctrlKey) return
+
+  const key = event.key.toLowerCase()
+  if (key === 'enter') {
+    event.preventDefault()
+    void generate()
+    return
+  }
+  if (key === 'd') {
+    event.preventDefault()
+    clearPrompt()
+    return
+  }
+  if (event.shiftKey && key === 'r') {
+    event.preventDefault()
+    polishPrompt()
+    return
+  }
+  if (key === 'l') {
+    event.preventDefault()
+    libraryOpen.value = true
+    return
+  }
+  if (key === 's') {
+    event.preventDefault()
+    openExportDialog()
+  }
 }
 
 async function generate(): Promise<void> {
@@ -235,7 +274,7 @@ function openExportDialog(): void {
               <Sparkles :size="15" />
               润色
             </button>
-            <button class="btn-soft" type="button" @click="prompt = ''">
+            <button class="btn-soft" type="button" @click="clearPrompt">
               <RotateCcw :size="15" />
               清空
             </button>

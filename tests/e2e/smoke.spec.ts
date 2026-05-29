@@ -125,6 +125,27 @@ test('history reuse restores generation parameters in workspace', async ({ page 
   await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('987654')
 })
 
+test('workspace keyboard shortcuts run documented actions', async ({ page }) => {
+  await page.goto('/workspace?mode=txt2img&prompt=快捷键回归测试')
+
+  await page.dispatchEvent('body', 'keydown', {
+    key: 'R',
+    code: 'KeyR',
+    ctrlKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  })
+  await expect(page.locator('.prompt-preview')).toContainText('快捷键回归测试')
+  await expect(page.locator('.prompt-preview')).toContainText('Text Polish')
+
+  await page.keyboard.press('Control+Enter')
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.keyboard.press('Control+D')
+  await expect(page.locator('.prompt-preview')).toContainText('点击打开大编辑器')
+})
+
 test('generation can run without saving to history when auto-save is disabled', async ({ page }) => {
   await page.goto('/settings')
 
