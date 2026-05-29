@@ -579,6 +579,21 @@ test('workspace can load a reference image with shortcut', async ({ page }) => {
   await expect(page.locator('.sample').first()).toBeVisible()
 })
 
+test('workspace can reuse a generated result as an image reference', async ({ page }) => {
+  await page.goto('/workspace?mode=cover&prompt=结果作为参考图回归测试封面')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '作为参考图', exact: true }).click()
+
+  await expect(page.getByText('已将结果作为参考图')).toBeVisible()
+  await expect(page.getByRole('button', { name: /图生图/ })).toHaveClass(/active/)
+  await expect(page.getByText('参考图已载入，点击替换')).toBeVisible()
+  await expect(page.getByAltText('参考图预览')).toBeVisible()
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toContainText('图生图 1')
+})
+
 test('workspace prompt library filters prompts by category', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

@@ -271,6 +271,17 @@ function handlePaste(event: ClipboardEvent): void {
   loadReferenceFile(file)
 }
 
+function reuseSelectedAsReference(): void {
+  const asset = selectedAsset.value ?? currentAssets.value[0]
+  if (!asset) {
+    store.notify('请先生成或选择结果', 'error')
+    return
+  }
+  setMode('img2img')
+  referenceImage.value = asset.dataUrl
+  store.notify('已将结果作为参考图')
+}
+
 async function copySelectedResult(): Promise<void> {
   const asset = selectedAsset.value ?? currentAssets.value[0]
   if (!asset) {
@@ -439,7 +450,7 @@ function openExportDialog(): void {
                 <Copy :size="15" />
                 复制结果图
               </button>
-              <button class="btn-soft" type="button" @click="mode = 'img2img'; referenceImage = selectedAsset?.dataUrl ?? referenceImage">作为参考图</button>
+              <button class="btn-soft" type="button" @click="reuseSelectedAsReference">作为参考图</button>
               <button class="btn-primary" type="button" @click="openExportDialog">
                 <Download :size="15" />
                 导出
