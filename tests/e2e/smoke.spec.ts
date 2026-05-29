@@ -1851,11 +1851,21 @@ test('custom cover presets reject invalid dimensions', async ({ page }) => {
   await page.getByRole('button', { name: '保存' }).click()
 
   await expect(page.getByText('请输入 128 到 4096 之间的有效尺寸')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '自定义封面预设' })).toBeVisible()
+  await expect(page.getByLabel('名称')).toHaveValue('非法尺寸封面')
+  await expect(page.getByLabel('宽度')).toHaveValue('0')
+  await expect(page.getByLabel('高度')).toHaveValue('5000')
   await expect(page.locator('.custom-preset-row').filter({ hasText: '非法尺寸封面' })).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => {
     const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
     return Boolean(state.coverPresets?.some((preset: { name: string }) => preset.name === '非法尺寸封面'))
   })).toBe(false)
+
+  await page.getByLabel('宽度').fill('1080')
+  await page.getByLabel('高度').fill('1440')
+  await page.getByRole('button', { name: '保存' }).click()
+  await expect(page.getByText('封面预设已添加')).toBeVisible()
+  await expect(page.locator('.custom-preset-row').filter({ hasText: '非法尺寸封面' })).toBeVisible()
 })
 
 test('workspace generation uses the selected image model', async ({ page }) => {

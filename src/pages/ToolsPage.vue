@@ -71,12 +71,14 @@ function savePreset(): void {
   }
   const width = Number(presetWidth.value)
   const height = Number(presetHeight.value)
-  store.addCoverPreset({
+  const saved = store.addCoverPreset({
     name: presetName.value.trim(),
     width,
     height,
     enabled: true,
   })
+  if (!saved) return
+
   presetName.value = ''
   presetWidth.value = ''
   presetHeight.value = ''

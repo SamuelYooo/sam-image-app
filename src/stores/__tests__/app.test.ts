@@ -202,4 +202,23 @@ describe('app store generation bridge', () => {
     expect(store.settings.defaultExportFormat).toBe('png')
     expect(JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}').models[0].id).toBe('sqlite-image')
   })
+
+  it('reports invalid cover preset dimensions without adding a preset', () => {
+    const store = useAppStore()
+    const beforeCount = store.coverPresets.length
+
+    const saved = store.addCoverPreset({
+      name: 'Invalid preset',
+      width: 80,
+      height: 608,
+      enabled: true,
+    })
+
+    expect(saved).toBe(false)
+    expect(store.coverPresets).toHaveLength(beforeCount)
+    expect(store.toast).toEqual(expect.objectContaining({
+      message: '请输入 128 到 4096 之间的有效尺寸',
+      type: 'error',
+    }))
+  })
 })

@@ -230,12 +230,14 @@ function addCoverPresetFromSettings(): void {
     return
   }
 
-  store.addCoverPreset({
+  const saved = store.addCoverPreset({
     name,
     width: coverPresetWidth.value,
     height: coverPresetHeight.value,
     enabled: coverPresetEnabled.value,
   })
+  if (!saved) return
+
   coverPresetModalOpen.value = false
 }
 
