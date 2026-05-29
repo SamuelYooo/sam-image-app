@@ -1365,6 +1365,21 @@ test('tools page manages custom cover presets', async ({ page }) => {
   })).toBe(false)
 })
 
+test('tools custom cover preset previews the entered aspect ratio', async ({ page }) => {
+  await page.goto('/tools')
+
+  await page.getByRole('button', { name: '自定义尺寸' }).click()
+  await expect(page.getByText('比例')).toBeVisible()
+  await expect(page.getByText('—')).toBeVisible()
+
+  await page.getByLabel('宽度').fill('1080')
+  await page.getByLabel('高度').fill('608')
+  await expect(page.getByText('135 : 76')).toBeVisible()
+
+  await page.getByLabel('高度').fill('1920')
+  await expect(page.getByText('9 : 16')).toBeVisible()
+})
+
 test('custom cover presets reject invalid dimensions', async ({ page }) => {
   await page.goto('/tools')
 

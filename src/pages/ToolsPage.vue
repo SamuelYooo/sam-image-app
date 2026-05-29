@@ -11,12 +11,44 @@ const router = useRouter()
 const store = useAppStore()
 const modalOpen = ref(false)
 const presetName = ref('')
-const presetWidth = ref(1080)
-const presetHeight = ref(608)
+const presetWidth = ref<number | ''>('')
+const presetHeight = ref<number | ''>('')
 const customCoverPresets = computed(() => store.coverPresets.filter((preset) => preset.custom))
+const presetRatio = computed(() => {
+  const width = Math.round(Number(presetWidth.value))
+  const height = Math.round(Number(presetHeight.value))
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return '—'
+
+  const divisor = gcd(width, height)
+  return `${width / divisor} : ${height / divisor}`
+})
+const ratioPreviewStyle = computed(() => {
+  const width = Math.round(Number(presetWidth.value))
+  const height = Math.round(Number(presetHeight.value))
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return { width: '60px', height: '34px' }
+  }
+
+  const scale = Math.min(64 / width, 40 / height)
+  return {
+    width: `${Math.max(12, Math.round(width * scale))}px`,
+    height: `${Math.max(12, Math.round(height * scale))}px`,
+  }
+})
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? Math.abs(a) : gcd(b, a % b)
+}
 
 function openWorkspace(mode: GenerationMode, preset?: string): void {
   router.push({ path: '/workspace', query: { mode, ...(preset ? { preset } : {}) } })
+}
+
+function openPresetModal(): void {
+  presetName.value = ''
+  presetWidth.value = ''
+  presetHeight.value = ''
+  modalOpen.value = true
 }
 
 function openTool(tool: ToolEntry): void {
@@ -37,15 +69,17 @@ function savePreset(): void {
     store.notify('请输入预设名称', 'error')
     return
   }
+  const width = Number(presetWidth.value)
+  const height = Number(presetHeight.value)
   store.addCoverPreset({
     name: presetName.value.trim(),
-    width: presetWidth.value,
-    height: presetHeight.value,
+    width,
+    height,
     enabled: true,
   })
   presetName.value = ''
-  presetWidth.value = 1080
-  presetHeight.value = 608
+  presetWidth.value = ''
+  presetHeight.value = ''
   modalOpen.value = false
 }
 
@@ -86,7 +120,7 @@ function removeCustomPreset(preset: CoverPreset): void {
     <section class="tool-section">
       <div class="section-head">
         <h2><span class="section-dot pom" />封面预设</h2>
-        <button class="btn-soft btn-sm" type="button" @click="modalOpen = true">
+        <button class="btn-soft btn-sm" type="button" @click="openPresetModal">
           <Plus :size="14" />
           自定义
         </button>
@@ -103,7 +137,7 @@ function removeCustomPreset(preset: CoverPreset): void {
           <strong>{{ preset.name }}</strong>
           <small>{{ preset.width }} x {{ preset.height }}</small>
         </button>
-        <button class="cover-preset add" type="button" @click="modalOpen = true">
+        <button class="cover-preset add" type="button" @click="openPresetModal">
           <Plus :size="28" />
           <strong>自定义尺寸</strong>
         </button>
@@ -154,6 +188,11 @@ function removeCustomPreset(preset: CoverPreset): void {
               <label for="tools-custom-preset-height">高度</label>
               <input id="tools-custom-preset-height" v-model.number="presetHeight" type="number" min="128" max="4096" />
             </div>
+          </div>
+          <div class="ratio-display">
+            <span>比例</span>
+            <strong>{{ presetRatio }}</strong>
+            <i :style="ratioPreviewStyle" aria-hidden="true" />
           </div>
         </div>
         <div class="modal-foot">
@@ -261,6 +300,27 @@ function removeCustomPreset(preset: CoverPreset): void {
   text-align: center;
   border-style: dashed;
   color: var(--muted);
+}
+
+.ratio-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ratio-display strong {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.ratio-display i {
+  display: block;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
 }
 
 .custom-presets {
