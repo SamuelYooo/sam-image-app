@@ -309,7 +309,7 @@ function addCoverPresetFromSettings(): void {
         <div class="btn-row">
           <button class="btn-soft btn-sm" type="button" @click="exportPrompts">
             <Download :size="14" />
-            导出
+            导出 JSON
           </button>
         </div>
       </div>

@@ -1205,6 +1205,63 @@ test('prompt market copies a prompt to clipboard', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => localStorage.getItem('samimage.e2e.clipboard'))).toBe('复制到剪贴板的完整提示词内容')
 })
 
+test('prompt market exports prompts as reusable json', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [
+          {
+            id: 'prompt-export-custom',
+            title: '导出提示词回归测试',
+            prompt: '导出后可重新导入的提示词内容',
+            source: 'custom',
+            sourceId: 'export-custom',
+            category: '封面',
+            subCategory: '',
+            author: 'User',
+            tags: ['封面', '导出'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-05T00:00:00.000Z',
+          },
+        ],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出 JSON' }).click(), 1)
+  const download = findDownload(downloads, '.json')
+  expect(download.suggestedFilename()).toBe('samimage-v3-prompts.json')
+  const path = await download.path()
+  expect(path).toBeTruthy()
+  const exportedPrompts = JSON.parse(await readFile(path!, 'utf8'))
+  expect(exportedPrompts).toEqual([
+    expect.objectContaining({
+      title: '导出提示词回归测试',
+      prompt: '导出后可重新导入的提示词内容',
+      source: 'custom',
+      category: '封面',
+    }),
+  ])
+})
+
 test('prompt market syncs open source prompt repositories safely', async ({ page }) => {
   await page.addInitScript(() => {
     const syncedPayload = JSON.stringify({
