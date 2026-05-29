@@ -556,6 +556,70 @@ test('workspace can copy the selected result image with shortcut', async ({ page
   await expect.poll(() => page.evaluate(() => localStorage.getItem('samimage.e2e.clipboard')?.startsWith('data:image/svg+xml'))).toBe(true)
 })
 
+test('workspace prompt library filters prompts by category', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [
+          {
+            id: 'workspace-library-cover',
+            title: '封面分类提示词',
+            prompt: '只应该在封面分类里出现',
+            source: 'custom',
+            sourceId: 'workspace-cover',
+            category: '封面',
+            subCategory: '',
+            author: 'User',
+            tags: ['封面'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'workspace-library-icon',
+            title: 'ICON 分类提示词',
+            prompt: '玻璃拟态应用图标，蓝色发光边缘',
+            source: 'custom',
+            sourceId: 'workspace-icon',
+            category: 'ICON',
+            subCategory: '',
+            author: 'User',
+            tags: ['ICON'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-02T00:00:00.000Z',
+          },
+        ],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/workspace?mode=txt2img')
+  await page.getByRole('button', { name: '词库' }).click()
+  const promptLibrary = page.getByRole('dialog').filter({ hasText: '提示词库' })
+  await promptLibrary.getByRole('button', { name: 'ICON' }).click()
+
+  await expect(promptLibrary.getByText('ICON 分类提示词')).toBeVisible()
+  await expect(promptLibrary.getByText('封面分类提示词')).toHaveCount(0)
+
+  await promptLibrary.locator('.prompt-item').filter({ hasText: 'ICON 分类提示词' }).getByRole('button', { name: '使用' }).click()
+  await expect(page.locator('.prompt-preview')).toContainText('玻璃拟态应用图标')
+})
+
 test('global numeric shortcuts navigate between primary pages', async ({ page }) => {
   await page.goto('/about')
 

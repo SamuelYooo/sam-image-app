@@ -28,6 +28,7 @@ const promptModalOpen = ref(false)
 const libraryOpen = ref(false)
 const exportOpen = ref(false)
 const promptSearch = ref('')
+const promptCategory = ref('全部')
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 const exportScale = ref(1)
 const retryNotice = ref('')
@@ -36,9 +37,13 @@ const currentModeLabel = computed(() => modeLabels[mode.value])
 const defaultModel = computed(() => store.defaultImageModel)
 const selectedModel = computed(() => store.imageModels.find((model) => model.id === selectedModelId.value) ?? defaultModel.value)
 const selectedTextModel = computed(() => store.textModels.find((model) => model.id === selectedTextModelId.value) ?? store.primaryTextModel)
+const promptCategories = computed(() => ['全部', ...Array.from(new Set(store.prompts.map((item) => item.category).filter(Boolean)))])
 const visiblePrompts = computed(() => {
   const keyword = promptSearch.value.trim().toLowerCase()
-  return store.prompts.filter((item) => !keyword || `${item.title} ${item.prompt} ${item.category}`.toLowerCase().includes(keyword)).slice(0, 24)
+  return store.prompts
+    .filter((item) => promptCategory.value === '全部' || item.category === promptCategory.value || item.subCategory === promptCategory.value)
+    .filter((item) => !keyword || `${item.title} ${item.prompt} ${item.category}`.toLowerCase().includes(keyword))
+    .slice(0, 24)
 })
 const currentAssets = computed(() => currentTask.value?.assets ?? store.recentTasks[0]?.assets ?? [])
 
@@ -128,6 +133,12 @@ function applyPrompt(item: PromptItem): void {
   libraryOpen.value = false
 }
 
+function openPromptLibrary(): void {
+  promptCategory.value = '全部'
+  promptSearch.value = ''
+  libraryOpen.value = true
+}
+
 function polishPrompt(): void {
   const source = prompt.value.trim()
   if (!source) {
@@ -177,7 +188,7 @@ function handleShortcut(event: KeyboardEvent): void {
   }
   if (key === 'l') {
     event.preventDefault()
-    libraryOpen.value = true
+    openPromptLibrary()
     return
   }
   if (key === 's') {
@@ -297,7 +308,7 @@ function openExportDialog(): void {
           <p v-if="retryNotice" class="retry-notice">{{ retryNotice }}</p>
           <div class="btn-row">
             <button class="btn-soft" type="button" @click="promptModalOpen = true">编辑</button>
-            <button class="btn-soft" type="button" @click="libraryOpen = true">
+            <button class="btn-soft" type="button" @click="openPromptLibrary">
               <Library :size="15" />
               词库
             </button>
@@ -478,31 +489,47 @@ function openExportDialog(): void {
           <textarea v-model="prompt" rows="12" placeholder="输入更完整的正向提示词" />
         </div>
         <div class="modal-foot">
-          <button class="btn-soft" type="button" @click="libraryOpen = true">从词库选择</button>
+          <button class="btn-soft" type="button" @click="openPromptLibrary">从词库选择</button>
           <button class="btn-primary" type="button" @click="promptModalOpen = false">应用到工作台</button>
         </div>
       </div>
     </div>
 
     <div v-if="libraryOpen" class="modal-overlay" @click.self="libraryOpen = false">
-      <div class="modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prompt-library-title">
         <div class="modal-head">
           <div>
-            <h2>提示词库</h2>
+            <h2 id="prompt-library-title">提示词库</h2>
             <p class="muted">选择提示词，一键应用到当前工作台。</p>
           </div>
           <button class="btn-icon" type="button" @click="libraryOpen = false">×</button>
         </div>
-        <div class="modal-body stack">
-          <input v-model="promptSearch" placeholder="搜索提示词" />
-          <div class="prompt-list">
-            <article v-for="item in visiblePrompts" :key="item.id" class="prompt-item">
-              <div>
-                <div class="inline"><strong>{{ item.title }}</strong><span class="chip">{{ item.source }}</span><span class="chip accent">{{ item.category }}</span></div>
-                <p>{{ item.prompt }}</p>
+        <div class="modal-body">
+          <div class="library-grid">
+            <aside class="library-categories" aria-label="提示词分类">
+              <button
+                v-for="category in promptCategories"
+                :key="category"
+                class="category-button"
+                :class="{ active: promptCategory === category }"
+                type="button"
+                @click="promptCategory = category"
+              >
+                {{ category }}
+              </button>
+            </aside>
+            <main class="library-main">
+              <input v-model="promptSearch" placeholder="搜索提示词" />
+              <div class="prompt-list">
+                <article v-for="item in visiblePrompts" :key="item.id" class="prompt-item">
+                  <div>
+                    <div class="inline"><strong>{{ item.title }}</strong><span class="chip">{{ item.source }}</span><span class="chip accent">{{ item.category }}</span></div>
+                    <p>{{ item.prompt }}</p>
+                  </div>
+                  <button class="btn-primary btn-sm" type="button" @click="applyPrompt(item)">使用</button>
+                </article>
               </div>
-              <button class="btn-primary btn-sm" type="button" @click="applyPrompt(item)">使用</button>
-            </article>
+            </main>
           </div>
         </div>
       </div>
@@ -817,6 +844,40 @@ function openExportDialog(): void {
   gap: 10px;
 }
 
+.library-grid {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.library-categories {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.category-button {
+  min-height: 34px;
+  padding: 7px 10px;
+  color: var(--fg-2);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.category-button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.library-main {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
 .prompt-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -851,6 +912,19 @@ function openExportDialog(): void {
 
   .workspace-center {
     overflow: visible;
+  }
+
+  .library-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .library-categories {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .category-button {
+    white-space: nowrap;
   }
 }
 </style>
