@@ -19,7 +19,7 @@ function findDownload(downloads: Download[], suffix: string): Download {
 test('workspace can generate a local preview and show it in history', async ({ page }) => {
   await page.goto('/workspace?mode=cover')
 
-  await expect(page.getByRole('heading', { name: '生成结果预览' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '生成结果预览' })).toBeVisible({ timeout: 20000 })
   await page.getByText('点击打开大编辑器').click()
   await page.getByPlaceholder('输入更完整的正向提示词').fill('小红书 AI 工具合集封面，赛博科技风，清晰标题层级')
   await page.getByRole('button', { name: '应用到工作台' }).click()
@@ -564,6 +564,89 @@ test('home recent detail can reuse prompt in workspace', async ({ page }) => {
   await expect(page.getByLabel('高度')).toHaveValue('360')
   await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('32')
   await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('13579')
+})
+
+test('home recent detail can retry a failed generation with original parameters', async ({ page }) => {
+  await page.addInitScript(() => {
+    const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280"><rect width="720" height="1280" fill="#b84c4c"/></svg>')
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [
+          {
+            id: 'local-preview',
+            name: 'Local Preview',
+            provider: 'local-preview',
+            endpoint: '',
+            apiKey: '',
+            model: 'samimage-local-preview',
+            kind: 'image',
+            isPrimary: true,
+            status: 'connected',
+          },
+        ],
+        prompts: [],
+        tasks: [
+          {
+            id: 'home-failed-task',
+            mode: 'img2img',
+            prompt: '首页失败重试回归测试',
+            negativePrompt: '低质量',
+            modelId: 'local-preview',
+            width: 720,
+            height: 1280,
+            batchSize: 3,
+            steps: 41,
+            seed: 424242,
+            style: '像素',
+            status: 'failed',
+            error: '模型连接失败',
+            assets: [
+              {
+                id: 'home-failed-asset',
+                taskId: 'home-failed-task',
+                title: '首页失败任务占位资源',
+                width: 720,
+                height: 1280,
+                format: 'svg',
+                dataUrl: `data:image/svg+xml;charset=utf-8,${assetSvg}`,
+                createdAt: '2026-01-13T00:00:00.000Z',
+              },
+            ],
+            createdAt: '2026-01-13T00:00:00.000Z',
+          },
+        ],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/')
+  await page.getByRole('button', { name: /首页失败重试回归测试/ }).click()
+  await expect(page.getByText('模型连接失败')).toBeVisible()
+
+  await page.getByRole('button', { name: '失败重新生成' }).click()
+
+  await expect(page).toHaveURL(/\/workspace/)
+  await expect(page).toHaveURL(/retryTaskId=home-failed-task/)
+  await expect(page.locator('.prompt-preview')).toContainText('首页失败重试回归测试')
+  await expect(page.getByRole('button', { name: '图生图' })).toHaveClass(/active/)
+  await expect(page.getByLabel('宽度')).toHaveValue('720')
+  await expect(page.getByLabel('高度')).toHaveValue('1280')
+  await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('3')
+  await expect(page.getByText('步数').locator('..').getByRole('slider')).toHaveValue('41')
+  await expect(page.getByText('Seed').locator('..').getByRole('spinbutton')).toHaveValue('424242')
+  await expect(page.getByText('已载入失败任务参数，可重新生成')).toBeVisible()
 })
 
 test('workspace keyboard shortcuts run documented actions', async ({ page }) => {

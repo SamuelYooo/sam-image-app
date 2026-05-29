@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { Download, Eye, FolderOpen, ImagePlus, ShieldCheck, Sparkles, Settings, WandSparkles } from 'lucide-vue-next'
+import { Download, Eye, FolderOpen, ImagePlus, RotateCcw, ShieldCheck, Sparkles, Settings, WandSparkles } from 'lucide-vue-next'
 import { exportFormatOptions, modeLabels, toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
@@ -35,6 +35,26 @@ function reusePrompt(task: GenerationTask): void {
   router.push({
     path: '/workspace',
     query: {
+      mode: task.mode,
+      prompt: task.prompt,
+      negativePrompt: task.negativePrompt,
+      modelId: task.modelId,
+      width: String(task.width),
+      height: String(task.height),
+      batchSize: String(task.batchSize),
+      steps: String(task.steps),
+      seed: String(task.seed),
+      style: task.style,
+    },
+  })
+}
+
+function retryRecent(task: GenerationTask): void {
+  store.setActivePrompt(task.prompt)
+  router.push({
+    path: '/workspace',
+    query: {
+      retryTaskId: task.id,
       mode: task.mode,
       prompt: task.prompt,
       negativePrompt: task.negativePrompt,
@@ -185,7 +205,13 @@ async function chooseRecentExportDir(): Promise<void> {
             <div class="detail-row"><span>生成类型</span><strong>{{ modeLabels[selectedRecent.task.mode] }}</strong></div>
             <div class="detail-row"><span>模型</span><strong>{{ selectedRecent.task.modelId }}</strong></div>
             <div class="detail-row"><span>尺寸</span><strong>{{ selectedRecent.asset.width }} x {{ selectedRecent.asset.height }}</strong></div>
-            <div class="detail-row"><span>状态</span><strong>{{ selectedRecent.task.status === 'completed' ? '已完成' : selectedRecent.task.status }}</strong></div>
+            <div class="detail-row">
+              <span>状态</span>
+              <strong :class="{ 'status-error': selectedRecent.task.status === 'failed' }">
+                {{ selectedRecent.task.status === 'failed' ? '失败' : selectedRecent.task.status === 'completed' ? '已完成' : selectedRecent.task.status }}
+              </strong>
+            </div>
+            <div v-if="selectedRecent.task.error" class="prompt-box error-box">{{ selectedRecent.task.error }}</div>
             <div class="prompt-box">{{ selectedRecent.task.prompt }}</div>
           </div>
         </div>
@@ -193,6 +219,10 @@ async function chooseRecentExportDir(): Promise<void> {
           <button class="btn-soft" type="button" @click="reusePrompt(selectedRecent.task)">
             <Eye :size="15" />
             复用提示词
+          </button>
+          <button v-if="selectedRecent.task.status === 'failed'" class="btn-soft" type="button" @click="retryRecent(selectedRecent.task)">
+            <RotateCcw :size="15" />
+            失败重新生成
           </button>
           <button class="btn-primary" type="button" @click="openRecentExport">
             <Download :size="15" />
@@ -416,6 +446,16 @@ async function chooseRecentExportDir(): Promise<void> {
 
 .detail-row span {
   color: var(--muted);
+}
+
+.status-error,
+.error-box {
+  color: var(--danger);
+}
+
+.error-box {
+  border-color: rgba(184, 76, 76, .42);
+  background: rgba(184, 76, 76, .1);
 }
 
 .prompt-box {
