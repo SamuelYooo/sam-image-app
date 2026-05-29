@@ -38,3 +38,19 @@ test('history clear persists after reload', async ({ page }) => {
   await expect(page.getByText('暂无历史记录')).toBeVisible()
   await expect(page.getByText('清空历史回归测试封面')).toHaveCount(0)
 })
+
+test('tool catalog opens workspace with a focused generation intent', async ({ page }) => {
+  await page.goto('/tools')
+
+  await page.getByRole('button', { name: /ICON 图标/ }).click()
+
+  await expect(page).toHaveURL(/\/workspace\?/)
+  await expect(page.locator('.prompt-preview')).toContainText('本地 AI 图像工具 App Icon')
+  await expect(page.getByRole('button', { name: /^ICON$/ })).toHaveClass(/active/)
+
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.getByRole('link', { name: /历史/ }).click()
+  await expect(page.getByText('本地 AI 图像工具 App Icon').first()).toBeVisible()
+})

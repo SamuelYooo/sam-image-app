@@ -5,6 +5,7 @@ import { Plus, Trash2, Wrench } from 'lucide-vue-next'
 import { defaultCoverPresets, toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { GenerationMode } from '@/types/domain'
+import type { ToolEntry } from '@/data/catalog'
 
 const router = useRouter()
 const store = useAppStore()
@@ -15,6 +16,19 @@ const presetHeight = ref(608)
 
 function openWorkspace(mode: GenerationMode, preset?: string): void {
   router.push({ path: '/workspace', query: { mode, ...(preset ? { preset } : {}) } })
+}
+
+function openTool(tool: ToolEntry): void {
+  router.push({
+    path: '/workspace',
+    query: {
+      mode: tool.mode,
+      tool: tool.id,
+      prompt: tool.promptSeed,
+      ...(tool.style ? { style: tool.style } : {}),
+      ...(tool.preset ? { preset: tool.preset } : {}),
+    },
+  })
 }
 
 function savePreset(): void {
@@ -53,7 +67,7 @@ function savePreset(): void {
         <span class="badge">{{ group.tools.length }} 项</span>
       </div>
       <div class="grid grid-3">
-        <button v-for="tool in group.tools" :key="tool.title" class="tool-card" type="button" @click="openWorkspace(tool.mode)">
+        <button v-for="tool in group.tools" :key="tool.id" class="tool-card" type="button" @click="openTool(tool)">
           <span class="icon-tile" :class="group.tone">{{ tool.icon.slice(0, 2) }}</span>
           <h3>{{ tool.title }}</h3>
           <p>{{ tool.desc }}</p>

@@ -1,6 +1,17 @@
 import type { CoverPreset, GenerationMode, ModelProfile, PromptItem } from '@/types/domain'
 import { stableId } from '@/domain/ids'
 
+export interface ToolEntry {
+  id: string
+  title: string
+  desc: string
+  mode: GenerationMode
+  icon: string
+  promptSeed: string
+  style?: string
+  preset?: string
+}
+
 export const modeLabels: Record<GenerationMode, string> = {
   txt2img: '文生图',
   img2img: '图生图',
@@ -37,19 +48,67 @@ export const toolGroups: Array<{
   id: string
   name: string
   tone: string
-  tools: Array<{ title: string; desc: string; mode: GenerationMode; icon: string }>
+  tools: ToolEntry[]
 }> = [
   {
     id: 'generate',
     name: '生成类',
     tone: 'matcha',
     tools: [
-      { title: '文生图', desc: '输入提示词，描述你想要的内容，AI 生成对应图像', mode: 'txt2img', icon: 'Plus' },
-      { title: '图生图', desc: '上传图片，输入目标风格描述，生成新的变体图像', mode: 'img2img', icon: 'Image' },
-      { title: '3D 图生成', desc: '生成带深度感和三维质感的图像作品', mode: '3d', icon: 'Box' },
-      { title: '8bit 像素图', desc: '将图片转换为复古像素艺术风格', mode: 'gif', icon: 'Grid2X2' },
-      { title: 'GIF 动图', desc: '生成或转换短循环动图，支持场景变化', mode: 'gif', icon: 'Repeat' },
-      { title: '图案生成', desc: '生成可平铺的图案纹理，适用于壁纸与贴图', mode: 'txt2img', icon: 'Sparkles' },
+      {
+        id: 'text-to-image',
+        title: '文生图',
+        desc: '输入提示词，描述你想要的内容，AI 生成对应图像',
+        mode: 'txt2img',
+        icon: 'Plus',
+        promptSeed: '一张高质量 AI 生成图像，主体明确，构图干净，光影自然，适合正式项目交付。',
+        style: '摄影',
+      },
+      {
+        id: 'image-to-image',
+        title: '图生图',
+        desc: '上传图片，输入目标风格描述，生成新的变体图像',
+        mode: 'img2img',
+        icon: 'Image',
+        promptSeed: '保留参考图主体结构与核心轮廓，重绘为更精致的商业视觉作品，细节清晰，质感统一。',
+        style: '自然',
+      },
+      {
+        id: 'three-d-image',
+        title: '3D 图生成',
+        desc: '生成带深度感和三维质感的图像作品',
+        mode: '3d',
+        icon: 'Box',
+        promptSeed: '高质量 3D 产品概念图，柔和棚拍光，真实材质，干净背景，主体居中，具备空间深度。',
+        style: '3D',
+      },
+      {
+        id: 'eight-bit-pixel',
+        title: '8bit 像素图',
+        desc: '将图片转换为复古像素艺术风格',
+        mode: 'gif',
+        icon: 'Grid2X2',
+        promptSeed: '复古 8bit 像素艺术画面，低分辨率像素块质感，有限色板，怀旧游戏视觉，主体清楚。',
+        style: '像素',
+      },
+      {
+        id: 'gif-animation',
+        title: 'GIF 动图',
+        desc: '生成或转换短循环动图，支持场景变化',
+        mode: 'gif',
+        icon: 'Repeat',
+        promptSeed: '一个 4 秒无缝循环 GIF 动图，主体动作平滑，场景变化自然，开头和结尾能够顺畅衔接。',
+        style: '插画',
+      },
+      {
+        id: 'pattern-generator',
+        title: '图案生成',
+        desc: '生成可平铺的图案纹理，适用于壁纸与贴图',
+        mode: 'txt2img',
+        icon: 'Sparkles',
+        promptSeed: '可无缝平铺的装饰图案纹理，元素重复自然，边缘连续，适合壁纸、贴图和包装背景。',
+        style: '插画',
+      },
     ],
   },
   {
@@ -57,10 +116,43 @@ export const toolGroups: Array<{
     name: '设计类',
     tone: 'ube',
     tools: [
-      { title: 'ICON 图标', desc: '输入图标描述，生成 App / 网站 / 桌面图标', mode: 'icon', icon: 'Badge' },
-      { title: '社交头像', desc: '生成适合各平台的社交媒体头像', mode: 'img2img', icon: 'UserRound' },
-      { title: '自媒体封面', desc: '小红书 / 公众号 / B站 / 抖音平台封面', mode: 'cover', icon: 'PanelsTopLeft' },
-      { title: 'AI 证件照', desc: '上传自拍，生成标准证件照规格', mode: 'img2img', icon: 'IdCard' },
+      {
+        id: 'app-icon',
+        title: 'ICON 图标',
+        desc: '输入图标描述，生成 App / 网站 / 桌面图标',
+        mode: 'icon',
+        icon: 'Badge',
+        promptSeed: '一个本地 AI 图像工具 App Icon，中心是抽象相机与星光，圆角方形构图，玻璃质感，识别度高。',
+        style: '3D',
+      },
+      {
+        id: 'social-avatar',
+        title: '社交头像',
+        desc: '生成适合各平台的社交媒体头像',
+        mode: 'img2img',
+        icon: 'UserRound',
+        promptSeed: '适合社交媒体使用的头像，人物面部清晰，背景简洁，色彩友好，构图适配圆形裁切。',
+        style: '插画',
+      },
+      {
+        id: 'media-cover',
+        title: '自媒体封面',
+        desc: '小红书 / 公众号 / B站 / 抖音平台封面',
+        mode: 'cover',
+        icon: 'PanelsTopLeft',
+        promptSeed: '自媒体内容封面，醒目中文标题区域，主体突出，信息层级清晰，适合小红书和视频平台点击。',
+        style: '国潮',
+        preset: 'xiaohongshu',
+      },
+      {
+        id: 'id-photo',
+        title: 'AI 证件照',
+        desc: '上传自拍，生成标准证件照规格',
+        mode: 'img2img',
+        icon: 'IdCard',
+        promptSeed: '标准证件照效果，白色或浅色背景，正面人像，面部清晰，自然肤色，服装整洁。',
+        style: '摄影',
+      },
     ],
   },
   {
@@ -68,11 +160,51 @@ export const toolGroups: Array<{
     name: '修复类',
     tone: 'accent',
     tools: [
-      { title: '去背景', desc: '精准分离主体与背景，输出透明 PNG', mode: 'img2img', icon: 'Eraser' },
-      { title: '去文字', desc: '自动识别并去除图片中的文字，无痕修复背景', mode: 'img2img', icon: 'MessageSquareX' },
-      { title: '去阴影', desc: '移除人像或物体上的投影，还原本色', mode: 'img2img', icon: 'ShieldCheck' },
-      { title: '图片增强', desc: '去模糊、锐化、透视矫正，提升图像画质', mode: 'img2img', icon: 'Activity' },
-      { title: '老照片修复', desc: '修复划痕、褪色、破损，还老旧照片以新颜', mode: 'img2img', icon: 'History' },
+      {
+        id: 'remove-background',
+        title: '去背景',
+        desc: '精准分离主体与背景，输出透明 PNG',
+        mode: 'img2img',
+        icon: 'Eraser',
+        promptSeed: '精准分离主体并移除背景，保留主体边缘细节，输出透明背景 PNG，避免锯齿和残留杂色。',
+        style: '自然',
+      },
+      {
+        id: 'remove-text',
+        title: '去文字',
+        desc: '自动识别并去除图片中的文字，无痕修复背景',
+        mode: 'img2img',
+        icon: 'MessageSquareX',
+        promptSeed: '移除图片中的文字和水印区域，并根据周围纹理无痕补全背景，保持原始光影与透视。',
+        style: '自然',
+      },
+      {
+        id: 'remove-shadow',
+        title: '去阴影',
+        desc: '移除人像或物体上的投影，还原本色',
+        mode: 'img2img',
+        icon: 'ShieldCheck',
+        promptSeed: '移除主体或背景上的明显阴影，保持物体真实颜色和材质，画面干净自然。',
+        style: '自然',
+      },
+      {
+        id: 'image-enhance',
+        title: '图片增强',
+        desc: '去模糊、锐化、透视矫正，提升图像画质',
+        mode: 'img2img',
+        icon: 'Activity',
+        promptSeed: '增强图片清晰度与细节，降低噪点，改善锐度和色彩层次，保持真实自然不失真。',
+        style: '摄影',
+      },
+      {
+        id: 'old-photo-restore',
+        title: '老照片修复',
+        desc: '修复划痕、褪色、破损，还老旧照片以新颜',
+        mode: 'img2img',
+        icon: 'History',
+        promptSeed: '修复老照片划痕、褪色和破损区域，还原清晰人像与自然色彩，保留年代感。',
+        style: '摄影',
+      },
     ],
   },
   {
@@ -80,12 +212,38 @@ export const toolGroups: Array<{
     name: '人像类',
     tone: 'lemon',
     tools: [
-      { title: '人像卡通化', desc: '将真人照片转为卡通 / 插画风格', mode: 'img2img', icon: 'Smile' },
-      { title: '风格转换', desc: '印象派、赛博朋克、水彩、素描等艺术风格', mode: 'img2img', icon: 'Aperture' },
-      { title: '背景替换', desc: '智能去除背景并替换为指定场景背景', mode: 'img2img', icon: 'Layers' },
+      {
+        id: 'portrait-cartoon',
+        title: '人像卡通化',
+        desc: '将真人照片转为卡通 / 插画风格',
+        mode: 'img2img',
+        icon: 'Smile',
+        promptSeed: '将真人人像转换为精致卡通插画风格，保留五官特征，线条干净，色彩明亮。',
+        style: '插画',
+      },
+      {
+        id: 'style-transfer',
+        title: '风格转换',
+        desc: '印象派、赛博朋克、水彩、素描等艺术风格',
+        mode: 'img2img',
+        icon: 'Aperture',
+        promptSeed: '将参考图转换为目标艺术风格，保留主体结构和关键细节，画面风格统一，质感明确。',
+        style: '赛博',
+      },
+      {
+        id: 'replace-background',
+        title: '背景替换',
+        desc: '智能去除背景并替换为指定场景背景',
+        mode: 'img2img',
+        icon: 'Layers',
+        promptSeed: '保留人物或产品主体，替换为干净专业的新背景，主体边缘自然融合，光影方向一致。',
+        style: '自然',
+      },
     ],
   },
 ]
+
+export const toolEntries = toolGroups.flatMap((group) => group.tools)
 
 export const stylePresets = ['自然', '摄影', '插画', '国潮', '赛博', '极简', '3D', '像素']
 

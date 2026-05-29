@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Copy, Download, Library, RotateCcw, Sparkles, Upload, WandSparkles } from 'lucide-vue-next'
-import { aspectPresets, defaultCoverPresets, modeDescriptions, modeLabels, stylePresets } from '@/data/catalog'
+import { aspectPresets, defaultCoverPresets, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { GeneratedAsset, GenerationMode, PromptItem } from '@/types/domain'
 
@@ -42,11 +42,18 @@ watch(() => store.activePrompt, (value) => {
 onMounted(() => {
   mode.value = store.resolveMode(String(route.query.mode ?? 'txt2img'))
   store.setMode(mode.value)
+  const toolId = typeof route.query.tool === 'string' ? route.query.tool : ''
+  const selectedTool = toolEntries.find((item) => item.id === toolId)
   const queryPrompt = typeof route.query.prompt === 'string' ? route.query.prompt : ''
   if (queryPrompt) prompt.value = queryPrompt
+  else if (selectedTool) prompt.value = selectedTool.promptSeed
   else if (store.activePrompt) prompt.value = store.activePrompt
 
-  const presetId = typeof route.query.preset === 'string' ? route.query.preset : ''
+  const queryStyle = typeof route.query.style === 'string' ? route.query.style : ''
+  if (queryStyle && stylePresets.includes(queryStyle)) style.value = queryStyle
+  else if (selectedTool?.style && stylePresets.includes(selectedTool.style)) style.value = selectedTool.style
+
+  const presetId = typeof route.query.preset === 'string' ? route.query.preset : selectedTool?.preset ?? ''
   const preset = [...defaultCoverPresets, ...store.coverPresets].find((item) => item.id === presetId)
   if (preset) {
     width.value = preset.width
