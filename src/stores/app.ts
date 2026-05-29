@@ -199,7 +199,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function importPrompts(content: string, filename: string): number {
-    const imported = normalizePromptImport(content, filename)
+    return importPromptBatch([{ content, filename }])
+  }
+
+  function importPromptBatch(files: Array<{ content: string; filename: string }>): number {
+    const imported = files.flatMap((file) => normalizePromptImport(file.content, file.filename))
     const before = prompts.value.length
     prompts.value = mergePromptItems(prompts.value, imported)
     persist()
@@ -422,6 +426,7 @@ export const useAppStore = defineStore('app', () => {
     loadPersistedTasks,
     generate,
     importPrompts,
+    importPromptBatch,
     usePrompt,
     saveModel,
     testModel,

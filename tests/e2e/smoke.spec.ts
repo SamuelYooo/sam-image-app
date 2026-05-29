@@ -254,6 +254,28 @@ test('generation can run without saving to history when auto-save is disabled', 
   await expect(page.getByText('不保存历史回归测试封面')).toHaveCount(0)
 })
 
+test('prompt market imports multiple json files at once', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+
+  await page.locator('input[type="file"]').setInputFiles([
+    {
+      name: 'batch-prompts-a.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([{ title: '批量导入提示词 A', prompt: '第一份批量导入的提示词内容', category: '批量' }])),
+    },
+    {
+      name: 'batch-prompts-b.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([{ title: '批量导入提示词 B', prompt: '第二份批量导入的提示词内容', category: '批量' }])),
+    },
+  ])
+
+  await expect(page.getByText('已导入 2 条提示词')).toBeVisible()
+  await expect(page.getByText('批量导入提示词 A')).toBeVisible()
+  await expect(page.getByText('批量导入提示词 B')).toBeVisible()
+})
+
 test('workspace generation uses the selected image model', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

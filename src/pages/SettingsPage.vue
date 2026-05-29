@@ -50,12 +50,26 @@ function saveDraft(): void {
 
 function importFile(event: Event): void {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => store.importPrompts(String(reader.result), file.name)
-  reader.readAsText(file)
-  input.value = ''
+  const files = Array.from(input.files ?? [])
+  if (!files.length) return
+
+  Promise.all(files.map(readPromptFile))
+    .then((items) => store.importPromptBatch(items))
+    .catch((error: unknown) => {
+      store.notify(error instanceof Error ? error.message : '导入 Prompts 失败', 'error')
+    })
+    .finally(() => {
+      input.value = ''
+    })
+}
+
+function readPromptFile(file: File): Promise<{ content: string; filename: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve({ content: String(reader.result), filename: file.name })
+    reader.onerror = () => reject(new Error(`读取 ${file.name} 失败`))
+    reader.readAsText(file)
+  })
 }
 
 function exportPrompts(): void {
@@ -144,7 +158,7 @@ function exportPrompts(): void {
           <label class="btn-soft btn-sm">
             <Upload :size="14" />
             导入 JSON
-            <input type="file" accept="application/json,.json" hidden @change="importFile" />
+            <input type="file" accept="application/json,.json" multiple hidden @change="importFile" />
           </label>
           <button class="btn-soft btn-sm" type="button" @click="exportPrompts">
             <Download :size="14" />
