@@ -69,6 +69,8 @@ const visiblePrompts = computed(() => {
     .slice(0, 24)
 })
 const currentAssets = computed(() => currentTask.value?.assets ?? store.recentTasks[0]?.assets ?? [])
+const actionTask = computed(() => currentTask.value ?? store.recentTasks[0])
+const actionAsset = computed(() => selectedAsset.value ?? currentAssets.value[0] ?? null)
 const modeOptions = computed<Record<string, string | number | boolean>>(() => {
   const options: Record<string, string | number | boolean> = {}
   if (mode.value === 'txt2img') {
@@ -365,7 +367,7 @@ function handlePaste(event: ClipboardEvent): void {
 }
 
 function reuseSelectedAsReference(): void {
-  const asset = selectedAsset.value ?? currentAssets.value[0]
+  const asset = actionAsset.value
   if (!asset) {
     store.notify('请先生成或选择结果', 'error')
     return
@@ -376,7 +378,7 @@ function reuseSelectedAsReference(): void {
 }
 
 async function copySelectedResult(): Promise<void> {
-  const asset = selectedAsset.value ?? currentAssets.value[0]
+  const asset = actionAsset.value
   if (!asset) {
     store.notify('请先生成或选择结果', 'error')
     return
@@ -397,16 +399,17 @@ async function copySelectedResult(): Promise<void> {
 }
 
 async function downloadSelected(): Promise<void> {
-  if (!selectedAsset.value) {
+  const asset = actionAsset.value
+  if (!asset) {
     store.notify('请先选择结果', 'error')
     return
   }
-  await store.downloadAsset(selectedAsset.value, exportFormat.value, exportScale.value, currentTask.value ?? undefined)
+  await store.downloadAsset(asset, exportFormat.value, exportScale.value, actionTask.value ?? undefined)
   exportOpen.value = false
 }
 
 function openExportDialog(): void {
-  if (!selectedAsset.value) {
+  if (!actionAsset.value) {
     store.notify('请先生成或选择结果', 'error')
     return
   }

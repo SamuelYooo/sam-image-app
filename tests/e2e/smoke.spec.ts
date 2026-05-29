@@ -135,6 +135,23 @@ test('default export format from settings is used by workspace export', async ({
   expect(content.subarray(8, 12).toString('ascii')).toBe('WEBP')
 })
 
+test('workspace can export the visible recent result after reload', async ({ page }) => {
+  await page.goto('/workspace?mode=cover&prompt=可见最近结果导出回归测试封面')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+
+  await page.reload()
+  await expect(page.locator('.sample').first()).toBeVisible()
+  await expect(page.getByText('尚未选择结果')).toBeVisible()
+
+  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '导出结果' })).toBeVisible()
+
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 2)
+  expect(findDownload(downloads, '.svg').suggestedFilename()).toMatch(/\.svg$/)
+  expect(findDownload(downloads, '.metadata.json').suggestedFilename()).toMatch(/\.metadata\.json$/)
+})
+
 test('settings can pick and persist the default output directory', async ({ page }) => {
   await page.addInitScript(() => {
     window.samimageE2eDirectory = 'D:\\SamImage\\Picked'
