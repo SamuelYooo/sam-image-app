@@ -1450,6 +1450,21 @@ test('workspace generation uses the selected image model', async ({ page }) => {
   await expect(page.getByText('secondary-image')).toBeVisible()
 })
 
+test('workspace keeps generation parameters accessible on narrow screens', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto('/workspace?mode=cover&prompt=窄屏参数面板回归测试')
+
+  await expect(page.getByLabel('图像模型')).toBeVisible()
+  await expect(page.getByLabel('文本润色模型')).toBeVisible()
+  await expect(page.getByLabel('宽度')).toBeVisible()
+  await expect(page.getByLabel('高度')).toBeVisible()
+
+  await page.getByLabel('宽度').fill('900')
+  await page.getByLabel('高度').fill('1200')
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+})
+
 test('default image model from settings initializes a new workspace', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {

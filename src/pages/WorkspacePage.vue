@@ -988,11 +988,21 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 
 @media (max-width: 1180px) {
   .workspace-grid {
-    grid-template-columns: 300px 1fr;
+    height: auto;
+    min-height: calc(100vh - var(--titlebar-h) - 72px - var(--app-topbar-h));
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+    overflow: visible;
   }
 
   .workspace-pane:last-child {
-    display: none;
+    display: block;
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .workspace-center {
+    overflow: visible;
   }
 }
 
