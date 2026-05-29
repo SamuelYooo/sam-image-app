@@ -193,6 +193,13 @@ function removeCoverPresetWithConfirmation(preset: { id: string; name: string })
   store.removeCoverPreset(preset.id)
 }
 
+function resetCoverPresetsWithConfirmation(): void {
+  const confirmed = window.confirm('确定恢复默认封面预设？此操作会移除所有自定义封面预设，并重置内置预设的启用状态。')
+  if (!confirmed) return
+
+  store.resetCoverPresets()
+}
+
 async function chooseDefaultOutputDir(): Promise<void> {
   const directory = await pickDirectory(store.settings.defaultOutputDir)
   if (!directory) return
@@ -488,7 +495,7 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
               <h2>自媒体封面预设</h2>
               <p class="muted">{{ enabledCoverPresetCount }} 个启用</p>
             </div>
-            <button class="btn-soft btn-sm" type="button" @click="store.resetCoverPresets">
+            <button class="btn-soft btn-sm" type="button" @click="resetCoverPresetsWithConfirmation">
               <RotateCcw :size="14" />
               恢复默认封面预设
             </button>

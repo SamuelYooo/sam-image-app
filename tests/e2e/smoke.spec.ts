@@ -1490,11 +1490,82 @@ test('settings cover presets control the tools catalog', async ({ page }) => {
 
   await page.goto('/settings')
   await page.getByRole('button', { name: '系统设置' }).click()
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('恢复默认封面预设')
+    await dialog.accept()
+  })
   await page.getByRole('button', { name: '恢复默认封面预设' }).click()
   await expect(page.getByText('4 个启用')).toBeVisible()
 
   await page.goto('/tools')
   await expect(page.getByRole('button', { name: /小红书封面/ })).toBeVisible()
+})
+
+test('settings reset cover presets requires confirmation before removing custom presets', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [],
+        tasks: [],
+        coverPresets: [
+          {
+            id: 'xiaohongshu',
+            name: '小红书封面',
+            width: 1242,
+            height: 1660,
+            enabled: false,
+            custom: false,
+          },
+          {
+            id: 'reset-guard-cover',
+            name: '恢复保护封面',
+            width: 1000,
+            height: 1500,
+            enabled: true,
+            custom: true,
+          },
+        ],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+
+  await expect(page.locator('.cover-row').filter({ hasText: '恢复保护封面' })).toBeVisible()
+  await expect(page.getByLabel('启用 小红书封面')).not.toBeChecked()
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('恢复默认封面预设')
+    expect(dialog.message()).toContain('自定义封面预设')
+    await dialog.dismiss()
+  })
+  await page.getByRole('button', { name: '恢复默认封面预设' }).click()
+
+  await expect(page.locator('.cover-row').filter({ hasText: '恢复保护封面' })).toBeVisible()
+  await expect(page.getByLabel('启用 小红书封面')).not.toBeChecked()
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return {
+      customStillExists: state.coverPresets?.some((preset: { id: string }) => preset.id === 'reset-guard-cover'),
+      builtinStillDisabled: state.coverPresets?.find((preset: { id: string }) => preset.id === 'xiaohongshu')?.enabled,
+    }
+  })).toEqual({
+    customStillExists: true,
+    builtinStillDisabled: false,
+  })
 })
 
 test('settings can add a custom cover preset for tools and workspace', async ({ page }) => {
