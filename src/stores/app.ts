@@ -18,12 +18,18 @@ import type {
   GenerationInput,
   GenerationMode,
   GenerationTask,
+  ExportFormat,
   ModelProfile,
   PromptItem,
 } from '@/types/domain'
 import { createId } from '@/domain/ids'
 
 const STORAGE_KEY = 'samimage.v3.state'
+const rasterExportMime: Record<'png' | 'jpg' | 'webp', string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  webp: 'image/webp',
+}
 
 interface PersistedState {
   models: ModelProfile[]
@@ -40,6 +46,7 @@ const defaultState: PersistedState = {
   coverPresets: defaultCoverPresets,
   settings: {
     defaultOutputDir: 'D:\\SamImage\\Exports',
+    defaultExportFormat: 'svg',
     autoSaveHistory: true,
     includePromptMetadata: true,
     theme: 'dark',
@@ -50,13 +57,43 @@ function cloneDefault(): PersistedState {
   return JSON.parse(JSON.stringify(defaultState)) as PersistedState
 }
 
+function normalizeDefaultExportFormat(value: unknown): ExportFormat {
+  return value === 'png' || value === 'jpg' || value === 'webp' || value === 'svg' ? value : 'svg'
+}
+
+async function rasterizeDataUrl(dataUrl: string, width: number, height: number, format: 'png' | 'jpg' | 'webp'): Promise<string> {
+  const image = new Image()
+  const loaded = new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('导出图片渲染失败'))
+  })
+  image.src = dataUrl
+  await loaded
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('当前环境不支持图片导出')
+
+  if (format === 'jpg') {
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, width, height)
+  }
+  context.drawImage(image, 0, 0, width, height)
+
+  return canvas.toDataURL(rasterExportMime[format], 0.92)
+}
+
 export const useAppStore = defineStore('app', () => {
   const initial = browserStorage.read<PersistedState>(STORAGE_KEY, cloneDefault())
+  const initialSettings = { ...defaultState.settings, ...initial.settings }
+  initialSettings.defaultExportFormat = normalizeDefaultExportFormat(initialSettings.defaultExportFormat)
   const models = ref<ModelProfile[]>(initial.models.length ? initial.models : defaultModels)
   const prompts = ref<PromptItem[]>(initial.prompts.length ? initial.prompts : defaultPrompts)
   const tasks = ref<GenerationTask[]>(initial.tasks)
   const coverPresets = ref<CoverPreset[]>(initial.coverPresets.length ? initial.coverPresets : defaultCoverPresets)
-  const settings = ref<AppSettings>(initial.settings)
+  const settings = ref<AppSettings>(initialSettings)
   const toast = ref<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const activePrompt = ref('')
   const activeMode = ref<GenerationMode>('txt2img')
@@ -227,13 +264,14 @@ export const useAppStore = defineStore('app', () => {
     notify(`已导出 ${assets.length} 个结果`)
   }
 
-  async function downloadAsset(asset: GeneratedAsset): Promise<void> {
+  async function downloadAsset(asset: GeneratedAsset, format: ExportFormat = settings.value.defaultExportFormat): Promise<void> {
+    const exportData = await prepareExportAsset(asset, format)
     const result = await invokeOptional<{ path: string }>('export_generated_asset', {
       request: {
-        dataUrl: asset.dataUrl,
+        dataUrl: exportData.dataUrl,
         outputDir: settings.value.defaultOutputDir,
         title: asset.title,
-        format: asset.format,
+        format: exportData.format,
       },
     })
 
@@ -245,10 +283,16 @@ export const useAppStore = defineStore('app', () => {
     }
 
     const link = document.createElement('a')
-    link.href = asset.dataUrl
-    link.download = `${asset.title}.${asset.format}`
+    link.href = exportData.dataUrl
+    link.download = `${asset.title}.${exportData.format}`
     link.click()
     notify('已导出到浏览器下载目录')
+  }
+
+  async function prepareExportAsset(asset: GeneratedAsset, format: ExportFormat): Promise<{ dataUrl: string; format: ExportFormat }> {
+    if (format === asset.format) return { dataUrl: asset.dataUrl, format }
+    if (format === 'svg' || format === 'gif') return { dataUrl: asset.dataUrl, format: asset.format }
+    return { dataUrl: await rasterizeDataUrl(asset.dataUrl, asset.width, asset.height, format), format }
   }
 
   return {

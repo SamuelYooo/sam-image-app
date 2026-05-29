@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Download, Plus, Save, TestTube2, Upload } from 'lucide-vue-next'
+import { exportFormatOptions } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import type { ModelProfile } from '@/types/domain'
 import { createId } from '@/domain/ids'
@@ -182,8 +183,14 @@ function exportPrompts(): void {
         <div class="card-body stack">
           <h2>系统设置</h2>
           <div class="field">
-            <label>默认输出目录</label>
-            <input v-model="store.settings.defaultOutputDir" />
+            <label for="default-output-dir">默认输出目录</label>
+            <input id="default-output-dir" v-model="store.settings.defaultOutputDir" />
+          </div>
+          <div class="field">
+            <label for="default-export-format">默认导出格式</label>
+            <select id="default-export-format" v-model="store.settings.defaultExportFormat">
+              <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
           </div>
           <div class="btn-row">
             <button class="btn-primary" type="button" @click="store.saveSettings(store.settings)">保存系统设置</button>

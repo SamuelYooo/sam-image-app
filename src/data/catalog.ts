@@ -1,4 +1,4 @@
-import type { CoverPreset, GenerationMode, ModelProfile, PromptItem } from '@/types/domain'
+import type { CoverPreset, ExportFormat, GenerationMode, ModelProfile, PromptItem } from '@/types/domain'
 import { stableId } from '@/domain/ids'
 
 export interface ToolEntry {
@@ -254,6 +254,13 @@ export const aspectPresets = [
   { id: 'xhs', name: '小红书', width: 1080, height: 1440 },
   { id: 'bilibili', name: 'B站', width: 2560, height: 1440 },
   { id: 'douyin', name: '抖音', width: 1080, height: 1920 },
+]
+
+export const exportFormatOptions: Array<{ value: ExportFormat; label: string }> = [
+  { value: 'svg', label: 'SVG 本地预览' },
+  { value: 'png', label: 'PNG' },
+  { value: 'jpg', label: 'JPG' },
+  { value: 'webp', label: 'WEBP' },
 ]
 
 export const defaultCoverPresets: CoverPreset[] = [

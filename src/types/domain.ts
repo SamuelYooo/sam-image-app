@@ -1,6 +1,7 @@
 export type GenerationMode = 'txt2img' | 'img2img' | 'cover' | 'icon' | '3d' | 'gif'
 
 export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed'
+export type ExportFormat = 'svg' | 'png' | 'jpg' | 'webp' | 'gif'
 
 export interface PromptItem {
   id: string
@@ -50,7 +51,7 @@ export interface GeneratedAsset {
   title: string
   width: number
   height: number
-  format: 'svg' | 'png' | 'jpg' | 'webp' | 'gif'
+  format: ExportFormat
   dataUrl: string
   localPath?: string
   createdAt: string
@@ -85,6 +86,7 @@ export interface CoverPreset {
 
 export interface AppSettings {
   defaultOutputDir: string
+  defaultExportFormat: ExportFormat
   autoSaveHistory: boolean
   includePromptMetadata: boolean
   theme: 'dark'

@@ -2,9 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Copy, Download, Library, RotateCcw, Sparkles, Upload, WandSparkles } from 'lucide-vue-next'
-import { aspectPresets, defaultCoverPresets, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
+import { aspectPresets, defaultCoverPresets, exportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
-import type { GeneratedAsset, GenerationMode, PromptItem } from '@/types/domain'
+import type { ExportFormat, GeneratedAsset, GenerationMode, PromptItem } from '@/types/domain'
 
 const route = useRoute()
 const store = useAppStore()
@@ -25,6 +25,7 @@ const promptModalOpen = ref(false)
 const libraryOpen = ref(false)
 const exportOpen = ref(false)
 const promptSearch = ref('')
+const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
 const primaryModel = computed(() => store.primaryImageModel)
@@ -130,8 +131,13 @@ async function downloadSelected(): Promise<void> {
     store.notify('请先选择结果', 'error')
     return
   }
-  await store.downloadAsset(selectedAsset.value)
+  await store.downloadAsset(selectedAsset.value, exportFormat.value)
   exportOpen.value = false
+}
+
+function openExportDialog(): void {
+  exportFormat.value = store.settings.defaultExportFormat
+  exportOpen.value = true
 }
 </script>
 
@@ -266,7 +272,7 @@ async function downloadSelected(): Promise<void> {
                 复制提示词
               </button>
               <button class="btn-soft" type="button" @click="mode = 'img2img'; referenceImage = selectedAsset?.dataUrl ?? referenceImage">作为参考图</button>
-              <button class="btn-primary" type="button" @click="exportOpen = true">
+              <button class="btn-primary" type="button" @click="openExportDialog">
                 <Download :size="15" />
                 导出
               </button>
@@ -385,16 +391,13 @@ async function downloadSelected(): Promise<void> {
         </div>
         <div class="modal-body stack">
           <div class="field">
-            <label>导出目录</label>
-            <input v-model="store.settings.defaultOutputDir" />
+            <label for="workspace-export-dir">导出目录</label>
+            <input id="workspace-export-dir" v-model="store.settings.defaultOutputDir" />
           </div>
           <div class="field">
-            <label>格式</label>
-            <select>
-              <option>SVG 本地预览</option>
-              <option>PNG</option>
-              <option>JPG</option>
-              <option>WEBP</option>
+            <label for="workspace-export-format">格式</label>
+            <select id="workspace-export-format" v-model="exportFormat">
+              <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </div>
         </div>
