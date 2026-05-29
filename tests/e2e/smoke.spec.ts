@@ -790,6 +790,36 @@ test('settings cover presets control the tools catalog', async ({ page }) => {
   await expect(page.getByRole('button', { name: /小红书封面/ })).toBeVisible()
 })
 
+test('tools page manages custom cover presets', async ({ page }) => {
+  await page.goto('/tools')
+
+  await page.getByRole('button', { name: '自定义尺寸' }).click()
+  await page.getByLabel('名称').fill('竖版课程封面')
+  await page.getByLabel('宽度').fill('720')
+  await page.getByLabel('高度').fill('1280')
+  await page.getByRole('button', { name: '保存' }).click()
+
+  await expect(page.getByText('封面预设已添加')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '自定义封面预设' })).toBeVisible()
+  const customPreset = page.locator('.custom-preset-row').filter({ hasText: '竖版课程封面' })
+  await expect(customPreset).toContainText('720 x 1280')
+
+  await customPreset.getByRole('button', { name: '使用竖版课程封面' }).click()
+  await expect(page).toHaveURL(/\/workspace/)
+  await expect(page.getByLabel('宽度')).toHaveValue('720')
+  await expect(page.getByLabel('高度')).toHaveValue('1280')
+
+  await page.goto('/tools')
+  await page.locator('.custom-preset-row').filter({ hasText: '竖版课程封面' }).getByRole('button', { name: '删除竖版课程封面' }).click()
+
+  await expect(page.getByText('封面预设已删除')).toBeVisible()
+  await expect(page.getByText('竖版课程封面')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return state.coverPresets?.some((preset: { name: string }) => preset.name === '竖版课程封面')
+  })).toBe(false)
+})
+
 test('workspace generation uses the selected image model', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

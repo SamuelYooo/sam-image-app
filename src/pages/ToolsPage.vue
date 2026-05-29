@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Wrench } from 'lucide-vue-next'
+import { Plus, Trash2, Wrench } from 'lucide-vue-next'
 import { toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
-import type { GenerationMode } from '@/types/domain'
+import type { CoverPreset, GenerationMode } from '@/types/domain'
 import type { ToolEntry } from '@/data/catalog'
 
 const router = useRouter()
@@ -13,6 +13,7 @@ const modalOpen = ref(false)
 const presetName = ref('')
 const presetWidth = ref(1080)
 const presetHeight = ref(608)
+const customCoverPresets = computed(() => store.coverPresets.filter((preset) => preset.custom))
 
 function openWorkspace(mode: GenerationMode, preset?: string): void {
   router.push({ path: '/workspace', query: { mode, ...(preset ? { preset } : {}) } })
@@ -43,7 +44,13 @@ function savePreset(): void {
     enabled: true,
   })
   presetName.value = ''
+  presetWidth.value = 1080
+  presetHeight.value = 608
   modalOpen.value = false
+}
+
+function removeCustomPreset(preset: CoverPreset): void {
+  store.removeCoverPreset(preset.id)
 }
 </script>
 
@@ -101,6 +108,27 @@ function savePreset(): void {
           <strong>自定义尺寸</strong>
         </button>
       </div>
+
+      <div v-if="customCoverPresets.length" class="custom-presets">
+        <div class="custom-presets-head">
+          <h3>自定义封面预设</h3>
+          <span>{{ customCoverPresets.length }} 项</span>
+        </div>
+        <div class="custom-preset-list">
+          <article v-for="preset in customCoverPresets" :key="preset.id" class="custom-preset-row">
+            <div>
+              <strong>{{ preset.name }}</strong>
+              <span>{{ preset.width }} x {{ preset.height }}</span>
+            </div>
+            <div class="btn-row">
+              <button class="btn-soft btn-sm" type="button" :aria-label="`使用${preset.name}`" @click="openWorkspace('cover', preset.id)">使用</button>
+              <button class="btn-icon" type="button" :aria-label="`删除${preset.name}`" @click="removeCustomPreset(preset)">
+                <Trash2 :size="14" />
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
     </section>
 
     <div v-if="modalOpen" class="modal-overlay" @click.self="modalOpen = false">
@@ -114,17 +142,17 @@ function savePreset(): void {
         </div>
         <div class="modal-body stack">
           <div class="field">
-            <label>名称</label>
-            <input v-model="presetName" placeholder="例如：抖音横版封面" />
+            <label for="tools-custom-preset-name">名称</label>
+            <input id="tools-custom-preset-name" v-model="presetName" placeholder="例如：抖音横版封面" />
           </div>
           <div class="grid grid-2">
             <div class="field">
-              <label>宽度</label>
-              <input v-model.number="presetWidth" type="number" />
+              <label for="tools-custom-preset-width">宽度</label>
+              <input id="tools-custom-preset-width" v-model.number="presetWidth" type="number" min="128" max="4096" />
             </div>
             <div class="field">
-              <label>高度</label>
-              <input v-model.number="presetHeight" type="number" />
+              <label for="tools-custom-preset-height">高度</label>
+              <input id="tools-custom-preset-height" v-model.number="presetHeight" type="number" min="128" max="4096" />
             </div>
           </div>
         </div>
@@ -235,10 +263,62 @@ function savePreset(): void {
   color: var(--muted);
 }
 
-.delete-btn {
-  position: absolute;
-  right: 10px;
-  top: 10px;
+.custom-presets {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.custom-presets-head,
+.custom-preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.custom-presets-head {
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.custom-presets-head h3 {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.custom-presets-head span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.custom-preset-list {
+  display: grid;
+}
+
+.custom-preset-row {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.custom-preset-row:last-child {
+  border-bottom: 0;
+}
+
+.custom-preset-row div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.custom-preset-row span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 @media (max-width: 900px) {
