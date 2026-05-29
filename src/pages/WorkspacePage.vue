@@ -32,6 +32,7 @@ const promptCategory = ref('全部')
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 const exportScale = ref(1)
 const retryNotice = ref('')
+const referenceInput = ref<HTMLInputElement | null>(null)
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
 const defaultModel = computed(() => store.defaultImageModel)
@@ -106,10 +107,12 @@ onMounted(() => {
   steps.value = routeInteger('steps', steps.value, 1, 80)
   seed.value = routeInteger('seed', seed.value, 0, 999999999)
   window.addEventListener('keydown', handleShortcut)
+  window.addEventListener('paste', handlePaste)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleShortcut)
+  window.removeEventListener('paste', handlePaste)
 })
 
 function setMode(next: GenerationMode): void {
@@ -194,6 +197,12 @@ function handleShortcut(event: KeyboardEvent): void {
   if (key === 's') {
     event.preventDefault()
     openExportDialog()
+    return
+  }
+  if (key === 'u') {
+    event.preventDefault()
+    setMode('img2img')
+    openReferencePicker()
   }
 }
 
@@ -224,16 +233,42 @@ async function generate(): Promise<void> {
   }
 }
 
-function handleReference(event: Event): void {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+function openReferencePicker(): void {
+  referenceInput.value?.click()
+}
+
+function loadReferenceFile(file: File): void {
+  if (!file.type.startsWith('image/')) {
+    store.notify('请选择图片文件作为参考图', 'error')
+    return
+  }
   const reader = new FileReader()
   reader.onload = () => {
     referenceImage.value = String(reader.result)
     store.notify('参考图已加载')
   }
   reader.readAsDataURL(file)
+}
+
+function handleReference(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) loadReferenceFile(file)
+  input.value = ''
+}
+
+function handleReferenceDrop(event: DragEvent): void {
+  const file = Array.from(event.dataTransfer?.files ?? []).find((item) => item.type.startsWith('image/'))
+  if (file) loadReferenceFile(file)
+  else store.notify('请拖入图片文件作为参考图', 'error')
+}
+
+function handlePaste(event: ClipboardEvent): void {
+  const file = Array.from(event.clipboardData?.files ?? []).find((item) => item.type.startsWith('image/'))
+  if (!file) return
+  event.preventDefault()
+  setMode('img2img')
+  loadReferenceFile(file)
 }
 
 async function copySelectedResult(): Promise<void> {
@@ -332,10 +367,10 @@ function openExportDialog(): void {
             <strong>参考素材</strong>
             <span>{{ mode === 'img2img' ? '必填建议' : '可选' }}</span>
           </div>
-          <label class="upload-box">
+          <label class="upload-box" @dragover.prevent @drop.prevent="handleReferenceDrop">
             <Upload :size="18" />
             <span>{{ referenceImage ? '参考图已载入，点击替换' : '上传参考图或拖入素材' }}</span>
-            <input type="file" accept="image/*" hidden @change="handleReference" />
+            <input ref="referenceInput" type="file" accept="image/*" hidden @change="handleReference" />
           </label>
           <img v-if="referenceImage" class="reference-preview" :src="referenceImage" alt="参考图预览" />
         </div>

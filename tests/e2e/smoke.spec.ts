@@ -556,6 +556,29 @@ test('workspace can copy the selected result image with shortcut', async ({ page
   await expect.poll(() => page.evaluate(() => localStorage.getItem('samimage.e2e.clipboard')?.startsWith('data:image/svg+xml'))).toBe(true)
 })
 
+test('workspace can load a reference image with shortcut', async ({ page }) => {
+  const tinyPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64',
+  )
+
+  await page.goto('/workspace?mode=img2img&prompt=参考图快捷键回归测试')
+
+  const fileChooserPromise = page.waitForEvent('filechooser')
+  await page.keyboard.press('Control+U')
+  const fileChooser = await fileChooserPromise
+  await fileChooser.setFiles({
+    name: 'reference.png',
+    mimeType: 'image/png',
+    buffer: tinyPng,
+  })
+
+  await expect(page.getByText('参考图已加载')).toBeVisible()
+  await expect(page.getByAltText('参考图预览')).toBeVisible()
+  await page.getByRole('button', { name: '生成新结果' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+})
+
 test('workspace prompt library filters prompts by category', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(
@@ -654,6 +677,8 @@ test('about page documents complete keyboard shortcuts', async ({ page }) => {
   await expect(page.getByText('Ctrl + Shift + R')).toBeVisible()
   await expect(page.getByText('复制结果图')).toBeVisible()
   await expect(page.getByText('Ctrl + Shift + C')).toBeVisible()
+  await expect(page.getByText('上传参考图')).toBeVisible()
+  await expect(page.getByText('Ctrl + U')).toBeVisible()
   await expect(page.getByRole('main').getByText('关于帮助')).toBeVisible()
   await expect(page.getByText('Ctrl + 6')).toBeVisible()
 })

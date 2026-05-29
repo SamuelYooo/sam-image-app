@@ -19,6 +19,7 @@ const workspaceShortcuts = [
   { action: 'AI 润色', keys: 'Ctrl + Shift + R' },
   { action: '复制结果图', keys: 'Ctrl + Shift + C' },
   { action: '打开提示词库', keys: 'Ctrl + L' },
+  { action: '上传参考图', keys: 'Ctrl + U' },
   { action: '导出结果', keys: 'Ctrl + S' },
 ]
 
