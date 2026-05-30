@@ -23,7 +23,7 @@
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-pill: 999px;
-  --titlebar-h: 38px;
+  --titlebar-h: 0px;
   --app-topbar-h: 54px;
   --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -107,42 +107,6 @@ svg {
   grid-template-columns: 1fr;
   overflow: hidden;
   position: relative;
-}
-
-.app-shell::before {
-  content: "SamImage 3.0";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--titlebar-h);
-  display: flex;
-  align-items: center;
-  padding-left: 16px;
-  color: var(--fg-2);
-  font-size: 12px;
-  font-weight: 600;
-  background: rgba(7, 10, 17, 0.72);
-  border-bottom: 1px solid rgba(130, 154, 190, 0.11);
-  backdrop-filter: blur(24px) saturate(135%);
-  z-index: 60;
-  pointer-events: none;
-}
-
-.app-shell::after {
-  content: "-  □  ×";
-  position: fixed;
-  top: 0;
-  right: 14px;
-  height: var(--titlebar-h);
-  display: flex;
-  align-items: center;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: .8em;
-  z-index: 61;
-  pointer-events: none;
 }
 
 .sidebar {
