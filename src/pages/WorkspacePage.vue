@@ -723,7 +723,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
               </button>
             </aside>
             <main class="library-main">
-              <input v-model="promptSearch" placeholder="搜索提示词" />
+              <input v-model="promptSearch" class="library-search" placeholder="搜索提示词" />
               <div class="prompt-list">
                 <article v-for="item in visiblePrompts" :key="item.id" class="prompt-item">
                   <div class="prompt-item-copy">
@@ -1094,6 +1094,11 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   gap: 10px;
 }
 
+.library-search {
+  width: min(100%, 320px) !important;
+  justify-self: start;
+}
+
 .prompt-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1170,6 +1175,10 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 
   .library-grid {
     grid-template-columns: 1fr;
+  }
+
+  .library-search {
+    width: 100% !important;
   }
 
   .library-categories {
