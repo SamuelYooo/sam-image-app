@@ -74,6 +74,31 @@ test('workspace prompt editor can polish and clear draft prompts', async ({ page
   await expect(page.getByText('点击打开大编辑器')).toBeVisible()
 })
 
+test('workspace prompt library keeps action buttons stable for long prompts', async ({ page }) => {
+  await page.goto('/workspace?mode=cover')
+  await expect(page.locator('.prompt-preview')).toBeVisible()
+  await page.locator('.prompt-preview').click()
+  await page.getByRole('button', { name: '从词库选择' }).click()
+
+  const promptItem = page.locator('.prompt-item').first()
+  const actionButton = promptItem.getByRole('button', { name: '使用' })
+
+  await expect(promptItem).toBeVisible()
+  await expect(actionButton).toBeVisible()
+
+  await promptItem.locator('p').evaluate((node) => {
+    node.textContent = '这是一条用于验证提示词库布局的超长提示词，包含大量修饰语、镜头语言、材质描述、光影层次、构图要求、色彩控制、风格约束与输出细节，重复展开以观察弹层列表在内容过长时是否仍然保持按钮尺寸稳定，不会把右侧使用按钮拉成长条。'.repeat(3)
+  })
+
+  const [itemBox, buttonBox] = await Promise.all([promptItem.boundingBox(), actionButton.boundingBox()])
+
+  expect(itemBox).toBeTruthy()
+  expect(buttonBox).toBeTruthy()
+  expect(itemBox!.height).toBeGreaterThan(buttonBox!.height)
+  expect(buttonBox!.height).toBeLessThanOrEqual(36)
+  expect(buttonBox!.width).toBeLessThanOrEqual(72)
+})
+
 test('tool catalog opens workspace with a focused generation intent', async ({ page }) => {
   await page.goto('/tools')
 

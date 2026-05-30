@@ -726,11 +726,11 @@ async function chooseWorkspaceExportDir(): Promise<void> {
               <input v-model="promptSearch" placeholder="搜索提示词" />
               <div class="prompt-list">
                 <article v-for="item in visiblePrompts" :key="item.id" class="prompt-item">
-                  <div>
+                  <div class="prompt-item-copy">
                     <div class="inline"><strong>{{ item.title }}</strong><span class="chip">{{ item.source }}</span><span class="chip accent">{{ item.category }}</span></div>
                     <p>{{ item.prompt }}</p>
                   </div>
-                  <button class="btn-primary btn-sm" type="button" @click="applyPrompt(item)">使用</button>
+                  <button class="btn-primary btn-sm prompt-item-action" type="button" @click="applyPrompt(item)">使用</button>
                 </article>
               </div>
             </main>
@@ -1097,6 +1097,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 .prompt-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--border);
@@ -1104,9 +1105,24 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   background: rgba(6, 10, 18, .38);
 }
 
+.prompt-item-copy {
+  min-width: 0;
+}
+
 .prompt-item p {
   margin-top: 6px;
   color: var(--fg-2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-height: 1.5;
+}
+
+.prompt-item-action {
+  min-width: 56px;
+  align-self: start;
+  white-space: nowrap;
 }
 
 @media (max-width: 1260px) {
