@@ -677,7 +677,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
     </section>
 
     <div v-if="promptModalOpen" class="modal-overlay" @click.self="promptModalOpen = false">
-      <div class="modal">
+      <div class="modal prompt-modal">
         <div class="modal-head">
           <div>
             <h2>编辑正向提示词</h2>
@@ -685,8 +685,8 @@ async function chooseWorkspaceExportDir(): Promise<void> {
           </div>
           <button class="btn-icon" type="button" @click="promptModalOpen = false">×</button>
         </div>
-        <div class="modal-body">
-          <textarea v-model="prompt" rows="12" placeholder="输入更完整的正向提示词" />
+        <div class="modal-body prompt-modal-body">
+          <textarea v-model="prompt" class="prompt-editor" rows="12" placeholder="输入更完整的正向提示词" />
         </div>
         <div class="modal-foot">
           <div class="btn-row">
@@ -700,7 +700,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
     </div>
 
     <div v-if="libraryOpen" class="modal-overlay" @click.self="libraryOpen = false">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prompt-library-title">
+      <div class="modal library-modal" role="dialog" aria-modal="true" aria-labelledby="prompt-library-title">
         <div class="modal-head">
           <div>
             <h2 id="prompt-library-title">提示词库</h2>
@@ -708,7 +708,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
           </div>
           <button class="btn-icon" type="button" @click="libraryOpen = false">×</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body library-modal-body">
           <div class="library-grid">
             <aside class="library-categories" aria-label="提示词分类">
               <button
@@ -723,7 +723,9 @@ async function chooseWorkspaceExportDir(): Promise<void> {
               </button>
             </aside>
             <main class="library-main">
-              <input v-model="promptSearch" class="library-search" placeholder="搜索提示词" />
+              <div class="library-toolbar">
+                <input v-model="promptSearch" class="library-search" placeholder="搜索提示词" />
+              </div>
               <div class="prompt-list">
                 <article v-for="item in visiblePrompts" :key="item.id" class="prompt-item">
                   <div class="prompt-item-copy">
@@ -1055,31 +1057,62 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   width: calc(100% - 32px);
 }
 
+.prompt-modal {
+  width: min(840px, 96vw);
+}
+
+.prompt-modal-body {
+  padding: 18px 20px 20px;
+}
+
+.prompt-editor {
+  min-height: clamp(280px, 48vh, 520px);
+  padding: 14px 16px;
+  line-height: 1.7;
+  border-radius: 14px;
+  resize: none;
+  background: rgba(7, 11, 20, 0.72);
+}
+
+.library-modal {
+  width: min(1120px, 96vw);
+}
+
+.library-modal-body {
+  overflow: hidden;
+}
+
 .prompt-list {
   display: grid;
   gap: 10px;
+  align-content: start;
 }
 
 .library-grid {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(208px, 248px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
 }
 
 .library-categories {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: 8px;
 }
 
 .category-button {
-  min-height: 34px;
-  padding: 7px 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
   color: var(--fg-2);
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .category-button.active {
@@ -1092,11 +1125,17 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   min-width: 0;
   display: grid;
   gap: 10px;
+  align-content: start;
+}
+
+.library-toolbar {
+  display: flex;
+  align-items: center;
 }
 
 .library-search {
-  width: min(100%, 320px) !important;
-  justify-self: start;
+  width: min(100%, 360px) !important;
+  min-height: 40px;
 }
 
 .prompt-item {
@@ -1157,6 +1196,14 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   .samples {
     grid-template-columns: 1fr;
   }
+
+  .library-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .library-categories {
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  }
 }
 
 @media (max-width: 820px) {
@@ -1177,6 +1224,15 @@ async function chooseWorkspaceExportDir(): Promise<void> {
     grid-template-columns: 1fr;
   }
 
+  .prompt-modal,
+  .library-modal {
+    width: min(96vw, 720px);
+  }
+
+  .prompt-editor {
+    min-height: 240px;
+  }
+
   .library-search {
     width: 100% !important;
   }
@@ -1184,10 +1240,14 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   .library-categories {
     display: flex;
     overflow-x: auto;
+    grid-template-columns: none;
   }
 
   .category-button {
     white-space: nowrap;
+    width: auto;
+    min-width: max-content;
+    overflow-wrap: normal;
   }
 }
 </style>
