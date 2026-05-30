@@ -5,9 +5,7 @@ import {
   Home,
   Images,
   Layers3,
-  Plus,
   Settings,
-  Sparkles,
   Wrench,
 } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
@@ -103,16 +101,6 @@ onBeforeUnmount(() => {
           <strong>SamImage 3.0</strong>
           <span>/</span>
           <span>{{ route.name }}</span>
-        </div>
-        <div class="topbar-actions">
-          <RouterLink class="btn-soft" to="/tools">
-            <Sparkles :size="16" />
-            工具库
-          </RouterLink>
-          <RouterLink class="btn-primary" to="/workspace">
-            <Plus :size="16" />
-            开始创作
-          </RouterLink>
         </div>
       </div>
 
