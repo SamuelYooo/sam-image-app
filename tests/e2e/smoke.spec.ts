@@ -250,6 +250,10 @@ test('export dialogs can pick output directories from all result surfaces', asyn
   await page.getByRole('button', { name: '导出', exact: true }).click()
   await page.getByRole('button', { name: '重新选择目录' }).click()
   await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\WorkspacePicked')
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return state.settings?.defaultOutputDir
+  })).toBe('D:\\SamImage\\WorkspacePicked')
   await page.getByRole('button', { name: '×' }).last().click()
 
   await page.evaluate(() => {
@@ -260,6 +264,10 @@ test('export dialogs can pick output directories from all result surfaces', asyn
   await page.getByRole('button', { name: '导出到本地' }).click()
   await page.getByRole('button', { name: '重新选择目录' }).click()
   await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\HistoryPicked')
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return state.settings?.defaultOutputDir
+  })).toBe('D:\\SamImage\\HistoryPicked')
   await page.getByRole('button', { name: '×' }).last().click()
   await page.getByRole('button', { name: '×' }).last().click()
 
@@ -271,6 +279,10 @@ test('export dialogs can pick output directories from all result surfaces', asyn
   await page.getByRole('button', { name: '导出到本地' }).click()
   await page.getByRole('button', { name: '重新选择目录' }).click()
   await expect(page.getByLabel('导出目录')).toHaveValue('D:\\SamImage\\HomePicked')
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('samimage.v3.state') ?? '{}')
+    return state.settings?.defaultOutputDir
+  })).toBe('D:\\SamImage\\HomePicked')
 })
 
 test('workspace export scale produces a larger png download', async ({ page }) => {

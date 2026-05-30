@@ -422,7 +422,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   const directory = await pickDirectory(store.settings.defaultOutputDir)
   if (!directory) return
 
-  store.settings.defaultOutputDir = directory
+  store.saveSettings({ defaultOutputDir: directory })
   store.notify(`已选择导出目录：${directory}`)
 }
 </script>
