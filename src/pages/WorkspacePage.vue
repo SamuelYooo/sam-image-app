@@ -60,6 +60,24 @@ const referenceInput = ref<HTMLInputElement | null>(null)
 const resizeModeOptions = ['just-resize', 'crop-resize', 'resize-fill'] as const
 const iconBackgroundOptions = ['transparent', 'rounded', 'solid'] as const
 type RouteModeOptions = Record<string, string | number | boolean>
+type SizePreset = {
+  id: string
+  name: string
+  width: number
+  height: number
+  hint?: string
+}
+
+const iconSizePresets: SizePreset[] = [
+  { id: 'icon-16', name: '16 x 16', width: 16, height: 16, hint: '浏览器标签' },
+  { id: 'icon-32', name: '32 x 32', width: 32, height: 32, hint: '标准 favicon' },
+  { id: 'icon-48', name: '48 x 48', width: 48, height: 48, hint: '桌面快捷方式' },
+  { id: 'icon-64', name: '64 x 64', width: 64, height: 64, hint: '应用图标' },
+  { id: 'icon-128', name: '128 x 128', width: 128, height: 128, hint: '高清预览' },
+  { id: 'icon-256', name: '256 x 256', width: 256, height: 256, hint: '商店上传' },
+  { id: 'icon-512', name: '512 x 512', width: 512, height: 512, hint: '主视觉源图' },
+]
+const defaultIconSizePreset = iconSizePresets[iconSizePresets.length - 1]
 
 const currentModeLabel = computed(() => modeLabels[mode.value])
 const modeFlowCopy = computed(() => {
@@ -105,6 +123,16 @@ const promptCategoryOptions = computed<PromptCategoryOption[]>(() =>
     ...resolvePromptCategoryMeta(value),
   })),
 )
+const sizePresets = computed<SizePreset[]>(() => (mode.value === 'icon' ? iconSizePresets : aspectPresets))
+const minDimension = computed(() => (mode.value === 'icon' ? 16 : 128))
+const iconSize = computed({
+  get: () => width.value,
+  set: (value: number) => {
+    const normalized = Math.min(4096, Math.max(16, Math.round(Number(value) || defaultIconSizePreset.width)))
+    width.value = normalized
+    height.value = normalized
+  },
+})
 const visiblePrompts = computed(() => {
   const keyword = promptSearch.value.trim().toLowerCase()
   return store.prompts
@@ -224,11 +252,14 @@ onMounted(() => {
     height.value = preset.height
   }
 
-  width.value = routeInteger('width', width.value, 128, 4096)
-  height.value = routeInteger('height', height.value, 128, 4096)
+  const routeWidth = routeString('width')
+  const routeHeight = routeString('height')
+  width.value = routeInteger('width', width.value, 16, 4096)
+  height.value = routeInteger('height', height.value, 16, 4096)
   batchSize.value = routeInteger('batchSize', batchSize.value, 1, 4)
   steps.value = routeInteger('steps', steps.value, 1, 80)
   seed.value = routeInteger('seed', seed.value, 0, 999999999)
+  applyModeDefaults(mode.value, !routeWidth && !routeHeight)
   applyRouteModeOptions(routeModeOptions())
   window.addEventListener('keydown', handleShortcut)
   window.addEventListener('paste', handlePaste)
@@ -239,19 +270,33 @@ onBeforeUnmount(() => {
   window.removeEventListener('paste', handlePaste)
 })
 
-function setMode(next: GenerationMode): void {
-  mode.value = next
-  store.setMode(next)
+function applyModeDefaults(next: GenerationMode, useDefaultSize = true): void {
   if (next === 'cover') {
     const xhs = store.enabledCoverPresets[0] ?? store.coverPresets[0]
     width.value = xhs.width
     height.value = xhs.height
+    return
   }
+
+  if (next === 'icon' && useDefaultSize) {
+    width.value = defaultIconSizePreset.width
+    height.value = defaultIconSizePreset.height
+  }
+}
+
+function setMode(next: GenerationMode): void {
+  mode.value = next
+  store.setMode(next)
+  applyModeDefaults(next)
 }
 
 function applyAspect(preset: { width: number; height: number }): void {
   width.value = preset.width
   height.value = preset.height
+}
+
+function isSizePresetActive(preset: { width: number; height: number }): boolean {
+  return width.value === preset.width && height.value === preset.height
 }
 
 function applyPrompt(item: PromptItem): void {
@@ -637,19 +682,44 @@ async function chooseWorkspaceExportDir(): Promise<void> {
             <strong>输出尺寸</strong>
             <span>{{ width }} x {{ height }}</span>
           </div>
-          <div class="chip-grid">
-            <button v-for="preset in aspectPresets" :key="preset.id" class="chip-button" type="button" @click="applyAspect(preset)">
+          <div v-if="mode === 'icon'" class="icon-size-grid">
+            <button
+              v-for="preset in sizePresets"
+              :key="preset.id"
+              class="icon-size-card"
+              :class="{ active: isSizePresetActive(preset) }"
+              type="button"
+              @click="applyAspect(preset)"
+            >
+              <strong>{{ preset.name }}</strong>
+              <small>{{ preset.hint }}</small>
+            </button>
+          </div>
+          <div v-else class="chip-grid">
+            <button
+              v-for="preset in sizePresets"
+              :key="preset.id"
+              class="chip-button"
+              :class="{ active: isSizePresetActive(preset) }"
+              type="button"
+              @click="applyAspect(preset)"
+            >
               {{ preset.name }}
             </button>
           </div>
-          <div class="param-two">
+          <div v-if="mode === 'icon'" class="field">
+            <label for="workspace-icon-size">图标边长</label>
+            <input id="workspace-icon-size" v-model.number="iconSize" type="number" :min="minDimension" max="4096" step="16" />
+            <p class="field-note">图标模式固定输出为正方形，输入边长后会同步更新宽高。</p>
+          </div>
+          <div v-else class="param-two">
             <div class="field">
               <label for="workspace-width">宽度</label>
-              <input id="workspace-width" v-model.number="width" type="number" min="128" max="4096" />
+              <input id="workspace-width" v-model.number="width" type="number" :min="minDimension" max="4096" />
             </div>
             <div class="field">
               <label for="workspace-height">高度</label>
-              <input id="workspace-height" v-model.number="height" type="number" min="128" max="4096" />
+              <input id="workspace-height" v-model.number="height" type="number" :min="minDimension" max="4096" />
             </div>
           </div>
         </div>
@@ -960,6 +1030,46 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   padding: 7px;
 }
 
+.icon-size-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.icon-size-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.icon-size-card strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.icon-size-card small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.icon-size-card.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.field-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .workspace-center {
   min-width: 0;
   display: grid;
@@ -1255,6 +1365,10 @@ async function chooseWorkspaceExportDir(): Promise<void> {
     grid-template-columns: 1fr;
   }
 
+  .icon-size-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .library-grid {
     grid-template-columns: 1fr;
   }
@@ -1280,6 +1394,10 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 
   .library-grid {
     grid-template-columns: 1fr;
+  }
+
+  .icon-size-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .prompt-modal,

@@ -126,6 +126,22 @@ test('workspace prompt library keeps controls stable for long content', async ({
   expect(categoryBox!.height).toBeLessThanOrEqual(58)
 })
 
+test('workspace icon mode uses common icon size presets', async ({ page }) => {
+  await page.goto('/workspace?mode=icon')
+
+  const sizeBlock = page.locator('.block').filter({ has: page.getByText('输出尺寸') }).first()
+  const iconSizeInput = page.getByLabel('图标边长')
+
+  await expect(page.getByRole('button', { name: '16 x 16 浏览器标签' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '512 x 512 主视觉源图' })).toBeVisible()
+  await expect(iconSizeInput).toHaveValue('512')
+  await expect(sizeBlock).toContainText('512 x 512')
+
+  await page.getByRole('button', { name: '16 x 16 浏览器标签' }).click()
+  await expect(iconSizeInput).toHaveValue('16')
+  await expect(sizeBlock).toContainText('16 x 16')
+})
+
 test('tool catalog opens workspace with a focused generation intent', async ({ page }) => {
   await page.goto('/tools')
 
