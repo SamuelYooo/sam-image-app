@@ -264,6 +264,15 @@ export const exportFormatOptions: Array<{ value: ExportFormat; label: string }> 
   { value: 'gif', label: 'GIF' },
 ]
 
+export const iconExportFormatOptions: Array<{ value: ExportFormat; label: string }> = [
+  ...exportFormatOptions,
+  { value: 'ico', label: 'ICO 多尺寸' },
+]
+
+export function getExportFormatOptions(mode?: GenerationMode): Array<{ value: ExportFormat; label: string }> {
+  return mode === 'icon' ? iconExportFormatOptions : exportFormatOptions
+}
+
 export const defaultCoverPresets: CoverPreset[] = [
   { id: 'xiaohongshu', name: '小红书封面', width: 1080, height: 1440, enabled: true, custom: false },
   { id: 'wechat', name: '公众号封面', width: 900, height: 383, enabled: true, custom: false },

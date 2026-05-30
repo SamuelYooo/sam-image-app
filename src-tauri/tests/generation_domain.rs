@@ -143,3 +143,20 @@ fn local_generation_keeps_mode_specific_options() {
     assert_eq!(task.mode_options["imageStrength"], 68);
     assert_eq!(task.mode_options["resizeMode"], "crop-resize");
 }
+
+#[test]
+fn icon_generation_allows_small_square_sizes() {
+    let mut input = valid_input();
+    input.mode = GenerationMode::Icon;
+    input.width = 16;
+    input.height = 16;
+    input.batch_size = 1;
+    input.prompt = "favicon 导出测试".into();
+
+    validate_generation_input(&input).expect("icon mode should allow 16px sizes");
+    let task = create_local_generation(input).expect("icon preview should generate");
+
+    assert_eq!(task.assets.len(), 1);
+    assert_eq!(task.assets[0].width, 16);
+    assert_eq!(task.assets[0].height, 16);
+}

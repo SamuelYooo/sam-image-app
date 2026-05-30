@@ -98,20 +98,25 @@ pub struct GenerationTask {
 }
 
 pub fn validate_generation_input(input: &GenerationInput) -> Result<(), GenerationError> {
+    let min_dimension = if input.mode == GenerationMode::Icon {
+        16
+    } else {
+        128
+    };
     if input.prompt.trim().is_empty() {
         return Err(GenerationError::Validation("请输入正向提示词".into()));
     }
     if input.model_id.trim().is_empty() {
         return Err(GenerationError::Validation("请选择图像模型".into()));
     }
-    if !(128..=4096).contains(&input.width) {
+    if !(min_dimension..=4096).contains(&input.width) {
         return Err(GenerationError::Validation(
-            "宽度必须在 128 到 4096 之间".into(),
+            format!("宽度必须在 {min_dimension} 到 4096 之间"),
         ));
     }
-    if !(128..=4096).contains(&input.height) {
+    if !(min_dimension..=4096).contains(&input.height) {
         return Err(GenerationError::Validation(
-            "高度必须在 128 到 4096 之间".into(),
+            format!("高度必须在 {min_dimension} 到 4096 之间"),
         ));
     }
     if !(1..=4).contains(&input.batch_size) {
@@ -414,6 +419,7 @@ fn normalize_export_format(value: &str) -> Result<&'static str, GenerationError>
         "jpg" | "jpeg" => Ok("jpg"),
         "webp" => Ok("webp"),
         "gif" => Ok("gif"),
+        "ico" => Ok("ico"),
         _ => Err(GenerationError::Validation(format!(
             "不支持的导出格式: {}",
             value.trim()

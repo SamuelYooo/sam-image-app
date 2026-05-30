@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Download, Eye, FolderOpen, RotateCcw, Search, Star, Trash2 } from 'lucide-vue-next'
-import { exportFormatOptions, modeLabels } from '@/data/catalog'
+import { getExportFormatOptions, modeLabels } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
@@ -16,6 +16,10 @@ const visibleCount = ref(8)
 const selected = ref<{ task: GenerationTask; asset: GeneratedAsset } | null>(null)
 const exportOpen = ref<'selected' | 'all' | null>(null)
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
+const availableExportFormatOptions = computed(() => {
+  if (exportOpen.value === 'selected') return getExportFormatOptions(selected.value?.task.mode)
+  return getExportFormatOptions()
+})
 
 const filteredTasks = computed(() => {
   const keyword = search.value.trim().toLowerCase()
@@ -99,12 +103,18 @@ function clearHistory(): void {
 }
 
 function openHistoryExport(): void {
-  exportFormat.value = store.settings.defaultExportFormat
+  const options = getExportFormatOptions(selected.value?.task.mode)
+  exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
+    ? store.settings.defaultExportFormat
+    : options[0]?.value ?? 'png'
   exportOpen.value = 'selected'
 }
 
 function openAllHistoryExport(): void {
-  exportFormat.value = store.settings.defaultExportFormat
+  const options = getExportFormatOptions()
+  exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
+    ? store.settings.defaultExportFormat
+    : options[0]?.value ?? 'png'
   exportOpen.value = 'all'
 }
 
@@ -284,9 +294,10 @@ async function confirmHistoryExport(): Promise<void> {
           <div class="field">
             <label for="history-export-format">格式</label>
             <select id="history-export-format" v-model="exportFormat">
-              <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              <option v-for="option in availableExportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </div>
+          <p v-if="exportFormat === 'ico'" class="muted">ICO 会自动打包常用图标尺寸，并跳过超过当前源图尺寸的规格。</p>
           <p class="muted">{{ exportOpen === 'all' ? '导出将包含全部已完成结果，并保留可用的提示词元数据。' : '导出将使用当前结果并保留可用的提示词元数据。' }}</p>
         </div>
         <div class="modal-foot">

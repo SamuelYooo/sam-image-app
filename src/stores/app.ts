@@ -33,6 +33,7 @@ const rasterExportMime: Record<'png' | 'jpg' | 'webp', string> = {
   jpg: 'image/jpeg',
   webp: 'image/webp',
 }
+const icoBundleSizes = [16, 32, 48, 64, 128, 256, 512] as const
 
 interface PersistedState {
   models: ModelProfile[]
@@ -67,6 +68,7 @@ interface ExportAssetData {
   format: ExportFormat
   width: number
   height: number
+  bundleSizes?: number[]
 }
 
 const defaultState: PersistedState = {
@@ -173,6 +175,90 @@ async function rasterizeDataUrl(dataUrl: string, width: number, height: number, 
   context.drawImage(image, 0, 0, width, height)
 
   return canvas.toDataURL(rasterExportMime[format], 0.92)
+}
+
+async function loadImageFromDataUrl(dataUrl: string): Promise<HTMLImageElement> {
+  const image = new Image()
+  const loaded = new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('导出图片渲染失败'))
+  })
+  image.src = dataUrl
+  await loaded
+  return image
+}
+
+async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+  if (!blob) throw new Error('ICO 导出失败：无法生成 PNG 帧')
+  return new Uint8Array(await blob.arrayBuffer())
+}
+
+function bytesToDataUrl(bytes: Uint8Array, mimeType: string): string {
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
+  }
+  return `data:${mimeType};base64,${btoa(binary)}`
+}
+
+function buildIcoFile(frames: Array<{ size: number; bytes: Uint8Array }>): Uint8Array {
+  const headerSize = 6
+  const entrySize = 16
+  const totalBytes = frames.reduce((sum, frame) => sum + frame.bytes.length, 0)
+  const output = new Uint8Array(headerSize + entrySize * frames.length + totalBytes)
+  const view = new DataView(output.buffer)
+
+  view.setUint16(0, 0, true)
+  view.setUint16(2, 1, true)
+  view.setUint16(4, frames.length, true)
+
+  let dataOffset = headerSize + entrySize * frames.length
+  frames.forEach((frame, index) => {
+    const entryOffset = headerSize + index * entrySize
+    const sizeByte = frame.size >= 256 ? 0 : frame.size
+    output[entryOffset] = sizeByte
+    output[entryOffset + 1] = sizeByte
+    output[entryOffset + 2] = 0
+    output[entryOffset + 3] = 0
+    view.setUint16(entryOffset + 4, 1, true)
+    view.setUint16(entryOffset + 6, 32, true)
+    view.setUint32(entryOffset + 8, frame.bytes.length, true)
+    view.setUint32(entryOffset + 12, dataOffset, true)
+    output.set(frame.bytes, dataOffset)
+    dataOffset += frame.bytes.length
+  })
+
+  return output
+}
+
+async function createIcoDataUrl(dataUrl: string, width: number, height: number): Promise<ExportAssetData> {
+  const maxSize = Math.max(16, Math.min(width, height))
+  const bundleSizes = icoBundleSizes.filter((size) => size <= maxSize)
+  const sizes = bundleSizes.length ? bundleSizes : [Math.max(16, maxSize)]
+  const image = await loadImageFromDataUrl(dataUrl)
+  const frames: Array<{ size: number; bytes: Uint8Array }> = []
+
+  for (const size of sizes) {
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('当前环境不支持 ICO 导出')
+    context.clearRect(0, 0, size, size)
+    context.drawImage(image, 0, 0, size, size)
+    frames.push({ size, bytes: await canvasToPngBytes(canvas) })
+  }
+
+  const bytes = buildIcoFile(frames)
+  return {
+    dataUrl: bytesToDataUrl(bytes, 'image/x-icon'),
+    format: 'ico',
+    width,
+    height,
+    bundleSizes: sizes.slice(),
+  }
 }
 
 export const useAppStore = defineStore('app', () => {
@@ -593,8 +679,9 @@ export const useAppStore = defineStore('app', () => {
     scale = 1,
     task?: GenerationTask,
   ): Promise<void> {
-    const exportData = await prepareExportAsset(asset, format, scale)
-    const metadataJson = settings.value.includePromptMetadata && task ? createExportMetadataJson(task, asset, exportData, scale) : undefined
+    const exportScale = format === 'ico' ? 1 : scale
+    const exportData = await prepareExportAsset(asset, format, exportScale)
+    const metadataJson = settings.value.includePromptMetadata && task ? createExportMetadataJson(task, asset, exportData, exportScale) : undefined
     const result = await invokeOptional<{ path: string; metadataPath?: string }>('export_generated_asset', {
       request: {
         dataUrl: exportData.dataUrl,
@@ -626,6 +713,7 @@ export const useAppStore = defineStore('app', () => {
 
   async function prepareExportAsset(asset: GeneratedAsset, format: ExportFormat, scale = 1): Promise<ExportAssetData> {
     if (format === asset.format && scale === 1) return { dataUrl: asset.dataUrl, format, width: asset.width, height: asset.height }
+    if (format === 'ico') return createIcoDataUrl(asset.dataUrl, asset.width, asset.height)
     if (format === 'svg' || format === 'gif') return { dataUrl: asset.dataUrl, format: asset.format, width: asset.width, height: asset.height }
     const width = asset.width * scale
     const height = asset.height * scale
@@ -656,6 +744,7 @@ export const useAppStore = defineStore('app', () => {
           format: exportData.format,
           width: exportData.width,
           height: exportData.height,
+          bundleSizes: exportData.bundleSizes ?? [],
           originalFormat: asset.format,
           originalWidth: asset.width,
           originalHeight: asset.height,

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { Download, Eye, FolderOpen, ImagePlus, RotateCcw, ShieldCheck, Sparkles, Settings, WandSparkles } from 'lucide-vue-next'
-import { exportFormatOptions, modeLabels, toolGroups } from '@/data/catalog'
+import { getExportFormatOptions, modeLabels, toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask, ModelProfile } from '@/types/domain'
@@ -12,6 +12,7 @@ const store = useAppStore()
 const selectedRecent = ref<{ task: GenerationTask; asset: GeneratedAsset } | null>(null)
 const exportOpen = ref(false)
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
+const availableExportFormatOptions = computed(() => getExportFormatOptions(selectedRecent.value?.task.mode))
 const quickTools = computed(() => toolGroups.flatMap((group) => group.tools).slice(0, 6))
 type ModelSummaryTone = 'ok' | 'warn' | 'error'
 
@@ -121,7 +122,10 @@ function retryRecent(task: GenerationTask): void {
 }
 
 function openRecentExport(): void {
-  exportFormat.value = store.settings.defaultExportFormat
+  const options = availableExportFormatOptions.value
+  exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
+    ? store.settings.defaultExportFormat
+    : options[0]?.value ?? 'png'
   exportOpen.value = true
 }
 
@@ -306,9 +310,10 @@ async function chooseRecentExportDir(): Promise<void> {
           <div class="field">
             <label for="home-export-format">格式</label>
             <select id="home-export-format" v-model="exportFormat">
-              <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              <option v-for="option in availableExportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </div>
+          <p v-if="exportFormat === 'ico'" class="muted">ICO 会自动打包常用图标尺寸，并跳过超过当前源图尺寸的规格。</p>
           <p class="muted">导出将使用最近生成结果并保留可用的提示词元数据。</p>
         </div>
         <div class="modal-foot">

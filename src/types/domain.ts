@@ -1,7 +1,7 @@
 export type GenerationMode = 'txt2img' | 'img2img' | 'cover' | 'icon' | '3d' | 'gif'
 
 export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed'
-export type ExportFormat = 'svg' | 'png' | 'jpg' | 'webp' | 'gif'
+export type ExportFormat = 'svg' | 'png' | 'jpg' | 'webp' | 'gif' | 'ico'
 
 export interface PromptItem {
   id: string

@@ -18,7 +18,7 @@ import {
   Upload,
   WandSparkles,
 } from 'lucide-vue-next'
-import { aspectPresets, exportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
+import { aspectPresets, getExportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask, PromptItem } from '@/types/domain'
@@ -125,6 +125,7 @@ const promptCategoryOptions = computed<PromptCategoryOption[]>(() =>
 )
 const sizePresets = computed<SizePreset[]>(() => (mode.value === 'icon' ? iconSizePresets : aspectPresets))
 const minDimension = computed(() => (mode.value === 'icon' ? 16 : 128))
+const availableExportFormatOptions = computed(() => getExportFormatOptions(actionTask.value?.mode ?? mode.value))
 const iconSize = computed({
   get: () => width.value,
   set: (value: number) => {
@@ -502,7 +503,10 @@ function openExportDialog(): void {
     store.notify('请先生成或选择结果', 'error')
     return
   }
-  exportFormat.value = store.settings.defaultExportFormat
+  const options = availableExportFormatOptions.value
+  exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
+    ? store.settings.defaultExportFormat
+    : options[0]?.value ?? 'png'
   exportScale.value = 1
   exportOpen.value = true
 }
@@ -879,10 +883,11 @@ async function chooseWorkspaceExportDir(): Promise<void> {
           <div class="field">
             <label for="workspace-export-format">格式</label>
             <select id="workspace-export-format" v-model="exportFormat">
-              <option v-for="option in exportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              <option v-for="option in availableExportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </div>
-          <div class="field">
+          <p v-if="exportFormat === 'ico'" class="muted">ICO 会按 16 / 32 / 48 / 64 / 128 / 256 / 512 多尺寸打包，并自动跳过超过当前源图尺寸的规格。</p>
+          <div v-if="exportFormat !== 'ico'" class="field">
             <label for="workspace-export-scale">倍率</label>
             <select id="workspace-export-scale" v-model.number="exportScale">
               <option :value="1">1x 原尺寸</option>

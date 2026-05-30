@@ -41,6 +41,22 @@ fn rejects_unsupported_export_formats() {
 }
 
 #[test]
+fn exports_ico_data_to_requested_directory() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let data_url = "data:image/x-icon;base64,AAABAAEA";
+
+    let output = export_asset_data_url(data_url, temp_dir.path(), "App Icon", "ico")
+        .expect("ico asset should export");
+
+    assert_eq!(
+        output.file_name().and_then(|value| value.to_str()),
+        Some("App_Icon.ico")
+    );
+    let bytes = std::fs::read(output).expect("exported ico");
+    assert_eq!(&bytes[..4], &[0, 0, 1, 0]);
+}
+
+#[test]
 fn exports_metadata_json_sidecar_to_requested_directory() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
 
