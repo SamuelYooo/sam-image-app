@@ -233,9 +233,17 @@ function buildIcoFile(frames: Array<{ size: number; bytes: Uint8Array }>): Uint8
   return output
 }
 
-async function createIcoDataUrl(dataUrl: string, width: number, height: number): Promise<ExportAssetData> {
+async function createIcoDataUrl(
+  dataUrl: string,
+  width: number,
+  height: number,
+  requestedSizes?: number[],
+): Promise<ExportAssetData> {
   const maxSize = Math.max(16, Math.min(width, height))
-  const bundleSizes = icoBundleSizes.filter((size) => size <= maxSize)
+  const candidateSizes = requestedSizes?.length
+    ? Array.from(new Set(requestedSizes.map((size) => Math.round(size)).filter((size) => size >= 16)))
+    : [...icoBundleSizes]
+  const bundleSizes = candidateSizes.filter((size) => size <= maxSize).sort((left, right) => left - right)
   const sizes = bundleSizes.length ? bundleSizes : [Math.max(16, maxSize)]
   const image = await loadImageFromDataUrl(dataUrl)
   const frames: Array<{ size: number; bytes: Uint8Array }> = []
@@ -678,9 +686,10 @@ export const useAppStore = defineStore('app', () => {
     format: ExportFormat = settings.value.defaultExportFormat,
     scale = 1,
     task?: GenerationTask,
+    options?: { iconSizes?: number[] },
   ): Promise<void> {
     const exportScale = format === 'ico' ? 1 : scale
-    const exportData = await prepareExportAsset(asset, format, exportScale)
+    const exportData = await prepareExportAsset(asset, format, exportScale, options)
     const metadataJson = settings.value.includePromptMetadata && task ? createExportMetadataJson(task, asset, exportData, exportScale) : undefined
     const result = await invokeOptional<{ path: string; metadataPath?: string }>('export_generated_asset', {
       request: {
@@ -711,9 +720,14 @@ export const useAppStore = defineStore('app', () => {
     notify(metadataJson ? '已导出图片和提示词元数据到浏览器下载目录' : '已导出到浏览器下载目录')
   }
 
-  async function prepareExportAsset(asset: GeneratedAsset, format: ExportFormat, scale = 1): Promise<ExportAssetData> {
+  async function prepareExportAsset(
+    asset: GeneratedAsset,
+    format: ExportFormat,
+    scale = 1,
+    options?: { iconSizes?: number[] },
+  ): Promise<ExportAssetData> {
     if (format === asset.format && scale === 1) return { dataUrl: asset.dataUrl, format, width: asset.width, height: asset.height }
-    if (format === 'ico') return createIcoDataUrl(asset.dataUrl, asset.width, asset.height)
+    if (format === 'ico') return createIcoDataUrl(asset.dataUrl, asset.width, asset.height, options?.iconSizes)
     if (format === 'svg' || format === 'gif') return { dataUrl: asset.dataUrl, format: asset.format, width: asset.width, height: asset.height }
     const width = asset.width * scale
     const height = asset.height * scale

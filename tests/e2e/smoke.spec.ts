@@ -142,7 +142,7 @@ test('workspace icon mode uses common icon size presets', async ({ page }) => {
   await expect(sizeBlock).toContainText('16 x 16')
 })
 
-test('workspace icon mode can export a multi-size ico bundle', async ({ page }) => {
+test('workspace icon mode can export a selected-size ico bundle', async ({ page }) => {
   await page.goto('/workspace?mode=icon&prompt=ICO 多尺寸导出测试图标')
 
   await page.getByRole('button', { name: '生成新结果' }).click()
@@ -152,6 +152,13 @@ test('workspace icon mode can export a multi-size ico bundle', async ({ page }) 
   await page.getByLabel('格式').selectOption('ico')
   await expect(page.getByText(/ICO 会按 16 \/ 32 \/ 48 \/ 64 \/ 128 \/ 256 \/ 512/)).toBeVisible()
   await expect(page.getByLabel('倍率')).toHaveCount(0)
+  await expect(page.getByLabel('ICO 尺寸 16 x 16')).toBeChecked()
+  await expect(page.getByLabel('ICO 尺寸 64 x 64')).toBeChecked()
+  await page.getByLabel('ICO 尺寸 32 x 32').uncheck()
+  await page.getByLabel('ICO 尺寸 48 x 48').uncheck()
+  await page.getByLabel('ICO 尺寸 128 x 128').uncheck()
+  await page.getByLabel('ICO 尺寸 256 x 256').uncheck()
+  await page.getByLabel('ICO 尺寸 512 x 512').uncheck()
 
   const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 2)
   const download = findDownload(downloads, '.ico')
@@ -160,6 +167,7 @@ test('workspace icon mode can export a multi-size ico bundle', async ({ page }) 
   expect(downloadedPath).toBeTruthy()
   const content = await readFile(downloadedPath!)
   expect(Array.from(content.subarray(0, 4))).toEqual([0, 0, 1, 0])
+  expect(content.readUInt16LE(4)).toBe(2)
 })
 
 test('tool catalog opens workspace with a focused generation intent', async ({ page }) => {

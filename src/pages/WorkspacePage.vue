@@ -55,6 +55,7 @@ const promptSearch = ref('')
 const promptCategory = ref('全部')
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
 const exportScale = ref(1)
+const selectedIcoExportSizes = ref<number[]>([])
 const retryNotice = ref('')
 const referenceInput = ref<HTMLInputElement | null>(null)
 const resizeModeOptions = ['just-resize', 'crop-resize', 'resize-fill'] as const
@@ -126,6 +127,10 @@ const promptCategoryOptions = computed<PromptCategoryOption[]>(() =>
 const sizePresets = computed<SizePreset[]>(() => (mode.value === 'icon' ? iconSizePresets : aspectPresets))
 const minDimension = computed(() => (mode.value === 'icon' ? 16 : 128))
 const availableExportFormatOptions = computed(() => getExportFormatOptions(actionTask.value?.mode ?? mode.value))
+const availableIcoExportSizes = computed(() => {
+  const maxSide = Math.max(16, Math.min(actionAsset.value?.width ?? width.value, actionAsset.value?.height ?? height.value))
+  return iconSizePresets.filter((preset) => preset.width <= maxSide)
+})
 const iconSize = computed({
   get: () => width.value,
   set: (value: number) => {
@@ -170,6 +175,12 @@ watch(defaultModel, (value) => {
   if (!selectedModelId.value || !store.imageModels.some((model) => model.id === selectedModelId.value)) {
     selectedModelId.value = value?.id ?? ''
   }
+})
+watch(exportFormat, (value) => {
+  if (!exportOpen.value || value !== 'ico') return
+  const allowed = new Set(availableIcoExportSizes.value.map((preset) => preset.width))
+  const next = selectedIcoExportSizes.value.filter((size) => allowed.has(size))
+  selectedIcoExportSizes.value = next.length ? next : availableIcoExportSizes.value.map((preset) => preset.width)
 })
 
 function routeString(name: string): string {
@@ -494,7 +505,17 @@ async function downloadSelected(): Promise<void> {
     store.notify('请先选择结果', 'error')
     return
   }
-  await store.downloadAsset(asset, exportFormat.value, exportScale.value, actionTask.value ?? undefined)
+  if (exportFormat.value === 'ico' && !selectedIcoExportSizes.value.length) {
+    store.notify('请至少勾选一个 ICO 导出尺寸', 'error')
+    return
+  }
+  await store.downloadAsset(
+    asset,
+    exportFormat.value,
+    exportScale.value,
+    actionTask.value ?? undefined,
+    exportFormat.value === 'ico' ? { iconSizes: selectedIcoExportSizes.value } : undefined,
+  )
   exportOpen.value = false
 }
 
@@ -508,6 +529,7 @@ function openExportDialog(): void {
     ? store.settings.defaultExportFormat
     : options[0]?.value ?? 'png'
   exportScale.value = 1
+  selectedIcoExportSizes.value = availableIcoExportSizes.value.map((preset) => preset.width)
   exportOpen.value = true
 }
 
@@ -887,6 +909,20 @@ async function chooseWorkspaceExportDir(): Promise<void> {
             </select>
           </div>
           <p v-if="exportFormat === 'ico'" class="muted">ICO 会按 16 / 32 / 48 / 64 / 128 / 256 / 512 多尺寸打包，并自动跳过超过当前源图尺寸的规格。</p>
+          <div v-if="exportFormat === 'ico'" class="field">
+            <label>导出尺寸</label>
+            <div class="ico-size-checks">
+              <label v-for="preset in availableIcoExportSizes" :key="preset.id" class="ico-size-check">
+                <input
+                  :aria-label="`ICO 尺寸 ${preset.name}`"
+                  :value="preset.width"
+                  v-model="selectedIcoExportSizes"
+                  type="checkbox"
+                />
+                <span>{{ preset.name }}</span>
+              </label>
+            </div>
+          </div>
           <div v-if="exportFormat !== 'ico'" class="field">
             <label for="workspace-export-scale">倍率</label>
             <select id="workspace-export-scale" v-model.number="exportScale">
@@ -1073,6 +1109,28 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.ico-size-checks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ico-size-check {
+  min-height: 38px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--fg-2);
+}
+
+.ico-size-check input[type="checkbox"] {
+  flex: 0 0 auto;
 }
 
 .workspace-center {
@@ -1374,6 +1432,10 @@ async function chooseWorkspaceExportDir(): Promise<void> {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .ico-size-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .library-grid {
     grid-template-columns: 1fr;
   }
@@ -1403,6 +1465,10 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 
   .icon-size-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ico-size-checks {
+    grid-template-columns: 1fr;
   }
 
   .prompt-modal,
