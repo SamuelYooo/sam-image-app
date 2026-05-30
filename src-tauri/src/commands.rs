@@ -187,6 +187,37 @@ pub async fn test_model_profile(profile: ModelProfile) -> Result<ModelTestResult
             message: "请填写 API Key".into(),
         });
     }
+    if profile.kind == "text" && profile.model.trim().is_empty() {
+        return Ok(ModelTestResult {
+            ok: false,
+            message: "请填写文本模型 ID".into(),
+        });
+    }
+
+    if profile.kind == "text" {
+        let response = reqwest::Client::new()
+            .post(profile.endpoint.trim())
+            .bearer_auth(profile.api_key.trim())
+            .json(&serde_json::json!({
+                "model": profile.model.trim(),
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "ping"
+                    }
+                ],
+                "max_tokens": 1,
+            }))
+            .timeout(std::time::Duration::from_secs(8))
+            .send()
+            .await?;
+        let status = response.status();
+
+        return Ok(ModelTestResult {
+            ok: status.is_success(),
+            message: format!("文本模型端点响应：HTTP {}", status.as_u16()),
+        });
+    }
 
     let response = reqwest::Client::new()
         .get(profile.endpoint)

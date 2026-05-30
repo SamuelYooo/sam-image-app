@@ -221,4 +221,32 @@ describe('app store generation bridge', () => {
       type: 'error',
     }))
   })
+
+  it('removes imported prompts while keeping builtin prompts intact', () => {
+    const store = useAppStore()
+    const importedCount = store.importPromptBatch([
+      {
+        filename: 'custom-prompts.json',
+        content: JSON.stringify([
+          { title: '可删除提示词', prompt: '这是一条可删除的导入提示词', category: '测试' },
+        ]),
+      },
+    ])
+
+    expect(importedCount).toBe(1)
+    const importedPrompt = store.prompts.find((item) => item.title === '可删除提示词')
+    expect(importedPrompt).toBeTruthy()
+
+    store.removePrompt(importedPrompt!.id)
+    expect(store.prompts.some((item) => item.id === importedPrompt!.id)).toBe(false)
+
+    const builtinPrompt = store.prompts.find((item) => item.source === 'builtin')
+    expect(builtinPrompt).toBeTruthy()
+    store.removePrompt(builtinPrompt!.id)
+    expect(store.prompts.some((item) => item.id === builtinPrompt!.id)).toBe(true)
+    expect(store.toast).toEqual(expect.objectContaining({
+      message: '内置提示词不能删除',
+      type: 'error',
+    }))
+  })
 })

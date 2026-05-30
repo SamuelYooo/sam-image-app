@@ -37,8 +37,10 @@ const sortedTasks = computed(() => {
   })
 })
 
-const visibleTasks = computed(() => sortedTasks.value.slice(0, visibleCount.value))
-const hasMoreTasks = computed(() => visibleTasks.value.length < sortedTasks.value.length)
+const visibleEntries = computed(() => sortedTasks.value
+  .flatMap((task) => task.assets.map((asset) => ({ task, asset })))
+  .slice(0, visibleCount.value))
+const hasMoreTasks = computed(() => visibleEntries.value.length < sortedTasks.value.reduce((sum, task) => sum + task.assets.length, 0))
 
 const stats = computed(() => ({
   total: store.tasks.reduce((sum, task) => sum + task.assets.length, 0),
@@ -177,31 +179,29 @@ async function confirmHistoryExport(): Promise<void> {
 
     <div v-if="sortedTasks.length">
       <div class="image-grid">
-        <article v-for="task in visibleTasks" :key="task.id" class="history-card">
+        <article v-for="entry in visibleEntries" :key="entry.asset.id" class="history-card">
           <button
             class="favorite-button"
-            :class="{ active: task.isFavorite }"
+            :class="{ active: entry.task.isFavorite }"
             type="button"
-            :aria-label="task.isFavorite ? '取消收藏' : '收藏'"
-            :title="`${task.isFavorite ? '取消收藏' : '收藏'} ${task.prompt}`"
-            @click="store.toggleTaskFavorite(task.id)"
+            :aria-label="entry.task.isFavorite ? '取消收藏' : '收藏'"
+            :title="`${entry.task.isFavorite ? '取消收藏' : '收藏'} ${entry.task.prompt}`"
+            @click="store.toggleTaskFavorite(entry.task.id)"
           >
-            <Star :size="15" :fill="task.isFavorite ? 'currentColor' : 'none'" />
+            <Star :size="15" :fill="entry.task.isFavorite ? 'currentColor' : 'none'" />
           </button>
           <button
-            v-for="asset in task.assets"
-            :key="asset.id"
             class="image-card"
             type="button"
-            @click="selected = { task, asset }"
+            @click="selected = { task: entry.task, asset: entry.asset }"
           >
-            <span class="art-preview thumb"><img :src="asset.dataUrl" :alt="asset.title" /></span>
+            <span class="art-preview thumb"><img :src="entry.asset.dataUrl" :alt="entry.asset.title" /></span>
             <span class="image-info">
-              <span class="mode-chip">{{ modeLabels[task.mode] }}</span>
-              <strong>{{ task.prompt }}</strong>
+              <span class="mode-chip">{{ modeLabels[entry.task.mode] }}</span>
+              <strong>{{ entry.task.prompt }}</strong>
               <small>
-                {{ new Date(task.createdAt).toLocaleString() }} · {{ task.width }} x {{ task.height }}
-                <span v-if="task.status === 'failed'" class="status-text error"> · 失败</span>
+                {{ new Date(entry.task.createdAt).toLocaleString() }} · {{ entry.asset.width }} x {{ entry.asset.height }}
+                <span v-if="entry.task.status === 'failed'" class="status-text error"> · 失败</span>
               </small>
             </span>
           </button>
@@ -398,12 +398,20 @@ async function confirmHistoryExport(): Promise<void> {
 
 .image-card {
   width: 100%;
-  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   text-align: left;
+  transition: border-color 160ms, box-shadow 160ms, transform 160ms;
+}
+
+.image-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34), 0 0 0 1px var(--border-glow);
+  transform: translateY(-2px);
 }
 
 .favorite-button {
@@ -441,12 +449,15 @@ async function confirmHistoryExport(): Promise<void> {
   display: grid;
   gap: 6px;
   padding: 12px;
+  min-width: 0;
 }
 
 .image-info strong {
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.45;
 }
 
 .image-info small {
@@ -527,6 +538,19 @@ async function confirmHistoryExport(): Promise<void> {
     margin-left: 0;
     width: 100%;
     justify-content: flex-end;
+  }
+}
+
+@media (max-width: 680px) {
+  .stats-row,
+  .image-grid,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-bar {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

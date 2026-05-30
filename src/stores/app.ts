@@ -402,6 +402,19 @@ export const useAppStore = defineStore('app', () => {
     notify(`已应用提示词：${item.title}`)
   }
 
+  function removePrompt(id: string): void {
+    const target = prompts.value.find((item) => item.id === id)
+    if (!target) return
+    if (target.source === 'builtin') {
+      notify('内置提示词不能删除', 'error')
+      return
+    }
+
+    prompts.value = prompts.value.filter((item) => item.id !== id)
+    persist()
+    notify(`已删除提示词：${target.title}`)
+  }
+
   function saveModel(profile: ModelProfile): void {
     const next = profile.id ? profile : { ...profile, id: createId('model') }
     if (next.isPrimary) {
@@ -694,6 +707,7 @@ export const useAppStore = defineStore('app', () => {
     importPromptBatch,
     syncPromptSource,
     usePrompt,
+    removePrompt,
     saveModel,
     setPrimaryImageModel,
     setPrimaryTextModel,

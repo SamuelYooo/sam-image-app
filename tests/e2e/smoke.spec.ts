@@ -1309,6 +1309,30 @@ test('prompt market imports multiple json files at once', async ({ page }) => {
   await expect(page.getByText('批量导入提示词 B')).toBeVisible()
 })
 
+test('prompt market can delete imported prompts', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+
+  await page.locator('input[type="file"]').setInputFiles([
+    {
+      name: 'delete-prompts.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([{ title: '待删除提示词', prompt: '这是待删除的导入提示词', category: '删除' }])),
+    },
+  ])
+
+  await expect(page.getByText('待删除提示词')).toBeVisible()
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('删除提示词')
+    expect(dialog.message()).toContain('待删除提示词')
+    await dialog.accept()
+  })
+  await page.locator('.prompt-card').filter({ hasText: '待删除提示词' }).getByRole('button', { name: '删除' }).click()
+
+  await expect(page.getByText('已删除提示词：待删除提示词')).toBeVisible()
+  await expect(page.getByText('待删除提示词')).toHaveCount(0)
+})
+
 test('prompt market shows an empty state when no prompts are available', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(
@@ -2206,7 +2230,7 @@ test('settings model deletion requires confirmation before removing user models'
 test('settings model editor can fetch a model from the local catalog', async ({ page }) => {
   await page.goto('/settings')
 
-  await page.getByRole('button', { name: '新增模型' }).click()
+  await page.getByRole('button', { name: '新增图像模型' }).click()
   await page.getByRole('button', { name: '获取模型' }).click()
   await expect(page.getByRole('heading', { name: '获取模型' })).toBeVisible()
 
@@ -2225,8 +2249,7 @@ test('settings model editor can fetch a model from the local catalog', async ({ 
 test('settings model catalog supports text polish models', async ({ page }) => {
   await page.goto('/settings')
 
-  await page.getByRole('button', { name: '新增模型' }).click()
-  await page.getByLabel('类型').selectOption('text')
+  await page.getByRole('button', { name: '新增文本模型' }).click()
   await page.getByRole('button', { name: '获取模型' }).click()
   await expect(page.getByRole('heading', { name: '获取模型' })).toBeVisible()
 
@@ -2247,9 +2270,8 @@ test('settings model catalog supports text polish models', async ({ page }) => {
 test('settings can set the primary text model used by prompt polish', async ({ page }) => {
   await page.goto('/settings')
 
-  await page.getByRole('button', { name: '新增模型' }).click()
+  await page.getByRole('button', { name: '新增文本模型' }).click()
   await page.getByLabel('模型名称').fill('Local Text Refiner')
-  await page.getByLabel('类型').selectOption('text')
   await expect(page.getByLabel('设为主文本模型')).toBeVisible()
   await expect(page.getByLabel('设为主图像模型')).toHaveCount(0)
   await page.getByLabel('API 地址').fill('')

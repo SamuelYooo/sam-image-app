@@ -44,11 +44,16 @@ pub async fn polish_prompt_with_model(
     let Some(model) = model else {
         return Ok(local_text_polish(input, "本地文本润色"));
     };
-    if model.provider == "local-preview" || model.endpoint.trim().is_empty() {
+    if model.provider == "local-preview" {
         return Ok(local_text_polish(input, &model.name));
     }
     if model.provider != "openai-compatible" {
         return Err(TextPolishError::Validation("不支持的文本模型提供方".into()));
+    }
+    if model.endpoint.trim().is_empty() {
+        return Err(TextPolishError::Validation(
+            "请填写文本模型 API 地址".into(),
+        ));
     }
     if model.api_key.trim().is_empty() {
         return Err(TextPolishError::Validation("请填写文本模型 API Key".into()));

@@ -64,15 +64,17 @@ const filteredModelCatalog = computed(() => {
     .filter((item) => !keyword || `${item.name} ${item.model}`.toLowerCase().includes(keyword))
 })
 
-function newModel(): void {
+type ModelStatusTone = 'ok' | 'warn' | 'error'
+
+function newModel(kind: ModelProfile['kind'] = 'image'): void {
   draft.value = {
     id: createId('model'),
-    name: 'OpenAI Compatible Image',
+    name: kind === 'text' ? 'OpenAI Compatible Text' : 'OpenAI Compatible Image',
     provider: 'openai-compatible',
-    endpoint: 'https://api.openai.com/v1/images/generations',
+    endpoint: kind === 'text' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.openai.com/v1/images/generations',
     apiKey: '',
-    model: 'gpt-image-1',
-    kind: 'image',
+    model: kind === 'text' ? 'gpt-4o-mini' : 'gpt-image-1',
+    kind,
     isPrimary: false,
     status: 'untested',
   }
@@ -177,6 +179,14 @@ async function copyPrompt(item: PromptItem): Promise<void> {
   store.notify('提示词已复制')
 }
 
+function removePromptWithConfirmation(item: PromptItem): void {
+  if (item.source === 'builtin') return
+  const confirmed = window.confirm(`确定删除提示词「${item.title}」？此操作不可恢复。`)
+  if (!confirmed) return
+
+  store.removePrompt(item.id)
+}
+
 function usePromptInWorkspace(item: PromptItem): void {
   store.usePrompt(item)
   void router.push({
@@ -246,6 +256,14 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
 
   await store.resetDemoData()
 }
+
+function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatusTone } {
+  if (model.provider === 'local-preview') return { label: '已连接', tone: 'ok' }
+  if (!model.endpoint.trim() || !model.apiKey.trim() || !model.model.trim()) return { label: '未配置', tone: 'warn' }
+  if (model.status === 'connected') return { label: '已连接', tone: 'ok' }
+  if (model.status === 'failed') return { label: '失败', tone: 'error' }
+  return { label: '待检测', tone: 'warn' }
+}
 </script>
 
 <template>
@@ -270,60 +288,144 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
     </div>
 
     <section v-if="activeTab === 'models'" class="settings-section">
-      <div class="section-head">
-        <h2>生图模型</h2>
-        <button class="btn-soft btn-sm" type="button" @click="newModel">
+      <div class="settings-section-block">
+        <div class="settings-section-title">
+          图像模型
+          <span class="count">{{ store.imageModels.length }} 已配置</span>
+        </div>
+        <div class="stack">
+          <article v-for="model in store.imageModels" :key="model.id" class="model-card">
+            <div class="model-card-head">
+              <div class="model-card-heading">
+                <h3>
+                  <span class="dot" />
+                  {{ model.name }}
+                </h3>
+                <p class="muted">{{ model.endpoint || '未配置 API 地址' }}</p>
+              </div>
+              <div class="model-card-badges">
+                <span v-if="model.isPrimary" class="primary-badge">
+                  <Star :size="12" fill="currentColor" />
+                  主模型
+                </span>
+                <button
+                  v-else
+                  class="set-primary-btn"
+                  type="button"
+                  @click="store.setPrimaryImageModel(model.id)"
+                >
+                  设为主模型
+                </button>
+                <span class="status-pill">
+                  <span class="status-dot" :class="{ warn: modelStatusMeta(model).tone === 'warn', error: modelStatusMeta(model).tone === 'error' }" />
+                  {{ modelStatusMeta(model).label }}
+                </span>
+              </div>
+            </div>
+            <div class="model-card-body">
+              <div class="model-fields">
+                <div class="field">
+                  <label>模型 ID</label>
+                  <div class="field-value">{{ model.model || '未设置模型 ID' }}</div>
+                </div>
+                <div class="field">
+                  <label>Provider</label>
+                  <div class="field-value">{{ model.provider }}</div>
+                </div>
+                <div class="field">
+                  <label>API Key</label>
+                  <div class="field-value">{{ model.apiKey ? '已填写' : '未填写' }}</div>
+                </div>
+              </div>
+              <div class="model-actions">
+                <div class="btn-row">
+                  <button class="btn-soft btn-sm" type="button" @click="editModel(model)">编辑</button>
+                  <button class="btn-soft btn-sm" type="button" @click="store.testModel(model.id)">
+                    <TestTube2 :size="14" />
+                    检测连接
+                  </button>
+                  <button class="btn-danger btn-sm" type="button" @click="removeModelWithConfirmation(model)">删除</button>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <button class="btn-soft add-row-btn" type="button" @click="newModel('image')">
           <Plus :size="14" />
-          新增模型
+          新增图像模型
         </button>
       </div>
-      <div class="stack">
-        <article v-for="model in store.models" :key="model.id" class="model-card">
-          <div class="split">
-            <div>
-              <h3>{{ model.name }}</h3>
-              <p class="muted">{{ model.provider }} · {{ model.model || '未设置模型 ID' }}</p>
+
+      <div class="settings-section-block">
+        <div class="settings-section-title">
+          文本模型（润色提示词）
+          <span class="count">{{ store.textModels.length }} 已配置</span>
+        </div>
+        <div class="stack">
+          <article v-for="model in store.textModels" :key="model.id" class="model-card text-model-card">
+            <div class="model-card-head">
+              <div class="model-card-heading">
+                <h3>
+                  <span class="dot text-dot" />
+                  {{ model.name }}
+                </h3>
+                <p class="muted">{{ model.endpoint || '未配置 API 地址' }}</p>
+              </div>
+              <div class="model-card-badges">
+                <span v-if="model.isPrimary" class="primary-badge">
+                  <Star :size="12" fill="currentColor" />
+                  主文本模型
+                </span>
+                <button
+                  v-else
+                  class="set-primary-btn"
+                  type="button"
+                  @click="store.setPrimaryTextModel(model.id)"
+                >
+                  设为主文本模型
+                </button>
+                <span class="status-pill">
+                  <span class="status-dot" :class="{ warn: modelStatusMeta(model).tone === 'warn', error: modelStatusMeta(model).tone === 'error' }" />
+                  {{ modelStatusMeta(model).label }}
+                </span>
+              </div>
             </div>
-            <div class="model-card-badges">
-              <span v-if="model.kind === 'image' && model.isPrimary" class="primary-badge">
-                <Star :size="12" fill="currentColor" />
-                主模型
-              </span>
-              <span v-else-if="model.kind === 'text' && model.isPrimary" class="primary-badge">
-                <Star :size="12" fill="currentColor" />
-                主文本模型
-              </span>
-              <button
-                v-else-if="model.kind === 'image'"
-                class="set-primary-btn"
-                type="button"
-                @click="store.setPrimaryImageModel(model.id)"
-              >
-                设为主模型
-              </button>
-              <button
-                v-else
-                class="set-primary-btn"
-                type="button"
-                @click="store.setPrimaryTextModel(model.id)"
-              >
-                设为主文本模型
-              </button>
-              <span class="status-pill">
-                <span class="status-dot" :class="{ warn: model.status !== 'connected', error: model.status === 'failed' }" />
-                {{ model.status === 'connected' ? '已连接' : model.status === 'failed' ? '失败' : '待检测' }}
-              </span>
+            <div class="model-card-body">
+              <div class="model-fields">
+                <div class="field">
+                  <label>模型 ID</label>
+                  <div class="field-value">{{ model.model || '未设置模型 ID' }}</div>
+                </div>
+                <div class="field">
+                  <label>Provider</label>
+                  <div class="field-value">{{ model.provider }}</div>
+                </div>
+                <div class="field">
+                  <label>API Key</label>
+                  <div class="field-value">{{ model.apiKey ? '已填写' : '未填写' }}</div>
+                </div>
+              </div>
+              <div class="model-actions">
+                <div class="btn-row">
+                  <button class="btn-soft btn-sm" type="button" @click="editModel(model)">编辑</button>
+                  <button class="btn-soft btn-sm" type="button" @click="store.testModel(model.id)">
+                    <TestTube2 :size="14" />
+                    检测连接
+                  </button>
+                  <button class="btn-danger btn-sm" type="button" @click="removeModelWithConfirmation(model)">删除</button>
+                </div>
+              </div>
             </div>
+          </article>
+          <div v-if="!store.textModels.length" class="empty-state">
+            <strong>暂无文本模型</strong>
+            <span>添加一个文本模型后，工作台的提示词润色会走远端模型。</span>
           </div>
-          <div class="btn-row">
-            <button class="btn-soft btn-sm" type="button" @click="editModel(model)">编辑</button>
-            <button class="btn-soft btn-sm" type="button" @click="store.testModel(model.id)">
-              <TestTube2 :size="14" />
-              检测连接
-            </button>
-            <button class="btn-danger btn-sm" type="button" @click="removeModelWithConfirmation(model)">删除</button>
-          </div>
-        </article>
+        </div>
+        <button class="btn-soft add-row-btn" type="button" @click="newModel('text')">
+          <Plus :size="14" />
+          新增文本模型
+        </button>
       </div>
 
       <div class="editor-card card">
@@ -413,20 +515,29 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
           </select>
         </div>
       </div>
-      <div class="prompt-list">
-        <article v-for="item in filteredPrompts" :key="item.id" class="prompt-card">
-          <div>
-            <div class="inline"><strong>{{ item.title }}</strong><span class="chip">{{ item.source }}</span><span class="chip accent">{{ item.category }}</span></div>
-            <p>{{ item.prompt }}</p>
+      <div class="card prompt-list-panel">
+        <div class="prompt-list">
+          <article v-for="item in filteredPrompts" :key="item.id" class="prompt-card">
+            <div class="prompt-card-main">
+              <div class="inline prompt-meta-line">
+                <strong>{{ item.title }}</strong>
+                <span class="chip">{{ item.source }}</span>
+                <span v-if="item.category" class="chip accent">{{ item.category }}</span>
+              </div>
+              <p>{{ item.prompt }}</p>
+              <div v-if="item.author" class="prompt-author">by {{ item.author }}</div>
+            </div>
+            <div class="prompt-actions">
+              <button class="btn-primary btn-sm" type="button" @click="usePromptInWorkspace(item)">使用</button>
+              <button class="btn-soft btn-sm" type="button" @click="copyPrompt(item)">复制</button>
+              <button v-if="item.source !== 'builtin'" class="btn-danger btn-sm" type="button" @click="removePromptWithConfirmation(item)">删除</button>
+              <span v-else class="builtin-note">内置</span>
+            </div>
+          </article>
+          <div v-if="!filteredPrompts.length" class="empty-state">
+            <strong>暂无 Prompts</strong>
+            <span>请从上方拖拽或点击导入文件</span>
           </div>
-          <div class="prompt-actions">
-            <button class="btn-primary btn-sm" type="button" @click="usePromptInWorkspace(item)">使用</button>
-            <button class="btn-soft btn-sm" type="button" @click="copyPrompt(item)">复制</button>
-          </div>
-        </article>
-        <div v-if="!filteredPrompts.length" class="empty-state">
-          <strong>暂无 Prompts</strong>
-          <span>请从上方拖拽或点击导入文件</span>
         </div>
       </div>
     </section>
@@ -641,7 +752,35 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
 
 .settings-section {
   display: grid;
-  gap: 16px;
+  gap: 22px;
+}
+
+.settings-section-block {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.settings-section-title::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border-soft);
+}
+
+.settings-section-title .count {
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 .section-head {
@@ -657,6 +796,41 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.model-card-head,
+.model-card-body,
+.model-actions,
+.model-card-heading {
+  display: grid;
+  gap: 12px;
+}
+
+.model-card-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.model-card-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+
+.text-dot {
+  background: var(--warn);
 }
 
 .primary-badge,
@@ -698,6 +872,26 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
   border-radius: var(--radius-md);
 }
 
+.model-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field-value {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(6, 10, 18, 0.34);
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .editor-card {
   margin-top: 8px;
 }
@@ -716,7 +910,7 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
 
 .prompt-summary {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -768,7 +962,7 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
 
 .sync-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 10px;
 }
 
@@ -791,6 +985,10 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
   gap: 10px;
 }
 
+.prompt-list-panel {
+  overflow: hidden;
+}
+
 .empty-state {
   display: grid;
   place-items: center;
@@ -811,18 +1009,53 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
 .prompt-card {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
+  border-radius: 0;
+  border-inline: 0;
+  border-top: 0;
+  background: transparent;
+  padding: 14px 20px;
+}
+
+.prompt-card:first-child {
+  padding-top: 18px;
+}
+
+.prompt-card:last-child {
+  border-bottom: 0;
+  padding-bottom: 18px;
 }
 
 .prompt-actions {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  align-items: stretch;
+  min-width: 84px;
 }
 
 .prompt-card p {
   margin-top: 6px;
   color: var(--fg-2);
   line-height: 1.6;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.prompt-meta-line {
+  gap: 8px;
+}
+
+.prompt-card-main {
+  min-width: 0;
+}
+
+.prompt-author {
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 
 .model-fetch-search {
@@ -909,8 +1142,19 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
   font-size: 11px;
 }
 
+.add-row-btn {
+  justify-self: stretch;
+}
+
 @media (max-width: 720px) {
   .sync-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-summary,
+  .model-fields,
+  .model-card-head,
+  .prompt-card {
     grid-template-columns: 1fr;
   }
 
@@ -921,6 +1165,19 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
 
   .model-fetch-grid {
     grid-template-columns: 1fr;
+  }
+
+  .prompt-actions {
+    width: 100%;
+  }
+
+  .settings-tabs {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .settings-tab {
+    white-space: nowrap;
   }
 }
 </style>

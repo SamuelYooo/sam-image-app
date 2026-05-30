@@ -91,3 +91,26 @@ async fn local_text_polish_is_available_without_api_configuration() {
     assert!(result.prompt.contains("适合文生图输出"));
     assert_eq!(result.model_name, "本地文本润色");
 }
+
+#[tokio::test]
+async fn openai_compatible_text_polish_requires_configured_endpoint() {
+    let error = polish_prompt_with_model(
+        TextPolishInput {
+            prompt: "产品海报".into(),
+            mode_label: "文生图".into(),
+            style: "自然".into(),
+        },
+        Some(TextPolishModel {
+            id: "remote-text".into(),
+            name: "Remote Text".into(),
+            provider: "openai-compatible".into(),
+            endpoint: "".into(),
+            api_key: "sk-text".into(),
+            model: "gpt-4o-mini".into(),
+        }),
+    )
+    .await
+    .expect_err("missing endpoint should not silently fall back to local polish");
+
+    assert_eq!(error.to_string(), "请填写文本模型 API 地址");
+}
