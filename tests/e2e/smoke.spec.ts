@@ -170,6 +170,22 @@ test('settings can pick and persist the default output directory', async ({ page
   await expect(page.getByLabel('默认输出目录')).toHaveValue('D:\\SamImage\\Picked')
 })
 
+test('settings directory picker persists without a separate save click', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.samimageE2eDirectory = 'D:\\SamImage\\PickedNoSave'
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: '系统设置' }).click()
+  await page.getByRole('button', { name: '重新选择目录' }).click()
+
+  await expect(page.getByLabel('默认输出目录')).toHaveValue('D:\\SamImage\\PickedNoSave')
+
+  await page.reload()
+  await page.getByRole('button', { name: '系统设置' }).click()
+  await expect(page.getByLabel('默认输出目录')).toHaveValue('D:\\SamImage\\PickedNoSave')
+})
+
 test('settings reset demo data requires confirmation before clearing user data', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(

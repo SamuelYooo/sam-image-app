@@ -211,8 +211,7 @@ async function chooseDefaultOutputDir(): Promise<void> {
   const directory = await pickDirectory(store.settings.defaultOutputDir)
   if (!directory) return
 
-  store.settings.defaultOutputDir = directory
-  store.notify('默认输出目录已更新')
+  store.saveSettings({ defaultOutputDir: directory })
 }
 
 function openCoverPresetModal(): void {
