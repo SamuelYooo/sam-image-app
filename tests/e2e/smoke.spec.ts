@@ -94,6 +94,9 @@ test('workspace prompt library keeps controls stable for long content', async ({
   await expect(actionButton).toBeVisible()
   await expect(searchInput).toBeVisible()
   await expect(categoryButton).toBeVisible()
+  const libraryCategories = page.locator('.library-categories')
+  await expect(libraryCategories.getByRole('button', { name: /图标/ })).toBeVisible()
+  await expect(libraryCategories.getByRole('button', { name: /^ICON$/ })).toHaveCount(0)
 
   await promptItem.locator('p').evaluate((node) => {
     node.textContent = '这是一条用于验证提示词库布局的超长提示词，包含大量修饰语、镜头语言、材质描述、光影层次、构图要求、色彩控制、风格约束与输出细节，重复展开以观察弹层列表在内容过长时是否仍然保持按钮尺寸稳定，不会把右侧使用按钮拉成长条。'.repeat(3)

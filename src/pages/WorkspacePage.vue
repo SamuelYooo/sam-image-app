@@ -1,7 +1,23 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Copy, Download, FolderOpen, Library, RotateCcw, Sparkles, Upload, WandSparkles } from 'lucide-vue-next'
+import {
+  Bot,
+  Box,
+  Copy,
+  Download,
+  FolderOpen,
+  Grid2x2,
+  Images,
+  Library,
+  MonitorSmartphone,
+  PanelsTopLeft,
+  RotateCcw,
+  ShoppingBag,
+  Sparkles,
+  Upload,
+  WandSparkles,
+} from 'lucide-vue-next'
 import { aspectPresets, exportFormatOptions, modeDescriptions, modeLabels, stylePresets, toolEntries } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
@@ -60,7 +76,35 @@ const modeFlowCopy = computed(() => {
 const defaultModel = computed(() => store.defaultImageModel)
 const selectedModel = computed(() => store.imageModels.find((model) => model.id === selectedModelId.value) ?? defaultModel.value)
 const selectedTextModel = computed(() => store.textModels.find((model) => model.id === selectedTextModelId.value) ?? store.primaryTextModel)
-const promptCategories = computed(() => ['全部', ...Array.from(new Set(store.prompts.map((item) => item.category).filter(Boolean)))])
+type PromptCategoryOption = {
+  value: string
+  label: string
+  icon: unknown
+}
+
+function resolvePromptCategoryMeta(category: string): Omit<PromptCategoryOption, 'value'> {
+  const map: Record<string, Omit<PromptCategoryOption, 'value'>> = {
+    全部: { label: '全部', icon: Grid2x2 },
+    封面: { label: '封面', icon: PanelsTopLeft },
+    图生图: { label: '图生图', icon: Images },
+    ICON: { label: '图标', icon: MonitorSmartphone },
+    '3D': { label: '3D', icon: Box },
+    GIF: { label: '动图', icon: Sparkles },
+    文生图: { label: '文生图', icon: WandSparkles },
+    'Use GPT Image2 API': { label: 'GPT 图像 API', icon: Bot },
+    'Use GPT Image 2 API': { label: 'GPT 图像 API', icon: Bot },
+    'E-commerceCaes': { label: '电商案例', icon: ShoppingBag },
+    'E-commerceCases': { label: '电商案例', icon: ShoppingBag },
+  }
+  return map[category] ?? { label: category || '未分类', icon: Library }
+}
+
+const promptCategoryOptions = computed<PromptCategoryOption[]>(() =>
+  ['全部', ...Array.from(new Set(store.prompts.map((item) => item.category).filter(Boolean)))].map((value) => ({
+    value,
+    ...resolvePromptCategoryMeta(value),
+  })),
+)
 const visiblePrompts = computed(() => {
   const keyword = promptSearch.value.trim().toLowerCase()
   return store.prompts
@@ -712,14 +756,15 @@ async function chooseWorkspaceExportDir(): Promise<void> {
           <div class="library-grid">
             <aside class="library-categories" aria-label="提示词分类">
               <button
-                v-for="category in promptCategories"
-                :key="category"
+                v-for="category in promptCategoryOptions"
+                :key="category.value"
                 class="category-button"
-                :class="{ active: promptCategory === category }"
+                :class="{ active: promptCategory === category.value }"
                 type="button"
-                @click="promptCategory = category"
+                @click="promptCategory = category.value"
               >
-                {{ category }}
+                <component :is="category.icon" :size="15" aria-hidden="true" />
+                <span class="category-label">{{ category.label }}</span>
               </button>
             </aside>
             <main class="library-main">
@@ -729,7 +774,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
               <div class="prompt-list">
                 <article v-for="item in visiblePrompts" :key="item.id" class="prompt-item">
                   <div class="prompt-item-copy">
-                    <div class="inline"><strong>{{ item.title }}</strong><span class="chip">{{ item.source }}</span><span class="chip accent">{{ item.category }}</span></div>
+                    <div class="inline"><strong>{{ item.title }}</strong><span class="chip">{{ item.source }}</span><span class="chip accent">{{ resolvePromptCategoryMeta(item.category).label }}</span></div>
                     <p>{{ item.prompt }}</p>
                   </div>
                   <button class="btn-primary btn-sm prompt-item-action" type="button" @click="applyPrompt(item)">使用</button>
@@ -1105,6 +1150,10 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   width: 100%;
   min-height: 40px;
   padding: 9px 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
   color: var(--fg-2);
   text-align: left;
   background: var(--surface);
@@ -1113,6 +1162,15 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   line-height: 1.35;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.category-button :deep(svg) {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.category-label {
+  min-width: 0;
 }
 
 .category-button.active {
@@ -1247,6 +1305,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
     white-space: nowrap;
     width: auto;
     min-width: max-content;
+    align-items: center;
     overflow-wrap: normal;
   }
 }
