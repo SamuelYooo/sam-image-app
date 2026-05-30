@@ -24,6 +24,7 @@
   --radius-lg: 18px;
   --radius-pill: 999px;
   --titlebar-h: 0px;
+  --shell-nav-h: 72px;
   --app-topbar-h: 54px;
   --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -41,6 +42,12 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -54,8 +61,8 @@ body {
     radial-gradient(circle at 82% 8%, rgba(157, 124, 255, 0.14), transparent 30%),
     radial-gradient(circle at 72% 92%, rgba(46, 232, 200, 0.10), transparent 34%),
     linear-gradient(135deg, #070a11 0%, #0d1220 48%, #070a11 100%);
-  background-attachment: fixed;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 button,
@@ -101,11 +108,11 @@ svg {
 }
 
 .app-shell {
-  height: 100vh;
+  min-height: 100vh;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-columns: 1fr;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
 }
 
@@ -304,7 +311,7 @@ svg {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .app-topbar {
@@ -346,8 +353,9 @@ svg {
 .page-wide,
 .page-full {
   width: 100%;
-  height: calc(100vh - var(--titlebar-h) - 72px - var(--app-topbar-h));
-  overflow: auto;
+  min-width: 0;
+  min-height: calc(100vh - var(--titlebar-h) - var(--shell-nav-h) - var(--app-topbar-h));
+  overflow: visible;
   padding: 20px 22px 40px;
   margin: 0 auto;
 }
@@ -524,7 +532,7 @@ svg {
   text-transform: uppercase;
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 textarea,
 select {
   width: 100%;
@@ -540,7 +548,7 @@ textarea {
   line-height: 1.6;
 }
 
-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
 textarea:focus,
 select:focus {
   outline: none;
@@ -549,7 +557,7 @@ select:focus {
   background: rgba(8, 13, 24, 0.82);
 }
 
-input::placeholder,
+input:not([type="checkbox"]):not([type="radio"])::placeholder,
 textarea::placeholder {
   color: var(--muted);
 }
@@ -561,6 +569,16 @@ select {
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
   padding-right: 30px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
 }
 
 input[type="range"] {
@@ -742,12 +760,7 @@ input[type="range"] {
 }
 
 @media (max-width: 820px) {
-  body {
-    overflow: auto;
-  }
-
   .app-shell {
-    height: auto;
     min-height: 100vh;
     overflow: visible;
   }
@@ -761,7 +774,17 @@ input[type="range"] {
   .page-wide,
   .page-full {
     overflow: visible;
-    height: auto;
+    min-height: auto;
+  }
+
+  .app-topbar {
+    padding-inline: 16px;
+  }
+
+  .page,
+  .page-wide,
+  .page-full {
+    padding: 16px 16px 28px;
   }
 
   .app-topbar,

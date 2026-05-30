@@ -709,6 +709,11 @@ async function resetDemoDataWithConfirmation(): Promise<void> {
   color: var(--fg-2);
 }
 
+.editor-card .toggle-line {
+  grid-column: 1 / -1;
+  min-height: 34px;
+}
+
 .prompt-summary {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -785,18 +785,20 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 <style scoped>
 .workspace-page {
   padding: 0;
+  min-height: calc(100vh - var(--titlebar-h) - var(--shell-nav-h) - var(--app-topbar-h));
 }
 
 .workspace-grid {
-  height: calc(100vh - var(--titlebar-h) - 72px - var(--app-topbar-h));
   display: grid;
-  grid-template-columns: 310px minmax(0, 1fr) 310px;
-  overflow: hidden;
+  grid-template-columns: minmax(280px, 296px) minmax(0, 1fr) minmax(280px, 296px);
+  min-height: inherit;
+  align-items: start;
 }
 
 .workspace-pane {
   background: rgba(255, 255, 255, .045);
-  overflow: auto;
+  min-width: 0;
+  overflow: visible;
   backdrop-filter: blur(18px);
 }
 
@@ -915,7 +917,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   min-width: 0;
   display: grid;
   grid-template-rows: auto 1fr;
-  overflow: hidden;
+  align-content: start;
 }
 
 .flow-row {
@@ -946,7 +948,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   background: var(--surface);
   box-shadow: var(--elev-raised);
   overflow: hidden;
-  min-height: 0;
+  min-height: clamp(520px, 62vh, 760px);
   display: grid;
   grid-template-rows: auto 1fr auto;
 }
@@ -1107,12 +1109,9 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   color: var(--fg-2);
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1260px) {
   .workspace-grid {
-    height: auto;
-    min-height: calc(100vh - var(--titlebar-h) - 72px - var(--app-topbar-h));
     grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
-    overflow: visible;
   }
 
   .workspace-pane:last-child {
@@ -1123,19 +1122,34 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   }
 
   .workspace-center {
-    overflow: visible;
+    min-height: auto;
+  }
+}
+
+@media (max-width: 1040px) {
+  .result-head,
+  .result-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .samples {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 820px) {
   .workspace-grid {
-    height: auto;
     grid-template-columns: 1fr;
-    overflow: visible;
   }
 
-  .workspace-center {
-    overflow: visible;
+  .flow-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .result-card {
+    margin: 16px;
+    min-height: 440px;
   }
 
   .library-grid {
