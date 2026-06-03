@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { Plus, Trash2, Wrench } from 'lucide-vue-next'
 import { toolGroups } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
+import { resolveToolIcon } from '@/domain/icons'
 import type { CoverPreset, GenerationMode } from '@/types/domain'
 import type { ToolEntry } from '@/data/catalog'
 
@@ -114,7 +115,9 @@ function removeCustomPreset(preset: CoverPreset): void {
       </div>
       <div class="grid grid-3">
         <button v-for="tool in group.tools" :key="tool.id" class="tool-card" type="button" @click="openTool(tool)">
-          <span class="icon-tile" :class="group.tone">{{ tool.icon.slice(0, 2) }}</span>
+          <span class="icon-tile" :class="group.tone">
+            <component :is="resolveToolIcon(tool.icon)" :size="20" />
+          </span>
           <h3>{{ tool.title }}</h3>
           <p>{{ tool.desc }}</p>
           <span class="tool-arrow">进入 -></span>

@@ -23,12 +23,12 @@ test('workspace can generate a local preview and show it in history', async ({ p
   await page.getByText('点击打开大编辑器').click()
   await page.getByPlaceholder('输入更完整的正向提示词').fill('小红书 AI 工具合集封面，赛博科技风，清晰标题层级')
   await page.getByRole('button', { name: '应用到工作台' }).click()
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
 
   await expect(page.getByText('已生成')).toBeVisible()
   await expect(page.locator('.sample').first()).toBeVisible()
 
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await expect(page.getByText('小红书 AI 工具合集封面').first()).toBeVisible()
 })
 
@@ -38,20 +38,20 @@ test('history clear persists after reload', async ({ page }) => {
   await page.getByText('点击打开大编辑器').click()
   await page.getByPlaceholder('输入更完整的正向提示词').fill('清空历史回归测试封面')
   await page.getByRole('button', { name: '应用到工作台' }).click()
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await expect(page.getByText('清空历史回归测试封面').first()).toBeVisible()
 
   page.once('dialog', async (dialog) => {
     await dialog.accept()
   })
-  await page.getByRole('button', { name: '清空历史', exact: true }).click()
-  await expect(page.getByText('暂无历史记录')).toBeVisible()
+  await page.getByRole('button', { name: '清空资产库', exact: true }).click()
+  await expect(page.getByText('暂无资产')).toBeVisible()
 
   await page.reload()
-  await expect(page.getByText('暂无历史记录')).toBeVisible()
+  await expect(page.getByText('暂无资产')).toBeVisible()
   await expect(page.getByText('清空历史回归测试封面')).toHaveCount(0)
 })
 
@@ -126,41 +126,39 @@ test('workspace prompt library keeps controls stable for long content', async ({
   expect(categoryBox!.height).toBeLessThanOrEqual(58)
 })
 
-test('workspace icon mode uses common icon size presets', async ({ page }) => {
+test('workspace icon mode uses master size and shows export size presets', async ({ page }) => {
   await page.goto('/workspace?mode=icon')
 
   const sizeBlock = page.locator('.block').filter({ has: page.getByText('输出尺寸') }).first()
-  const iconSizeInput = page.getByLabel('图标边长')
 
-  await expect(page.getByRole('button', { name: '16 x 16 浏览器标签' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '512 x 512 主视觉源图' })).toBeVisible()
-  await expect(iconSizeInput).toHaveValue('512')
-  await expect(sizeBlock).toContainText('512 x 512')
+  // ICON 模式固定使用 1024x1024 母图
+  await expect(sizeBlock).toContainText('1024 x 1024')
+  await expect(page.getByText('ICON 模式固定生成 1024×1024 母图')).toBeVisible()
 
-  await page.getByRole('button', { name: '16 x 16 浏览器标签' }).click()
-  await expect(iconSizeInput).toHaveValue('16')
-  await expect(sizeBlock).toContainText('16 x 16')
+  // 尺寸预设以信息卡片形式展示
+  await expect(page.locator('.icon-size-card').filter({ hasText: '16 x 16' })).toBeVisible()
+  await expect(page.locator('.icon-size-card').filter({ hasText: '512 x 512' })).toBeVisible()
 })
 
 test('workspace icon mode can export a selected-size ico bundle', async ({ page }) => {
   await page.goto('/workspace?mode=icon&prompt=ICO 多尺寸导出测试图标')
 
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.getByRole('button', { name: '导出', exact: true }).click()
   await page.getByLabel('格式').selectOption('ico')
-  await expect(page.getByText(/ICO 会按 16 \/ 32 \/ 48 \/ 64 \/ 128 \/ 256 \/ 512/)).toBeVisible()
+  await expect(page.getByText(/ICO 将选中尺寸打包为一个图标文件/)).toBeVisible()
   await expect(page.getByLabel('倍率')).toHaveCount(0)
-  await expect(page.getByLabel('ICO 尺寸 16 x 16')).toBeChecked()
-  await expect(page.getByLabel('ICO 尺寸 64 x 64')).toBeChecked()
-  await page.getByLabel('ICO 尺寸 32 x 32').uncheck()
-  await page.getByLabel('ICO 尺寸 48 x 48').uncheck()
-  await page.getByLabel('ICO 尺寸 128 x 128').uncheck()
-  await page.getByLabel('ICO 尺寸 256 x 256').uncheck()
-  await page.getByLabel('ICO 尺寸 512 x 512').uncheck()
+  await expect(page.getByLabel('导出尺寸 16 x 16')).toBeChecked()
+  await expect(page.getByLabel('导出尺寸 64 x 64')).toBeChecked()
+  await page.getByLabel('导出尺寸 32 x 32').uncheck()
+  await page.getByLabel('导出尺寸 48 x 48').uncheck()
+  await page.getByLabel('导出尺寸 128 x 128').uncheck()
+  await page.getByLabel('导出尺寸 256 x 256').uncheck()
+  await page.getByLabel('导出尺寸 512 x 512').uncheck()
 
-  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出图片' }).click(), 2)
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出 ICO' }).click(), 2)
   const download = findDownload(downloads, '.ico')
   expect(download.suggestedFilename()).toMatch(/\.ico$/)
   const downloadedPath = await download.path()
@@ -177,25 +175,72 @@ test('tool catalog opens workspace with a focused generation intent', async ({ p
 
   await expect(page).toHaveURL(/\/workspace\?/)
   await expect(page.locator('.prompt-preview')).toContainText('本地 AI 图像工具 App Icon')
-  await expect(page.getByRole('button', { name: /^ICON$/ })).toHaveClass(/active/)
+  await expect(page.locator('.tool-pick-card').filter({ hasText: 'ICON 图标' })).toHaveClass(/active/)
 
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await expect(page.getByText('本地 AI 图像工具 App Icon').first()).toBeVisible()
 })
 
 test('workspace explains the active generation mode data flow', async ({ page }) => {
   await page.goto('/workspace?mode=txt2img')
 
-  await expect(page.getByText('文生图读取正向/反向提示词与风格预设')).toBeVisible()
+  await expect(page.getByText('文生图读取提示词与画面参数，从零生成全新图像，无需上传任何参考图。')).toBeVisible()
 
-  await page.getByRole('button', { name: /图生图/ }).click()
-  await expect(page.getByText('图生图读取参考图、正向提示词与图片强度')).toBeVisible()
+  await page.locator('.tool-pick-card').filter({ hasText: '图生图' }).click()
+  await expect(page.getByText('图生图读取参考图与重绘幅度，在保留原结构的基础上生成新的风格变体。')).toBeVisible()
 
-  await page.getByRole('button', { name: /GIF 动图/ }).click()
-  await expect(page.getByText('GIF 动图读取提示词、时长和循环动作描述')).toBeVisible()
+  await page.locator('.tool-pick-card').filter({ hasText: 'GIF 动图' }).click()
+  await expect(page.getByText('上游返回静态主图，前端按帧率/时长/循环方式合成真动图')).toBeVisible()
+})
+
+test('workspace adapts content when switching tools within the same mode', async ({ page }) => {
+  await page.goto('/workspace?tool=remove-background')
+
+  await expect(page.locator('.tool-banner-title')).toHaveText('去背景')
+  await expect(page.getByLabel('边缘羽化')).toBeVisible()
+  await expect(page.getByLabel('输出形式')).toBeVisible()
+  await expect(page.locator('.tool-tips')).toContainText('发丝、毛绒等复杂边缘建议提高边缘羽化。')
+  await expect(page.getByText('去背景读取参考图与边缘羽化强度，分离主体并清理背景，输出可直接合成的透明 PNG。')).toBeVisible()
+
+  await page.locator('.tool-pick-card').filter({ hasText: 'AI 证件照' }).click()
+
+  await expect(page.locator('.tool-banner-title')).toHaveText('AI 证件照')
+  const idPhotoControls = page.locator('.tool-controls-block')
+  await expect(idPhotoControls.getByText('底色')).toBeVisible()
+  await expect(idPhotoControls.getByRole('button', { name: '白底' })).toBeVisible()
+  await expect(page.getByLabel('规格')).toBeVisible()
+  await expect(page.getByLabel('边缘羽化')).toHaveCount(0)
+  await expect(page.locator('.tool-tips')).toContainText('底色与规格按目标用途选择，常见证件用白底一寸。')
+  await expect(page.locator('.prompt-preview')).toContainText('标准证件照效果，白色或浅色背景，正面人像')
+  await expect(page.getByText('已切换到工具：AI 证件照')).toBeVisible()
+})
+
+test('workspace 3d mode offers visual style references and applies one', async ({ page }) => {
+  await page.goto('/workspace?mode=3d')
+
+  await expect(page.getByRole('button', { name: '查看精细石雕' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '查看科幻装甲' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '查看蒸汽朋克' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '查看白瓷镂刻' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '查看潮流手办' })).toBeVisible()
+
+  await page.getByRole('button', { name: '查看精细石雕' }).click()
+  const modal = page.locator('.three-d-preview-modal')
+  await expect(modal.getByRole('heading', { name: '精细石雕' })).toBeVisible()
+  await expect(modal.locator('img')).toHaveAttribute('src', /^data:image\/svg\+xml/)
+  await modal.getByRole('button', { name: '应用此风格' }).click()
+
+  await expect(page.locator('.prompt-preview')).toContainText('精细石雕风格的 3D 主体')
+  await expect(page.locator('.tool-banner-title')).toHaveText('3D 图生成')
+  await expect(page.getByLabel('立体感')).toHaveValue('88')
+  await expect(page.getByText('已应用 3D 风格：精细石雕')).toBeVisible()
+
+  await page.getByRole('button', { name: '开始生成' }).click()
+  await expect(page.locator('.sample').first()).toBeVisible()
+  await expect(page.locator('.sample').first()).toContainText('3D 图 1')
 })
 
 test('workspace export requires a selected generated result', async ({ page }) => {
@@ -216,7 +261,7 @@ test('default export format from settings is used by workspace export', async ({
   await expect(page.getByText('设置已保存')).toBeVisible()
 
   await page.goto('/workspace?mode=cover&prompt=默认导出格式测试封面')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
   await page.getByRole('button', { name: '导出', exact: true }).click()
   await expect(page.getByLabel('格式')).toHaveValue('webp')
@@ -233,7 +278,7 @@ test('default export format from settings is used by workspace export', async ({
 
 test('workspace can export the visible recent result after reload', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=可见最近结果导出回归测试封面')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.reload()
@@ -340,7 +385,7 @@ test('export dialogs can pick output directories from all result surfaces', asyn
   })
 
   await page.goto('/workspace?mode=cover&prompt=导出目录选择回归测试封面')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.getByRole('button', { name: '导出', exact: true }).click()
@@ -355,7 +400,7 @@ test('export dialogs can pick output directories from all result surfaces', asyn
   await page.evaluate(() => {
     window.samimageE2eDirectory = 'D:\\SamImage\\HistoryPicked'
   })
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await page.getByRole('button', { name: /导出目录选择回归测试封面/ }).first().click()
   await page.getByRole('button', { name: '导出到本地' }).click()
   await page.getByRole('button', { name: '重新选择目录' }).click()
@@ -385,7 +430,7 @@ test('workspace export scale produces a larger png download', async ({ page }) =
   await page.goto('/workspace?mode=cover&prompt=导出倍率回归测试封面')
   await page.getByLabel('宽度').fill('320')
   await page.getByLabel('高度').fill('240')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.getByRole('button', { name: '导出', exact: true }).click()
@@ -409,7 +454,7 @@ test('workspace export includes prompt metadata when enabled', async ({ page }) 
   await page.getByText('批量').locator('..').getByRole('slider').fill('2')
   await page.getByText('步数').locator('..').getByRole('slider').fill('36')
   await page.getByText('Seed').locator('..').getByRole('spinbutton').fill('246810')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.getByRole('button', { name: '导出', exact: true }).click()
@@ -439,7 +484,7 @@ test('workspace export metadata includes mode-specific parameters', async ({ pag
   await page.goto('/workspace?mode=img2img&prompt=图生图模式参数回归测试')
   await page.getByLabel('图片强度').fill('68')
   await page.getByLabel('Resize Mode').selectOption('crop-resize')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.getByRole('button', { name: '导出', exact: true }).click()
@@ -465,7 +510,7 @@ test('workspace export omits prompt metadata when disabled', async ({ page }) =>
   await expect(page.getByText('设置已保存')).toBeVisible()
 
   await page.goto('/workspace?mode=cover&prompt=关闭元数据导出回归测试封面')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.getByRole('button', { name: '导出', exact: true }).click()
@@ -479,7 +524,7 @@ test('workspace export omits prompt metadata when disabled', async ({ page }) =>
 test('gif workspace exports a gif asset when gif format is selected', async ({ page }) => {
   await page.goto('/workspace?mode=gif&prompt=GIF 导出回归测试动图')
   await page.getByText('批量').locator('..').getByRole('slider').fill('1')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
   await expect(page.locator('.sample').first()).toContainText('GIF 动图 1')
 
@@ -497,10 +542,10 @@ test('gif workspace exports a gif asset when gif format is selected', async ({ p
 
 test('history detail export confirms format before browser download', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=历史导出弹窗回归测试封面')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await page.getByRole('button', { name: /历史导出弹窗回归测试封面/ }).first().click()
   await page.getByRole('button', { name: '导出到本地' }).click()
 
@@ -518,20 +563,20 @@ test('history export all confirms format before downloading every asset', async 
   page.once('dialog', async (dialog) => {
     await dialog.accept()
   })
-  await page.getByRole('button', { name: '清空历史', exact: true }).click()
-  await expect(page.getByText('暂无历史记录')).toBeVisible()
+  await page.getByRole('button', { name: '清空资产库', exact: true }).click()
+  await expect(page.getByText('暂无资产')).toBeVisible()
 
   await page.goto('/workspace?mode=cover&prompt=历史批量导出 A')
   await page.getByText('批量').locator('..').getByRole('slider').fill('1')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.goto('/workspace?mode=icon&prompt=历史批量导出 B')
   await page.getByText('批量').locator('..').getByRole('slider').fill('1')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await page.getByRole('button', { name: '导出全部' }).click()
 
   await expect(page.getByRole('heading', { name: '导出全部' })).toBeVisible()
@@ -553,16 +598,16 @@ test('history reuse restores generation parameters in workspace', async ({ page 
   await page.getByText('Seed').locator('..').getByRole('spinbutton').fill('987654')
   await page.getByLabel('图片强度').fill('68')
   await page.getByLabel('Resize Mode').selectOption('crop-resize')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample')).toHaveCount(2)
 
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await page.getByRole('button', { name: /历史复用参数回归测试/ }).first().click()
   await page.getByRole('button', { name: '复用提示词' }).click()
 
   await expect(page).toHaveURL(/\/workspace/)
   await expect(page.locator('.prompt-preview')).toContainText('历史复用参数回归测试')
-  await expect(page.getByRole('button', { name: '图生图', exact: true })).toHaveClass(/active/)
+  await expect(page.locator('.tool-banner-title')).toHaveText('图生图')
   await expect(page.getByRole('button', { name: '赛博' })).toHaveClass(/active/)
   await expect(page.getByLabel('宽度')).toHaveValue('1536')
   await expect(page.getByLabel('高度')).toHaveValue('1024')
@@ -649,7 +694,7 @@ test('history failed task can retry generation with original parameters', async 
   await expect(page).toHaveURL(/\/workspace/)
   await expect(page).toHaveURL(/retryTaskId=history-failed-task/)
   await expect(page.locator('.prompt-preview')).toContainText('失败重试参数回归测试')
-  await expect(page.getByRole('button', { name: '图生图' })).toHaveClass(/active/)
+  await expect(page.locator('.tool-banner-title')).toHaveText('图生图')
   await expect(page.getByLabel('宽度')).toHaveValue('896')
   await expect(page.getByLabel('高度')).toHaveValue('1152')
   await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('2')
@@ -726,6 +771,89 @@ test('history supports sorting and loading more records', async ({ page }) => {
 
   await page.getByRole('button', { name: '加载更多' }).click()
   await expect(page.getByText('历史排序 10')).toBeVisible()
+})
+
+test('history cards and detail dialog stay stable with long prompts', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.addInitScript(() => {
+    const assetSvg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512" fill="#57a6ff"/></svg>')
+    const longPrompt = `历史长提示词布局回归测试-${'UltraLongPromptWithoutSpaces'.repeat(18)}`
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [],
+        tasks: [
+          {
+            id: 'history-long-task',
+            mode: 'cover',
+            prompt: longPrompt,
+            negativePrompt: '',
+            modelId: `model-${'very-long-id'.repeat(12)}`,
+            width: 512,
+            height: 512,
+            batchSize: 1,
+            steps: 24,
+            seed: 7,
+            style: '自然',
+            status: 'completed',
+            assets: [
+              {
+                id: 'history-long-asset',
+                taskId: 'history-long-task',
+                title: 'history-long-asset',
+                width: 512,
+                height: 512,
+                format: 'svg',
+                dataUrl: `data:image/svg+xml;charset=utf-8,${assetSvg}`,
+                createdAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/history')
+  const card = page.locator('.history-card').filter({ hasText: '历史长提示词布局回归测试' })
+  const cardTitle = card.locator('.image-info strong')
+  const favoriteButton = card.getByRole('button', { name: '收藏' })
+  await expect(card).toBeVisible()
+  const [cardBox, titleBox, favoriteBox] = await Promise.all([
+    card.boundingBox(),
+    cardTitle.boundingBox(),
+    favoriteButton.boundingBox(),
+  ])
+  expect(cardBox).toBeTruthy()
+  expect(titleBox).toBeTruthy()
+  expect(favoriteBox).toBeTruthy()
+  expect(titleBox!.height).toBeLessThanOrEqual(44)
+  expect(favoriteBox!.width).toBeLessThanOrEqual(34)
+
+  await card.locator('.image-card').click()
+  const modal = page.locator('.modal').filter({ hasText: '生成详情' })
+  await expect(modal).toBeVisible()
+  const [modalBox, promptBox] = await Promise.all([
+    modal.boundingBox(),
+    modal.locator('.prompt-box').boundingBox(),
+  ])
+  expect(modalBox).toBeTruthy()
+  expect(promptBox).toBeTruthy()
+  expect(modalBox!.width).toBeLessThanOrEqual(720)
+  expect(promptBox!.width).toBeLessThanOrEqual(modalBox!.width - 260)
 })
 
 test('history can favorite records and persist the favorite count', async ({ page }) => {
@@ -1045,7 +1173,7 @@ test('home recent detail can retry a failed generation with original parameters'
   await expect(page).toHaveURL(/\/workspace/)
   await expect(page).toHaveURL(/retryTaskId=home-failed-task/)
   await expect(page.locator('.prompt-preview')).toContainText('首页失败重试回归测试')
-  await expect(page.getByRole('button', { name: '图生图' })).toHaveClass(/active/)
+  await expect(page.locator('.tool-banner-title')).toHaveText('图生图')
   await expect(page.getByLabel('宽度')).toHaveValue('720')
   await expect(page.getByLabel('高度')).toHaveValue('1280')
   await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('3')
@@ -1154,12 +1282,12 @@ test('workspace shortcut toggles between text and image reference modes', async 
   await page.goto('/workspace?mode=txt2img&prompt=模式切换快捷键回归测试')
 
   await page.keyboard.press('Control+Tab')
-  await expect(page.getByRole('button', { name: /图生图/ })).toHaveClass(/active/)
-  await expect(page.getByText('图生图读取参考图、正向提示词与图片强度')).toBeVisible()
+  await expect(page.locator('.tool-banner-title')).toHaveText('图生图')
+  await expect(page.getByText('图生图读取参考图与重绘幅度，在保留原结构的基础上生成新的风格变体。')).toBeVisible()
 
   await page.keyboard.press('Control+Tab')
-  await expect(page.getByRole('button', { name: /文生图/ })).toHaveClass(/active/)
-  await expect(page.getByText('文生图读取正向/反向提示词与风格预设')).toBeVisible()
+  await expect(page.locator('.tool-banner-title')).toHaveText('文生图')
+  await expect(page.getByText('文生图读取提示词与画面参数，从零生成全新图像，无需上传任何参考图。')).toBeVisible()
 })
 
 test('workspace can copy the selected result image with shortcut', async ({ page }) => {
@@ -1175,7 +1303,7 @@ test('workspace can copy the selected result image with shortcut', async ({ page
   })
 
   await page.goto('/workspace?mode=cover&prompt=复制结果图回归测试封面')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.keyboard.press('Control+Shift+C')
@@ -1203,7 +1331,7 @@ test('workspace can load a reference image with shortcut', async ({ page }) => {
 
   await expect(page.getByText('参考图已加载')).toBeVisible()
   await expect(page.getByAltText('参考图预览')).toBeVisible()
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 })
 
@@ -1221,25 +1349,25 @@ test('workspace switches to img2img when a reference image is dropped', async ({
   await dropZone.dispatchEvent('drop', { dataTransfer })
 
   await expect(page.getByText('参考图已加载')).toBeVisible()
-  await expect(page.getByRole('button', { name: /图生图/ })).toHaveClass(/active/)
+  await expect(page.locator('.tool-banner-title')).toHaveText('图生图')
   await expect(page.getByAltText('参考图预览')).toBeVisible()
 
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toContainText('图生图 1')
 })
 
 test('workspace can reuse a generated result as an image reference', async ({ page }) => {
   await page.goto('/workspace?mode=cover&prompt=结果作为参考图回归测试封面')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.getByRole('button', { name: '作为参考图', exact: true }).click()
 
   await expect(page.getByText('已将结果作为参考图')).toBeVisible()
-  await expect(page.getByRole('button', { name: /图生图/ })).toHaveClass(/active/)
+  await expect(page.locator('.tool-banner-title')).toHaveText('图生图')
   await expect(page.getByText('参考图已载入，点击替换')).toBeVisible()
   await expect(page.getByAltText('参考图预览')).toBeVisible()
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toContainText('图生图 1')
 })
 
@@ -1370,16 +1498,16 @@ test('generation can run without saving to history when auto-save is disabled', 
   await page.goto('/settings')
 
   await page.getByRole('button', { name: '生成参数' }).click()
-  await page.getByLabel('自动保存生成历史').uncheck()
+  await page.getByLabel('自动保存到资产库').uncheck()
   await page.getByRole('button', { name: '保存生成参数' }).click()
   await expect(page.getByText('设置已保存')).toBeVisible()
 
   await page.goto('/workspace?mode=cover&prompt=不保存历史回归测试封面')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
-  await page.getByRole('link', { name: /历史/ }).click()
-  await expect(page.getByText('暂无历史记录')).toBeVisible()
+  await page.getByRole('link', { name: /资产库/ }).click()
+  await expect(page.getByText('暂无资产')).toBeVisible()
   await expect(page.getByText('不保存历史回归测试封面')).toHaveCount(0)
 })
 
@@ -1560,6 +1688,86 @@ test('prompt market filters prompts by source and category', async ({ page }) =>
   await page.getByLabel('分类筛选').selectOption('摄影')
   await expect(page.getByText('Glidea 摄影提示词', { exact: true })).toBeVisible()
   await expect(page.getByText('自定义 ICON 提示词', { exact: true })).toHaveCount(0)
+})
+
+test('prompt market keeps search and actions stable with long imported prompts', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'samimage.v3.state',
+      JSON.stringify({
+        models: [],
+        prompts: [
+          {
+            id: 'prompt-layout-builtin',
+            title: '内置长标题提示词'.repeat(6),
+            prompt: '内置提示词内容'.repeat(24),
+            source: 'builtin',
+            sourceId: 'builtin-layout',
+            category: 'Use GPT Image2 API',
+            subCategory: '',
+            author: 'SamImage',
+            tags: ['内置'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'prompt-layout-custom',
+            title: '导入超长提示词布局回归测试'.repeat(5),
+            prompt: '这是一条导入的超长提示词，包含主体、构图、镜头、光影、材质、色彩和用途描述，用来验证 Prompts 市场列表不会把搜索框或按钮拉伸变形。'.repeat(5),
+            source: 'custom',
+            sourceId: 'custom-layout',
+            category: 'E-commerceCaes',
+            subCategory: '',
+            author: 'User',
+            tags: ['导入', '布局'],
+            preview: '',
+            refImages: [],
+            createdAt: '2026-01-02T00:00:00.000Z',
+          },
+        ],
+        tasks: [],
+        coverPresets: [],
+        settings: {
+          defaultOutputDir: 'D:\\SamImage\\Exports',
+          defaultExportFormat: 'svg',
+          defaultGenerationSize: 1024,
+          defaultBatchSize: 1,
+          defaultStyle: '自然',
+          autoSaveHistory: true,
+          includePromptMetadata: true,
+          theme: 'dark',
+        },
+      }),
+    )
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Prompts 市场' }).click()
+  await page.getByLabel('搜索提示词').fill('导入超长')
+  await expect(page.getByText('导入超长提示词布局回归测试')).toBeVisible()
+  await expect(page.getByText('内置长标题提示词')).toHaveCount(0)
+  const promptCard = page.locator('.prompt-card').filter({ hasText: '导入超长提示词布局回归测试' })
+  await expect(promptCard.getByText('电商案例')).toBeVisible()
+  await expect(promptCard.getByText('E-commerceCaes')).toHaveCount(0)
+  await page.getByLabel('提示词类型').selectOption('imported')
+
+  const searchInput = page.getByLabel('搜索提示词')
+  const deleteButton = promptCard.getByRole('button', { name: '删除' })
+  const [cardBox, searchBox, deleteBox] = await Promise.all([
+    promptCard.boundingBox(),
+    searchInput.boundingBox(),
+    deleteButton.boundingBox(),
+  ])
+
+  expect(cardBox).toBeTruthy()
+  expect(searchBox).toBeTruthy()
+  expect(deleteBox).toBeTruthy()
+  expect(searchBox!.width).toBeLessThanOrEqual(430)
+  expect(deleteBox!.height).toBeLessThanOrEqual(34)
+  expect(deleteBox!.width).toBeLessThanOrEqual(86)
+  await expect(deleteButton).toBeVisible()
 })
 
 test('prompt market use action opens workspace with the selected prompt', async ({ page }) => {
@@ -2099,10 +2307,10 @@ test('workspace generation uses the selected image model', async ({ page }) => {
 
   await page.goto('/workspace?mode=cover&prompt=模型选择回归测试封面')
   await page.getByLabel('图像模型').selectOption('secondary-image')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await page.getByRole('button', { name: /模型选择回归测试封面/ }).first().click()
   await expect(page.getByText('secondary-image')).toBeVisible()
 })
@@ -2118,7 +2326,7 @@ test('workspace keeps generation parameters accessible on narrow screens', async
 
   await page.getByLabel('宽度').fill('900')
   await page.getByLabel('高度').fill('1200')
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 })
 
@@ -2175,9 +2383,9 @@ test('default image model from settings initializes a new workspace', async ({ p
   await page.goto('/workspace?mode=cover&prompt=默认生图模型回归测试封面')
   await expect(page.getByLabel('图像模型')).toHaveValue('secondary-image')
 
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await page.getByRole('button', { name: /默认生图模型回归测试封面/ }).first().click()
   await expect(page.getByText('secondary-image')).toBeVisible()
 })
@@ -2457,9 +2665,9 @@ test('generation defaults from settings initialize a new workspace', async ({ pa
   await expect(page.getByRole('button', { name: '赛博' })).toHaveClass(/active/)
   await expect(page.getByText('批量').locator('..').getByRole('slider')).toHaveValue('2')
 
-  await page.getByRole('button', { name: '生成新结果' }).click()
+  await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample')).toHaveCount(2)
-  await page.getByRole('link', { name: /历史/ }).click()
+  await page.getByRole('link', { name: /资产库/ }).click()
   await page.getByRole('button', { name: /默认生成参数回归测试/ }).first().click()
   await expect(page.getByText('1536 x 1536', { exact: true })).toBeVisible()
 })

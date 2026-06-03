@@ -26,12 +26,11 @@ interface ModelSummaryRow {
 
 function modelTag(model: ModelProfile | undefined): string {
   if (!model) return '未配置'
-  return model.model || (model.provider === 'local-preview' ? '本地预览' : '未设置')
+  return model.model || '未设置'
 }
 
 function isModelConfigured(model: ModelProfile | undefined): boolean {
   if (!model) return false
-  if (model.provider === 'local-preview') return true
   return Boolean(model.endpoint.trim() && model.apiKey.trim() && model.model.trim())
 }
 
@@ -70,8 +69,8 @@ const modelRows = computed<ModelSummaryRow[]>(() => {
   ]
 })
 
-function workspaceLink(mode: GenerationMode) {
-  return { path: '/workspace', query: { mode } }
+function toolWorkspaceLink(tool: { id: string; mode: GenerationMode }) {
+  return { path: '/workspace', query: { mode: tool.mode, tool: tool.id } }
 }
 
 function openRecentDetail(task: GenerationTask): void {
@@ -164,7 +163,7 @@ async function chooseRecentExportDir(): Promise<void> {
         <span class="mono">{{ quickTools.length }} 工具</span>
       </div>
       <div class="grid grid-3">
-        <RouterLink v-for="tool in quickTools" :key="tool.title" class="tool-card" :to="workspaceLink(tool.mode)">
+        <RouterLink v-for="tool in quickTools" :key="tool.title" class="tool-card" :to="toolWorkspaceLink(tool)">
           <span class="icon-tile" :class="{ matcha: tool.mode === 'txt2img', ube: tool.mode === 'img2img', lemon: tool.mode === 'icon', pom: tool.mode === 'gif' }">
             <ImagePlus :size="19" />
           </span>
@@ -325,7 +324,7 @@ async function chooseRecentExportDir(): Promise<void> {
 
     <section class="privacy-card">
       <ShieldCheck :size="20" />
-      <span><strong>本地隐私安全</strong>：配置、提示词和历史记录默认保存在本地，只有主动调用模型 API 时才联网。</span>
+      <span><strong>本地隐私安全</strong>：配置、提示词和资产库记录默认保存在本地，只有主动调用模型 API 时才联网。</span>
     </section>
   </div>
 </template>

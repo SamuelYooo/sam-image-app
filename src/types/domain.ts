@@ -7,6 +7,9 @@ export interface PromptItem {
   id: string
   title: string
   prompt: string
+  promptZh?: string
+  promptEn?: string
+  language?: 'zh' | 'en' | 'bilingual'
   source: 'builtin' | 'custom' | 'glidea' | 'EvoLinkAI' | 'freestylefly'
   sourceId: string
   category: string
@@ -23,12 +26,22 @@ export interface ModelProfile {
   name: string
   provider: 'openai-compatible' | 'local-preview'
   endpoint: string
+  apiPath?: string
+  apiProtocol?: 'openai-chat' | 'anthropic-messages' | 'openai-images' | 'dashscope-wanxiang' | 'openai-image-edits' | 'multimodal-chat' | 'mgtv-storyboard'
   apiKey: string
+  apiSecret?: string
   model: string
   kind: 'image' | 'text'
   isPrimary: boolean
   status: 'untested' | 'connected' | 'failed'
   lastCheckedAt?: string
+}
+
+export interface ModelCatalogItem {
+  id: string
+  name: string
+  kind: 'image' | 'text' | 'unknown'
+  source: 'remote' | 'builtin'
 }
 
 export interface GenerationInput {
@@ -50,6 +63,7 @@ export interface TextPolishInput {
   prompt: string
   modeLabel: string
   style: string
+  task?: 'polish' | 'translate-to-english'
 }
 
 export interface TextPolishResult {
@@ -84,6 +98,7 @@ export interface GenerationTask {
   modeOptions?: Record<string, string | number | boolean>
   status: TaskStatus
   error?: string
+  errorDetails?: Record<string, string | number | boolean | null>
   isFavorite?: boolean
   assets: GeneratedAsset[]
   createdAt: string

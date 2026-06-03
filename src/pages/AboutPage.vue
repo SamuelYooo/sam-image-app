@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { CircleHelp, Keyboard, LockKeyhole, Rocket, UserRound } from 'lucide-vue-next'
+import { CircleHelp, Github, Keyboard, LockKeyhole, Rocket, UserRound } from 'lucide-vue-next'
+import { invokeOptional } from '@/services/tauri'
 
 const tab = ref<'about' | 'help' | 'faq' | 'shortcuts'>('about')
 const openFaq = ref(0)
+const authorGithubUrl = 'https://github.com/SamuelYooo/sam-image-app'
 
 const faqs = [
   ['SamImage 需要联网吗？', '大部分功能不需要联网。只有在调用你配置的模型 API 生成图像时才需要网络连接。'],
-  ['支持哪些模型？', '支持本地预览模型、OpenAI 兼容协议的图像模型，以及用于 AI 润色的文本模型。可以配置多个模型并设置主模型。'],
+  ['支持哪些模型？', '支持 OpenAI 兼容协议的图像模型，以及用于 AI 润色的文本模型。可以配置多个模型并设置主模型。'],
   ['提示词如何导入？', '在设置的 Prompts 市场中同步 glidea/banana-prompt-quicker、EvoLinkAI/awesome-gpt-image 等开源仓库，或导入自定义 JSON。支持数组、{prompts:[]}、{items:[]} 等常见结构，并按 source+sourceId 或 content hash 去重。'],
   ['如何添加自定义封面预设？', '在工具库的封面预设区域点击「自定义」，或在设置的系统设置里点击「新增预设」，输入名称、宽度、高度后即可在列表中看到并使用。自定义预设保存在本地，支持随时删除。'],
-  ['图片保存在哪里？', '浏览器预览会保存到下载目录；桌面版会使用设置里的默认输出目录。历史记录可查看所有生成结果、提示词和参数，并支持重新导出。'],
-  ['数据安全吗？', 'SamImage 不收集任何用户数据。API Key 保存在本地，配置、提示词和历史记录不会上传到任何服务器。只有在生成图像时才会向你配置的模型 API 发送请求。'],
+  ['图片保存在哪里？', '浏览器预览会保存到下载目录；桌面版会使用设置里的默认输出目录。资产库可查看所有生成结果、提示词和参数，并支持重新导出。'],
+  ['数据安全吗？', 'SamImage 不收集任何用户数据。API Key 保存在本地，配置、提示词和资产库记录不会上传到任何服务器。只有在生成图像时才会向你配置的模型 API 发送请求。'],
 ]
 
 const workspaceShortcuts = [
@@ -29,10 +31,19 @@ const navigationShortcuts = [
   { action: '首页', keys: 'Ctrl + 1' },
   { action: '工作台', keys: 'Ctrl + 2' },
   { action: '工具库', keys: 'Ctrl + 3' },
-  { action: '历史', keys: 'Ctrl + 4' },
+  { action: '资产库', keys: 'Ctrl + 4' },
   { action: '设置', keys: 'Ctrl + 5' },
   { action: '关于帮助', keys: 'Ctrl + 6' },
 ]
+
+async function openExternalLink(url: string): Promise<void> {
+  const opened = await invokeOptional('plugin:opener|open_url', { url }).catch((error: unknown) => {
+    console.warn('Tauri opener failed', error)
+    return null
+  })
+  if (opened !== null) return
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
 </script>
 
 <template>
@@ -41,7 +52,7 @@ const navigationShortcuts = [
       <div class="about-logo">S</div>
       <h1>Sam<span>Image</span> 3.0</h1>
       <p class="version">本地 AI 生图工具 · 离线优先</p>
-      <p class="tagline">你的私人图像工厂。配置、提示词和历史记录默认保存在本机。</p>
+      <p class="tagline">你的私人图像工厂。配置、提示词和资产库记录默认保存在本机。</p>
       <div class="btn-row hero-actions">
         <RouterLink class="btn-primary" to="/workspace">
           <Rocket :size="16" />
@@ -66,9 +77,29 @@ const navigationShortcuts = [
         <div class="info-row"><span>运行模式</span><strong>本地单机 · 离线优先</strong></div>
         <div class="info-row"><span>数据存储</span><strong>SQLite WAL + 本地文件系统</strong></div>
       </article>
+      <article class="author-card">
+        <div class="author-head">
+          <div>
+            <h2><UserRound :size="17" /> 作者信息</h2>
+            <p>「当了13年技术宅，以为会修电脑就能拯救世界，结果只拯救了自己的体重。」</p>
+          </div>
+          <button class="btn-soft" type="button" @click="openExternalLink(authorGithubUrl)">
+            <Github :size="16" />
+            求 star 哦
+          </button>
+        </div>
+        <div class="info-row"><span>作者</span><strong>Samuel游</strong></div>
+        <div class="info-row"><span>微信</span><strong>malovoz</strong></div>
+        <div class="info-row">
+          <span>GitHub</span>
+          <button class="author-link" type="button" @click="openExternalLink(authorGithubUrl)">
+            {{ authorGithubUrl }}
+          </button>
+        </div>
+      </article>
       <article class="privacy-note">
         <LockKeyhole :size="18" />
-        <span><strong>隐私承诺</strong>：SamImage 不上传配置、提示词和历史记录。API Key 保存在本地，只有主动生成时才向配置的模型 API 发送请求。</span>
+        <span><strong>隐私承诺</strong>：SamImage 不上传配置、提示词和资产库记录。API Key 保存在本地，只有主动生成时才向配置的模型 API 发送请求。</span>
       </article>
     </section>
 
@@ -77,7 +108,7 @@ const navigationShortcuts = [
         <span class="step-num">{{ index + 1 }}</span>
         <div>
           <h3>{{ item }}</h3>
-          <p>按照工作台和设置页的引导完成这一环节，所有参数都会进入本地历史，方便复用。</p>
+          <p>按照工作台和设置页的引导完成这一环节，所有参数都会进入资产库，方便复用。</p>
         </div>
       </article>
     </section>
@@ -191,6 +222,7 @@ const navigationShortcuts = [
 }
 
 .info-card,
+.author-card,
 .step-item,
 .faq-item,
 .privacy-note,
@@ -206,6 +238,37 @@ const navigationShortcuts = [
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.author-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.author-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.author-head p {
+  color: var(--fg-2);
+  line-height: 1.7;
+}
+
+.author-link {
+  max-width: min(100%, 420px);
+  color: var(--accent);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.author-link:hover {
+  text-decoration: underline;
 }
 
 .info-row,
@@ -290,5 +353,16 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 2px 8px;
+}
+
+@media (max-width: 720px) {
+  .author-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .author-link {
+    text-align: left;
+  }
 }
 </style>

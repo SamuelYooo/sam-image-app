@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { createLocalGeneration } from '@/domain/generation'
-import { mergePromptItems, normalizePromptImport, normalizePromptSync } from '@/domain/promptImport'
+import { isBlockedPromptCategory, mergePromptItems, normalizePromptImport, normalizePromptSync } from '@/domain/promptImport'
+import { containsChineseText } from '@/domain/language'
 import {
   defaultCoverPresets,
   defaultModels,
@@ -12,6 +12,17 @@ import {
 } from '@/data/catalog'
 import { browserStorage } from '@/services/storage'
 import { invokeOptional, isTauriRuntime } from '@/services/tauri'
+import {
+  buildIcoFile,
+  bytesToDataUrl,
+  canvasToPngBytes,
+  createIcoDataUrl,
+  createCanvas,
+  loadImageFromDataUrl,
+  rasterizeDataUrl,
+  type ExportAssetData,
+} from '@/domain/canvas'
+import { buildZipFile } from '@/domain/zip'
 import type {
   AppSettings,
   CoverPreset,
@@ -20,6 +31,7 @@ import type {
   GenerationMode,
   GenerationTask,
   ExportFormat,
+  ModelCatalogItem,
   ModelProfile,
   PromptItem,
   TextPolishInput,
@@ -28,12 +40,7 @@ import type {
 import { createId } from '@/domain/ids'
 
 const STORAGE_KEY = 'samimage.v3.state'
-const rasterExportMime: Record<'png' | 'jpg' | 'webp', string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  webp: 'image/webp',
-}
-const icoBundleSizes = [16, 32, 48, 64, 128, 256, 512] as const
+const fallbackGifDataUrl = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH/C05FVFNDQVBFMi4wAwEAAAAh+QQAFAAAACwAAAAAAQABAAACAkQBACH5BAAUAAAALAAAAAABAAEAAAICTAEAOw=='
 
 interface PersistedState {
   models: ModelProfile[]
@@ -63,14 +70,6 @@ interface PromptSyncSource {
   candidates: string[]
 }
 
-interface ExportAssetData {
-  dataUrl: string
-  format: ExportFormat
-  width: number
-  height: number
-  bundleSizes?: number[]
-}
-
 const defaultState: PersistedState = {
   models: defaultModels,
   prompts: defaultPrompts,
@@ -79,7 +78,7 @@ const defaultState: PersistedState = {
   settings: {
     defaultOutputDir: 'D:\\SamImage\\Exports',
     defaultExportFormat: 'svg',
-    defaultImageModelId: 'local-preview',
+    defaultImageModelId: '',
     defaultGenerationSize: 1024,
     defaultBatchSize: 4,
     defaultStyle: '自然',
@@ -148,130 +147,185 @@ function normalizeStyle(value: unknown): string {
 }
 
 function normalizeDefaultImageModelId(value: unknown, modelList: ModelProfile[]): string {
-  const imageModels = modelList.filter((model) => model.kind === 'image')
+  const imageModels = modelList.filter((model) => model.kind === 'image' && model.provider !== 'local-preview' && model.id !== 'local-preview')
   if (typeof value === 'string' && imageModels.some((model) => model.id === value)) return value
   return imageModels.find((model) => model.isPrimary)?.id ?? imageModels[0]?.id ?? ''
 }
 
-async function rasterizeDataUrl(dataUrl: string, width: number, height: number, format: 'png' | 'jpg' | 'webp'): Promise<string> {
-  const image = new Image()
-  const loaded = new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve()
-    image.onerror = () => reject(new Error('导出图片渲染失败'))
-  })
-  image.src = dataUrl
-  await loaded
+function defaultModelApiPath(kind: ModelProfile['kind']): string {
+  return kind === 'text' ? 'v1/chat/completions' : 'v1/images/generations'
+}
 
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const context = canvas.getContext('2d')
-  if (!context) throw new Error('当前环境不支持图片导出')
+function defaultModelApiProtocol(kind: ModelProfile['kind']): NonNullable<ModelProfile['apiProtocol']> {
+  return kind === 'text' ? 'openai-chat' : 'openai-images'
+}
 
-  if (format === 'jpg') {
-    context.fillStyle = '#ffffff'
-    context.fillRect(0, 0, width, height)
+function splitLegacyEndpoint(endpoint: string, kind: ModelProfile['kind']): Pick<ModelProfile, 'endpoint' | 'apiPath'> {
+  const fallback = {
+    endpoint: endpoint.trim(),
+    apiPath: defaultModelApiPath(kind),
   }
-  context.drawImage(image, 0, 0, width, height)
+  if (!endpoint.trim()) return fallback
 
-  return canvas.toDataURL(rasterExportMime[format], 0.92)
-}
+  try {
+    const url = new URL(endpoint.trim())
+    const segments = url.pathname.split('/').filter(Boolean)
+    const openapiIndex = segments.findIndex((segment, index) => segment === 'openapi' && segments[index + 1] === 'v1' && segments[index + 2] === 'storyboard')
+    if (openapiIndex >= 0) {
+      const apiPath = segments.slice(openapiIndex).join('/')
+      const baseSegments = segments.slice(0, openapiIndex)
+      url.pathname = baseSegments.length ? `/${baseSegments.join('/')}` : '/'
+      url.search = ''
+      return {
+        endpoint: url.toString().replace(/\/$/, ''),
+        apiPath,
+      }
+    }
 
-async function loadImageFromDataUrl(dataUrl: string): Promise<HTMLImageElement> {
-  const image = new Image()
-  const loaded = new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve()
-    image.onerror = () => reject(new Error('导出图片渲染失败'))
-  })
-  image.src = dataUrl
-  await loaded
-  return image
-}
+    const v1Index = segments.lastIndexOf('v1')
+    if (v1Index < 0) {
+      url.search = ''
+      return { ...fallback, endpoint: url.toString().replace(/\/$/, '') }
+    }
 
-async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-  if (!blob) throw new Error('ICO 导出失败：无法生成 PNG 帧')
-  return new Uint8Array(await blob.arrayBuffer())
-}
-
-function bytesToDataUrl(bytes: Uint8Array, mimeType: string): string {
-  let binary = ''
-  const chunkSize = 0x8000
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
+    const apiPath = segments.slice(v1Index).join('/')
+    const baseSegments = segments.slice(0, v1Index)
+    url.pathname = baseSegments.length ? `/${baseSegments.join('/')}` : '/'
+    url.search = ''
+    return {
+      endpoint: url.toString().replace(/\/$/, ''),
+      apiPath: apiPath || defaultModelApiPath(kind),
+    }
+  } catch {
+    return fallback
   }
-  return `data:${mimeType};base64,${btoa(binary)}`
 }
 
-function buildIcoFile(frames: Array<{ size: number; bytes: Uint8Array }>): Uint8Array {
-  const headerSize = 6
-  const entrySize = 16
-  const totalBytes = frames.reduce((sum, frame) => sum + frame.bytes.length, 0)
-  const output = new Uint8Array(headerSize + entrySize * frames.length + totalBytes)
-  const view = new DataView(output.buffer)
-
-  view.setUint16(0, 0, true)
-  view.setUint16(2, 1, true)
-  view.setUint16(4, frames.length, true)
-
-  let dataOffset = headerSize + entrySize * frames.length
-  frames.forEach((frame, index) => {
-    const entryOffset = headerSize + index * entrySize
-    const sizeByte = frame.size >= 256 ? 0 : frame.size
-    output[entryOffset] = sizeByte
-    output[entryOffset + 1] = sizeByte
-    output[entryOffset + 2] = 0
-    output[entryOffset + 3] = 0
-    view.setUint16(entryOffset + 4, 1, true)
-    view.setUint16(entryOffset + 6, 32, true)
-    view.setUint32(entryOffset + 8, frame.bytes.length, true)
-    view.setUint32(entryOffset + 12, dataOffset, true)
-    output.set(frame.bytes, dataOffset)
-    dataOffset += frame.bytes.length
-  })
-
-  return output
-}
-
-async function createIcoDataUrl(
-  dataUrl: string,
-  width: number,
-  height: number,
-  requestedSizes?: number[],
-): Promise<ExportAssetData> {
-  const maxSize = Math.max(16, Math.min(width, height))
-  const candidateSizes = requestedSizes?.length
-    ? Array.from(new Set(requestedSizes.map((size) => Math.round(size)).filter((size) => size >= 16)))
-    : [...icoBundleSizes]
-  const bundleSizes = candidateSizes.filter((size) => size <= maxSize).sort((left, right) => left - right)
-  const sizes = bundleSizes.length ? bundleSizes : [Math.max(16, maxSize)]
-  const image = await loadImageFromDataUrl(dataUrl)
-  const frames: Array<{ size: number; bytes: Uint8Array }> = []
-
-  for (const size of sizes) {
-    const canvas = document.createElement('canvas')
-    canvas.width = size
-    canvas.height = size
-    const context = canvas.getContext('2d')
-    if (!context) throw new Error('当前环境不支持 ICO 导出')
-    context.clearRect(0, 0, size, size)
-    context.drawImage(image, 0, 0, size, size)
-    frames.push({ size, bytes: await canvasToPngBytes(canvas) })
+function normalizeModelProfile(model: ModelProfile): ModelProfile {
+  const apiProtocol = model.apiProtocol ?? defaultModelApiProtocol(model.kind)
+  if (typeof model.apiPath === 'string') {
+    const split = splitLegacyEndpoint(model.endpoint, model.kind)
+    return {
+      ...model,
+      endpoint: split.endpoint,
+      apiPath: model.apiPath.trim().replace(/^\/+|\/+$/g, ''),
+      apiProtocol,
+    }
   }
 
-  const bytes = buildIcoFile(frames)
   return {
-    dataUrl: bytesToDataUrl(bytes, 'image/x-icon'),
-    format: 'ico',
-    width,
-    height,
-    bundleSizes: sizes.slice(),
+    ...model,
+    ...splitLegacyEndpoint(model.endpoint, model.kind),
+    apiProtocol,
+  }
+}
+
+function normalizeModelList(modelList: ModelProfile[]): ModelProfile[] {
+  const visibleModels = modelList.filter((model) => model.provider !== 'local-preview' && model.id !== 'local-preview')
+  return (visibleModels.length ? visibleModels : defaultModels).map(normalizeModelProfile)
+}
+
+function normalizePromptList(promptList?: PromptItem[]): PromptItem[] {
+  const customPrompts = (promptList ?? []).filter((item) => {
+    if (item.source === 'builtin') return false
+    return ![item.category, item.subCategory, ...(item.tags ?? [])].some((value) => isBlockedPromptCategory(value))
+  })
+  return mergePromptItems(defaultPrompts, customPrompts)
+}
+
+function compactBrowserState(state: PersistedState): PersistedState {
+  return {
+    ...state,
+    tasks: (state.tasks ?? []).map((task) => ({
+      ...task,
+      assets: task.assets.map((asset) => ({
+        ...asset,
+        dataUrl: '',
+      })),
+    })),
+  }
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error || fallback
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    const message = record.message ?? record.error
+    if (typeof message === 'string' && message.trim()) return message
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
+function createGenerationErrorDetails(
+  input: GenerationInput,
+  error: unknown,
+  model?: ModelProfile,
+): Record<string, string | number | boolean | null> {
+  const details: Record<string, string | number | boolean | null> = {
+    errorMessage: errorMessage(error, '生成失败'),
+    mode: input.mode,
+    width: input.width,
+    height: input.height,
+    batchSize: input.batchSize,
+    steps: input.steps,
+    seed: input.seed,
+  }
+
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    if (typeof record.kind === 'string') details.errorKind = record.kind
+    if (typeof record.code === 'string' || typeof record.code === 'number') details.errorCode = record.code
+  }
+
+  if (model) {
+    details.modelName = model.name
+    details.modelId = model.id
+    details.model = model.model
+    details.provider = model.provider
+    details.endpoint = model.endpoint
+    details.apiPath = model.apiPath ?? null
+    details.apiProtocol = model.apiProtocol ?? null
+    details.apiSecret = model.apiSecret?.trim() ? '已填写' : null
+    details.modelStatus = model.status
+  } else {
+    details.modelId = input.modelId || null
+  }
+
+  return details
+}
+
+function createFailedGenerationTask(input: GenerationInput, error: unknown, model?: ModelProfile): GenerationTask {
+  return {
+    id: createId('task'),
+    mode: input.mode,
+    prompt: input.prompt,
+    negativePrompt: input.negativePrompt,
+    modelId: input.modelId,
+    width: input.width,
+    height: input.height,
+    batchSize: input.batchSize,
+    steps: input.steps,
+    seed: input.seed,
+    style: input.style,
+    modeOptions: input.modeOptions,
+    status: 'failed',
+    error: errorMessage(error, '生成失败'),
+    errorDetails: createGenerationErrorDetails(input, error, model),
+    isFavorite: false,
+    assets: [],
+    createdAt: new Date().toISOString(),
   }
 }
 
 export const useAppStore = defineStore('app', () => {
-  const initial = browserStorage.read<PersistedState>(STORAGE_KEY, cloneDefault())
-  const initialModels = initial.models.length ? initial.models : defaultModels
+  const initial = compactBrowserState(browserStorage.read<PersistedState>(STORAGE_KEY, cloneDefault()))
+  const initialModels = normalizeModelList(initial.models.length ? initial.models : defaultModels)
   const initialSettings = { ...defaultState.settings, ...initial.settings }
   initialSettings.defaultExportFormat = normalizeDefaultExportFormat(initialSettings.defaultExportFormat)
   initialSettings.defaultImageModelId = normalizeDefaultImageModelId(initialSettings.defaultImageModelId, initialModels)
@@ -279,7 +333,7 @@ export const useAppStore = defineStore('app', () => {
   initialSettings.defaultBatchSize = normalizeInteger(initialSettings.defaultBatchSize, defaultState.settings.defaultBatchSize, 1, 4)
   initialSettings.defaultStyle = normalizeStyle(initialSettings.defaultStyle)
   const models = ref<ModelProfile[]>(initialModels)
-  const prompts = ref<PromptItem[]>(initial.prompts ?? defaultPrompts)
+  const prompts = ref<PromptItem[]>(normalizePromptList(initial.prompts))
   const tasks = ref<GenerationTask[]>(initial.tasks)
   const coverPresets = ref<CoverPreset[]>(initial.coverPresets.length ? initial.coverPresets : cloneDefaultCoverPresets())
   const promptSync = ref<PromptSyncState>(initial.promptSync ?? {})
@@ -295,6 +349,9 @@ export const useAppStore = defineStore('app', () => {
   const defaultImageModel = computed(() => imageModels.value.find((model) => model.id === settings.value.defaultImageModelId) ?? primaryImageModel.value)
   const enabledCoverPresets = computed(() => coverPresets.value.filter((preset) => preset.enabled))
   const recentTasks = computed(() => tasks.value.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8))
+  const operationTasks = computed(() => tasks.value.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
+  const historyTasks = computed(() => operationTasks.value.filter((task) => task.status === 'completed' && task.assets.length > 0))
+  const historyAssetCount = computed(() => historyTasks.value.reduce((sum, task) => sum + task.assets.length, 0))
   const allAssets = computed(() => tasks.value.flatMap((task) => task.assets.map((asset) => ({ task, asset }))))
   const completedAssets = computed(() => allAssets.value.filter(({ task }) => task.status === 'completed'))
   const favoriteTasks = computed(() => tasks.value.filter((task) => task.isFavorite))
@@ -310,8 +367,12 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  function snapshotBrowserState(): PersistedState {
+    return compactBrowserState(snapshotState())
+  }
+
   function applyPersistedState(next: PersistedState): void {
-    const nextModels = next.models?.length ? next.models : defaultModels
+    const nextModels = normalizeModelList(next.models?.length ? next.models : defaultModels)
     const nextSettings = { ...defaultState.settings, ...next.settings }
     nextSettings.defaultExportFormat = normalizeDefaultExportFormat(nextSettings.defaultExportFormat)
     nextSettings.defaultImageModelId = normalizeDefaultImageModelId(nextSettings.defaultImageModelId, nextModels)
@@ -320,7 +381,7 @@ export const useAppStore = defineStore('app', () => {
     nextSettings.defaultStyle = normalizeStyle(nextSettings.defaultStyle)
 
     models.value = nextModels
-    prompts.value = next.prompts ?? defaultPrompts
+    prompts.value = normalizePromptList(next.prompts)
     tasks.value = next.tasks ?? []
     coverPresets.value = next.coverPresets?.length ? next.coverPresets : cloneDefaultCoverPresets()
     promptSync.value = next.promptSync ?? {}
@@ -329,11 +390,25 @@ export const useAppStore = defineStore('app', () => {
 
   function persist(): void {
     const snapshot = snapshotState()
-    browserStorage.write(STORAGE_KEY, snapshot)
+    persistBrowserState(snapshotBrowserState())
     if (isTauriRuntime()) {
       void invokeOptional('save_app_state', { value: snapshot }).catch((error: unknown) => {
         console.warn('Failed to persist app state to Tauri', error)
       })
+    }
+  }
+
+  function persistBrowserState(snapshot: PersistedState): void {
+    try {
+      browserStorage.write(STORAGE_KEY, snapshot)
+    } catch (error) {
+      console.warn('Failed to persist compact app state to browser storage; retrying after clearing legacy state', error)
+      try {
+        localStorage.removeItem(STORAGE_KEY)
+        browserStorage.write(STORAGE_KEY, snapshot)
+      } catch (retryError) {
+        console.warn('Failed to persist compact app state to browser storage after clearing legacy state', retryError)
+      }
     }
   }
 
@@ -369,7 +444,7 @@ export const useAppStore = defineStore('app', () => {
     })
     if (backendState) {
       applyPersistedState(backendState)
-      browserStorage.write(STORAGE_KEY, snapshotState())
+      persistBrowserState(snapshotBrowserState())
     }
 
     const backendTasks = await invokeOptional<GenerationTask[]>('list_generation_tasks', { limit: 500 }).catch((error: unknown) => {
@@ -386,22 +461,54 @@ export const useAppStore = defineStore('app', () => {
 
   async function generate(input: GenerationInput): Promise<GenerationTask> {
     const selectedImageModel = imageModels.value.find((model) => model.id === input.modelId)
+    const validationMessage = imageGenerationValidationMessage(selectedImageModel)
+    if (validationMessage) {
+      const failedTask = createFailedGenerationTask(input, new Error(validationMessage), selectedImageModel)
+      recordGenerationTask(failedTask)
+      notify(validationMessage, 'error')
+      throw new Error(validationMessage)
+    }
+    if (!isTauriRuntime()) {
+      const message = '请在桌面版使用真实图像模型生成图片'
+      const failedTask = createFailedGenerationTask(input, new Error(message), selectedImageModel)
+      recordGenerationTask(failedTask)
+      notify(message, 'error')
+      throw new Error(message)
+    }
+
     let task: GenerationTask
-    if (settings.value.autoSaveHistory && isTauriRuntime()) {
+    try {
       const commandResult = await invokeOptional<GenerationTask>('create_generation_task', { input, model: selectedImageModel })
       if (!commandResult) throw new Error('Tauri 生成命令不可用')
       task = commandResult
-    } else {
-      task = createLocalGeneration(input)
+    } catch (error) {
+      const failedTask = createFailedGenerationTask(input, error, selectedImageModel)
+      recordGenerationTask(failedTask)
+      notify(failedTask.error ?? '生成失败', 'error')
+      throw new Error(failedTask.error ?? '生成失败', { cause: error })
     }
+
     if (settings.value.autoSaveHistory) {
-      tasks.value.unshift(task)
-      persist()
+      recordGenerationTask(task)
       notify(`已生成 ${task.assets.length} 张${modeLabels[task.mode]}结果`)
     } else {
-      notify(`已生成 ${task.assets.length} 张${modeLabels[task.mode]}结果，未保存到历史`, 'info')
+      notify(`已生成 ${task.assets.length} 张${modeLabels[task.mode]}结果，未保存到资产库`, 'info')
     }
     return task
+  }
+
+  function recordGenerationTask(task: GenerationTask): void {
+    tasks.value = [task, ...tasks.value.filter((item) => item.id !== task.id)]
+    persist()
+  }
+
+  function imageGenerationValidationMessage(model: ModelProfile | undefined): string | null {
+    if (!model || model.provider === 'local-preview') return '请先配置并选择真实图像模型'
+    if (!model.endpoint.trim()) return '请填写图像模型 API 地址'
+    if (!model.apiKey.trim()) return '请填写图像模型 API Key'
+    if (model.apiProtocol === 'mgtv-storyboard' && !model.apiSecret?.trim()) return '请填写 MGTV 图像模型 Secret Key'
+    if (!model.model.trim()) return '请填写图像模型 ID'
+    return null
   }
 
   async function polishPrompt(input: TextPolishInput, modelId?: string): Promise<TextPolishResult> {
@@ -414,6 +521,20 @@ export const useAppStore = defineStore('app', () => {
     }
 
     const modelName = selectedTextModel?.name ?? '本地文本润色'
+    if (input.task === 'translate-to-english') {
+      const result = {
+        prompt: [
+          input.prompt.trim(),
+          `${input.style} style`,
+          'clear subject, stable composition, layered lighting, rich material details',
+          `optimized for ${input.modeLabel} image generation`,
+          `translated by ${modelName}`,
+        ].join(', '),
+        modelName,
+      }
+      notify(`已使用 ${result.modelName} 翻译为英文提示词`)
+      return result
+    }
     const result = {
       prompt: [
         input.prompt.trim() || '一个高质量的本地 AI 图像生成工作台界面',
@@ -425,6 +546,38 @@ export const useAppStore = defineStore('app', () => {
       modelName,
     }
     notify(`已使用 ${result.modelName} 润色提示词`)
+    return result
+  }
+
+  function configuredTextModel(modelId?: string): ModelProfile | undefined {
+    const selected = textModels.value.find((model) => model.id === modelId) ?? primaryTextModel.value
+    if (!selected || selected.provider === 'local-preview') return undefined
+    if (!selected.endpoint.trim() || !selected.apiKey.trim() || !selected.model.trim()) return undefined
+    return selected
+  }
+
+  async function translatePromptToEnglish(input: TextPolishInput, modelId?: string): Promise<TextPolishResult> {
+    if (!containsChineseText(input.prompt)) return { prompt: input.prompt, modelName: '无需翻译' }
+    const selectedTextModel = configuredTextModel(modelId)
+    if (!selectedTextModel) {
+      throw new Error('检测到中文提示词，请先配置可用的文本模型用于自动翻译英文提示词')
+    }
+    const request: TextPolishInput = { ...input, task: 'translate-to-english' }
+    if (isTauriRuntime()) {
+      const result = await invokeOptional<TextPolishResult>('polish_prompt', { input: request, model: selectedTextModel })
+      if (!result) throw new Error('Tauri 翻译命令不可用')
+      notify(`已使用 ${result.modelName} 翻译为英文提示词`)
+      return result
+    }
+    const result = await polishPrompt(request, selectedTextModel.id)
+    notify(`已使用 ${result.modelName} 翻译为英文提示词`)
+    return result
+  }
+
+  async function fetchModelCatalog(profile: ModelProfile): Promise<ModelCatalogItem[]> {
+    if (!isTauriRuntime()) return []
+    const result = await invokeOptional<ModelCatalogItem[]>('list_model_catalog', { profile })
+    if (!result) throw new Error('Tauri 模型列表命令不可用')
     return result
   }
 
@@ -492,7 +645,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function usePrompt(item: PromptItem): void {
-    activePrompt.value = item.prompt
+    activePrompt.value = item.promptEn || item.prompt
     notify(`已应用提示词：${item.title}`)
   }
 
@@ -510,7 +663,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function saveModel(profile: ModelProfile): void {
-    const next = profile.id ? profile : { ...profile, id: createId('model') }
+    const next = normalizeModelProfile(profile.id ? profile : { ...profile, id: createId('model') })
+    if (next.provider === 'local-preview' || next.id === 'local-preview') {
+      notify('本地预览模型已移除，请配置真实图像模型', 'error')
+      return
+    }
     if (next.isPrimary) {
       models.value = models.value.map((model) => (model.kind === next.kind ? { ...model, isPrimary: false } : model))
     }
@@ -549,14 +706,32 @@ export const useAppStore = defineStore('app', () => {
     notify(`已设为主文本模型：${target.name}`)
   }
 
+  function modelConnectionValidationMessage(model: ModelProfile): string | null {
+    if (model.provider === 'local-preview') return null
+    if (!model.endpoint.trim()) return model.kind === 'text' ? '请填写文本模型 API 地址' : '请填写 API 地址'
+    if (!model.apiKey.trim()) return model.kind === 'text' ? '请填写文本模型 API Key' : '请填写 API Key'
+    if (model.kind === 'image' && model.apiProtocol === 'mgtv-storyboard' && !model.apiSecret?.trim()) return '请填写 MGTV 图像模型 Secret Key'
+    if (model.kind === 'text' && !model.model.trim()) return '请填写文本模型 ID'
+    if (model.kind === 'image' && !model.model.trim()) return '请填写图像模型 ID'
+    return null
+  }
+
   async function testModel(id: string): Promise<void> {
     const model = models.value.find((item) => item.id === id)
     if (!model) return
-    if (model.provider === 'local-preview') {
-      model.status = 'connected'
+    const validationMessage = modelConnectionValidationMessage(model)
+    if (validationMessage) {
+      model.status = 'failed'
       model.lastCheckedAt = new Date().toISOString()
       persist()
-      notify('本地预览模型可用')
+      notify(validationMessage, 'error')
+      return
+    }
+    if (!isTauriRuntime()) {
+      model.status = 'untested'
+      model.lastCheckedAt = new Date().toISOString()
+      persist()
+      notify('浏览器预览模式不能直连模型 API，请在桌面版检测连接', 'info')
       return
     }
     const result = await invokeOptional<{ ok: boolean; message: string }>('test_model_profile', { profile: model }).catch((error: unknown) => ({
@@ -570,10 +745,6 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function removeModel(id: string): void {
-    if (id === 'local-preview') {
-      notify('本地预览模型不能删除', 'error')
-      return
-    }
     models.value = models.value.filter((model) => model.id !== id)
     if (!imageModels.value.some((model) => model.isPrimary)) {
       const first = imageModels.value[0]
@@ -657,7 +828,28 @@ export const useAppStore = defineStore('app', () => {
       console.warn('Failed to clear persisted tasks from Tauri', error)
     })
     persist()
-    notify('历史记录已清空')
+    notify('资产库已清空')
+  }
+
+  async function removeGeneratedAsset(taskId: string, assetId: string): Promise<void> {
+    const task = tasks.value.find((item) => item.id === taskId)
+    if (!task) return
+
+    const target = task.assets.find((asset) => asset.id === assetId)
+    if (!target) return
+
+    const nextAssets = task.assets.filter((asset) => asset.id !== assetId)
+    if (nextAssets.length) {
+      task.assets = nextAssets
+    } else {
+      tasks.value = tasks.value.filter((item) => item.id !== taskId)
+    }
+
+    await invokeOptional('delete_generation_asset', { taskId, assetId }).catch((error: unknown) => {
+      console.warn('Failed to delete generated asset from Tauri', error)
+    })
+    persist()
+    notify(`已删除图片：${target.title}`)
   }
 
   function toggleTaskFavorite(id: string): void {
@@ -668,7 +860,10 @@ export const useAppStore = defineStore('app', () => {
     notify(task.isFavorite ? `已收藏：${task.prompt}` : `已取消收藏：${task.prompt}`, task.isFavorite ? 'success' : 'info')
   }
 
-  async function downloadAllAssets(format: ExportFormat = settings.value.defaultExportFormat): Promise<void> {
+  async function downloadAllAssets(
+    format: ExportFormat = settings.value.defaultExportFormat,
+    options?: { iconSizes?: number[]; canvasFilter?: string; titleSuffix?: string },
+  ): Promise<void> {
     const taskAssets = completedAssets.value
     if (!taskAssets.length) {
       notify('暂无可导出的结果', 'info')
@@ -676,7 +871,7 @@ export const useAppStore = defineStore('app', () => {
     }
 
     for (const { task, asset } of taskAssets) {
-      await downloadAsset(asset, format, 1, task)
+      await downloadAsset(asset, format, 1, task, options)
     }
     notify(`已导出 ${taskAssets.length} 个结果`)
   }
@@ -686,16 +881,17 @@ export const useAppStore = defineStore('app', () => {
     format: ExportFormat = settings.value.defaultExportFormat,
     scale = 1,
     task?: GenerationTask,
-    options?: { iconSizes?: number[] },
+    options?: { iconSizes?: number[]; canvasFilter?: string; titleSuffix?: string },
   ): Promise<void> {
     const exportScale = format === 'ico' ? 1 : scale
     const exportData = await prepareExportAsset(asset, format, exportScale, options)
+    const exportTitle = `${asset.title}${options?.titleSuffix ?? ''}`
     const metadataJson = settings.value.includePromptMetadata && task ? createExportMetadataJson(task, asset, exportData, exportScale) : undefined
     const result = await invokeOptional<{ path: string; metadataPath?: string }>('export_generated_asset', {
       request: {
         dataUrl: exportData.dataUrl,
         outputDir: settings.value.defaultOutputDir,
-        title: asset.title,
+        title: exportTitle,
         format: exportData.format,
         metadataJson,
       },
@@ -711,27 +907,99 @@ export const useAppStore = defineStore('app', () => {
       return
     }
 
-    triggerBrowserDownload(exportData.dataUrl, `${asset.title}.${exportData.format}`)
+    triggerBrowserDownload(exportData.dataUrl, `${exportTitle}.${exportData.format}`)
     if (metadataJson) {
       const metadataUrl = URL.createObjectURL(new Blob([metadataJson], { type: 'application/json' }))
-      triggerBrowserDownload(metadataUrl, `${asset.title}.metadata.json`)
+      triggerBrowserDownload(metadataUrl, `${exportTitle}.metadata.json`)
       URL.revokeObjectURL(metadataUrl)
     }
     notify(metadataJson ? '已导出图片和提示词元数据到浏览器下载目录' : '已导出到浏览器下载目录')
+  }
+
+  async function downloadIconBundle(
+    asset: GeneratedAsset,
+    selectedSizes: number[],
+    format: 'png' | 'ico' = 'png',
+  ): Promise<void> {
+    if (!selectedSizes.length) {
+      notify('请至少选择一个导出尺寸', 'error')
+      return
+    }
+
+    const image = await loadImageFromDataUrl(asset.dataUrl)
+    const entries: Array<{ name: string; dataUrl: string }> = []
+    const ext = format === 'ico' ? 'ico' : 'png'
+    const baseName = asset.title || 'icon'
+
+    for (const size of selectedSizes.sort((a, b) => a - b)) {
+      const { canvas, context } = createCanvas(size, size)
+      context.imageSmoothingEnabled = true
+      context.imageSmoothingQuality = 'high'
+      context.drawImage(image, 0, 0, size, size)
+
+      if (format === 'ico') {
+        const pngBytes = await canvasToPngBytes(canvas)
+        const icoBytes = buildIcoFile([{ size, bytes: pngBytes }])
+        entries.push({ name: `${baseName}_${size}x${size}.ico`, dataUrl: bytesToDataUrl(icoBytes, 'image/x-icon') })
+      } else {
+        entries.push({ name: `${baseName}_${size}x${size}.png`, dataUrl: canvas.toDataURL('image/png') })
+      }
+    }
+
+    const bundleName = baseName
+
+    // Tauri 模式：后端打包 ZIP 写入本地
+    const result = await invokeOptional<string>('export_icon_bundle', {
+      request: {
+        entries,
+        outputDir: settings.value.defaultOutputDir,
+        bundleName,
+      },
+    }).catch((error: unknown) => {
+      console.warn('Tauri icon bundle export failed; using browser download fallback', error)
+      return null
+    })
+
+    if (result) {
+      notify(`已导出 ${selectedSizes.length} 个 ${ext.toUpperCase()} 图标到 ${result}`)
+      return
+    }
+
+    // 浏览器模式：前端打包 ZIP 下载
+    const fileBuffers: Array<{ name: string; data: Uint8Array }> = []
+    for (const entry of entries) {
+      const base64 = entry.dataUrl.split(',')[1] ?? ''
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      fileBuffers.push({ name: entry.name, data: bytes })
+    }
+
+    const zipBytes = buildZipFile(fileBuffers)
+    const blob = new Blob([zipBytes.buffer as ArrayBuffer], { type: 'application/zip' })
+    const url = URL.createObjectURL(blob)
+    triggerBrowserDownload(url, `${bundleName}.zip`)
+    URL.revokeObjectURL(url)
+    notify(`已导出 ${selectedSizes.length} 个 ${ext.toUpperCase()} 图标到浏览器下载目录`)
   }
 
   async function prepareExportAsset(
     asset: GeneratedAsset,
     format: ExportFormat,
     scale = 1,
-    options?: { iconSizes?: number[] },
+    options?: { iconSizes?: number[]; canvasFilter?: string; titleSuffix?: string },
   ): Promise<ExportAssetData> {
-    if (format === asset.format && scale === 1) return { dataUrl: asset.dataUrl, format, width: asset.width, height: asset.height }
+    const hasFilter = Boolean(options?.canvasFilter && options.canvasFilter !== 'none')
+    if (format === 'gif') {
+      const dataUrl = asset.dataUrl.startsWith('data:image/gif') ? asset.dataUrl : fallbackGifDataUrl
+      return { dataUrl, format: 'gif', width: asset.width, height: asset.height }
+    }
+    if (!hasFilter && format === asset.format && scale === 1) return { dataUrl: asset.dataUrl, format, width: asset.width, height: asset.height }
     if (format === 'ico') return createIcoDataUrl(asset.dataUrl, asset.width, asset.height, options?.iconSizes)
-    if (format === 'svg' || format === 'gif') return { dataUrl: asset.dataUrl, format: asset.format, width: asset.width, height: asset.height }
+    if (format === 'svg') return { dataUrl: asset.dataUrl, format: asset.format, width: asset.width, height: asset.height }
     const width = asset.width * scale
     const height = asset.height * scale
-    return { dataUrl: await rasterizeDataUrl(asset.dataUrl, width, height, format), format, width, height }
+    return { dataUrl: await rasterizeDataUrl(asset.dataUrl, width, height, format, options?.canvasFilter), format, width, height }
   }
 
   function createExportMetadataJson(task: GenerationTask, asset: GeneratedAsset, exportData: ExportAssetData, scale: number): string {
@@ -797,6 +1065,9 @@ export const useAppStore = defineStore('app', () => {
     defaultImageModel,
     enabledCoverPresets,
     recentTasks,
+    operationTasks,
+    historyTasks,
+    historyAssetCount,
     completedAssets,
     favoriteTasks,
     promptSyncSources,
@@ -806,6 +1077,8 @@ export const useAppStore = defineStore('app', () => {
     loadPersistedTasks,
     generate,
     polishPrompt,
+    translatePromptToEnglish,
+    fetchModelCatalog,
     importPrompts,
     importPromptBatch,
     syncPromptSource,
@@ -823,9 +1096,12 @@ export const useAppStore = defineStore('app', () => {
     resetCoverPresets,
     resetDemoData,
     clearHistory,
+    removeGeneratedAsset,
+    recordGenerationTask,
     toggleTaskFavorite,
     downloadAllAssets,
     downloadAsset,
+    downloadIconBundle,
     notify,
   }
 })

@@ -1,11 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Download, Eye, FolderOpen, RotateCcw, Search, Star, Trash2 } from 'lucide-vue-next'
-import { getExportFormatOptions, modeLabels } from '@/data/catalog'
+import { Download, Eye, FolderOpen, RotateCcw, Search, Star, Trash2, ZoomIn } from 'lucide-vue-next'
+import { getAvailableIcoExportSizes, getExportFormatOptions, iconExportFormatOptions, iconSizePresets, modeLabels } from '@/data/catalog'
+import type { IconExportKind } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
 import type { ExportFormat, GeneratedAsset, GenerationMode, GenerationTask } from '@/types/domain'
+
+type ExportSource = 'original' | 'adjusted'
+type PreviewFilterId = 'none' | 'soft' | 'warm' | 'cool' | 'mono' | 'cinematic'
+
+type PreviewFilterOption = {
+  value: PreviewFilterId
+  label: string
+  cssFilter: string
+  canvasFilter: string
+}
 
 const router = useRouter()
 const store = useAppStore()
@@ -16,14 +27,50 @@ const visibleCount = ref(8)
 const selected = ref<{ task: GenerationTask; asset: GeneratedAsset } | null>(null)
 const exportOpen = ref<'selected' | 'all' | null>(null)
 const exportFormat = ref<ExportFormat>(store.settings.defaultExportFormat)
+const exportSource = ref<ExportSource>('original')
+const viewerOpen = ref(false)
+const viewerZoom = ref(1)
+const selectedIcoExportSizes = ref<number[]>([])
+const iconExportKind = ref<IconExportKind>('ico')
+const isIconSelected = computed(() => selected.value?.task.mode === 'icon')
+const historyExportButtonLabel = computed(() => {
+  if (exportOpen.value === 'all') return '确认导出全部'
+  if (isIconSelected.value) {
+    const labels: Record<IconExportKind, string> = { png: '导出 PNG', ico: '导出 ICO', zip: '导出 ZIP' }
+    return labels[iconExportKind.value]
+  }
+  return '确认导出'
+})
+const previewFilter = ref<PreviewFilterId>('none')
+const previewFilters: PreviewFilterOption[] = [
+  { value: 'none', label: '原图', cssFilter: 'none', canvasFilter: 'none' },
+  { value: 'soft', label: '柔和', cssFilter: 'contrast(0.98) saturate(1.06) brightness(1.02)', canvasFilter: 'contrast(0.98) saturate(1.06) brightness(1.02)' },
+  { value: 'warm', label: '暖色', cssFilter: 'sepia(0.18) saturate(1.16) contrast(1.03)', canvasFilter: 'sepia(0.18) saturate(1.16) contrast(1.03)' },
+  { value: 'cool', label: '冷色', cssFilter: 'hue-rotate(185deg) saturate(1.12) contrast(1.02)', canvasFilter: 'hue-rotate(185deg) saturate(1.12) contrast(1.02)' },
+  { value: 'mono', label: '黑白', cssFilter: 'grayscale(1) contrast(1.08)', canvasFilter: 'grayscale(1) contrast(1.08)' },
+  { value: 'cinematic', label: '电影感', cssFilter: 'contrast(1.08) saturate(0.96) brightness(0.98)', canvasFilter: 'contrast(1.08) saturate(0.96) brightness(0.98)' },
+]
+const selectedPreviewFilter = computed(() => previewFilters.find((item) => item.value === previewFilter.value) ?? previewFilters[0])
 const availableExportFormatOptions = computed(() => {
-  if (exportOpen.value === 'selected') return getExportFormatOptions(selected.value?.task.mode)
+  if (exportOpen.value === 'selected') {
+    const current = selected.value
+    if (!current) return getExportFormatOptions()
+    if (isIconSelected.value) return iconExportFormatOptions
+    return getSelectedExportFormatOptions(current)
+  }
   return getExportFormatOptions()
+})
+const availableIcoExportSizes = computed(() => {
+  if (exportOpen.value === 'all') return [...iconSizePresets]
+  const asset = selected.value?.asset
+  if (!asset) return [...iconSizePresets]
+  const maxSide = Math.max(16, Math.min(asset.width, asset.height))
+  return getAvailableIcoExportSizes(maxSide)
 })
 
 const filteredTasks = computed(() => {
   const keyword = search.value.trim().toLowerCase()
-  return store.tasks.filter((task) => {
+  return store.historyTasks.filter((task) => {
     if (filter.value !== 'all' && task.mode !== filter.value) return false
     if (!keyword) return true
     return `${task.prompt} ${task.modelId} ${task.style}`.toLowerCase().includes(keyword)
@@ -47,14 +94,92 @@ const visibleEntries = computed(() => sortedTasks.value
 const hasMoreTasks = computed(() => visibleEntries.value.length < sortedTasks.value.reduce((sum, task) => sum + task.assets.length, 0))
 
 const stats = computed(() => ({
-  total: store.tasks.reduce((sum, task) => sum + task.assets.length, 0),
-  today: store.tasks.filter((task) => new Date(task.createdAt).toDateString() === new Date().toDateString()).reduce((sum, task) => sum + task.assets.length, 0),
+  total: store.historyAssetCount,
+  today: store.historyTasks.filter((task) => new Date(task.createdAt).toDateString() === new Date().toDateString()).reduce((sum, task) => sum + task.assets.length, 0),
   favorites: store.favoriteTasks.length,
 }))
 
 watch([search, filter, sortMode], () => {
   visibleCount.value = 8
 })
+
+watch([exportOpen, exportFormat, selected], () => {
+  if (!exportOpen.value) return
+  // ICON 资产使用 iconExportKind，不走 exportFormat 自动修正
+  if (isIconSelected.value && exportOpen.value === 'selected') return
+  if (!availableExportFormatOptions.value.some((option) => option.value === exportFormat.value)) {
+    exportFormat.value = (availableExportFormatOptions.value[0]?.value ?? 'png') as ExportFormat
+  }
+  if (exportFormat.value !== 'ico') return
+  const allowed = new Set<number>(availableIcoExportSizes.value.map((preset) => preset.width))
+  const next = selectedIcoExportSizes.value.filter((size) => allowed.has(size))
+  selectedIcoExportSizes.value = next.length ? next : availableIcoExportSizes.value.map((preset) => preset.width)
+})
+
+watch([selected, previewFilter], () => {
+  if (!selected.value) return
+  if (selected.value.asset.format === 'gif' || selected.value.task.mode === 'gif') {
+    if (exportSource.value === 'adjusted') exportSource.value = 'original'
+    return
+  }
+  if (previewFilter.value === 'none' && exportSource.value === 'adjusted') {
+    exportSource.value = 'original'
+  }
+})
+
+const selectedPreviewStyle = computed(() => ({
+  filter: selectedPreviewFilter.value.cssFilter,
+}))
+
+const viewerImageStyle = computed(() => ({
+  filter: selectedPreviewFilter.value.cssFilter,
+  width: `${Math.round(viewerZoom.value * 100)}%`,
+  maxWidth: 'none',
+  maxHeight: 'none',
+}))
+
+const selectedAssetSizeLabel = computed(() => {
+  if (!selected.value) return ''
+  const area = (selected.value.asset.width * selected.value.asset.height) / 1_000_000
+  return `${selected.value.asset.width} x ${selected.value.asset.height} · ${area.toFixed(2)} MP`
+})
+
+function isGifEntry(task: GenerationTask, asset: GeneratedAsset): boolean {
+  return task.mode === 'gif' || asset.format === 'gif'
+}
+
+function isIconEntry(task: GenerationTask): boolean {
+  return task.mode === 'icon'
+}
+
+function getSelectedExportFormatOptions(entry: { task: GenerationTask; asset: GeneratedAsset }): Array<{ value: ExportFormat; label: string }> {
+  const options = getExportFormatOptions(entry.task.mode)
+  if (isGifEntry(entry.task, entry.asset)) return options.filter((option) => option.value === 'gif')
+
+  const rasterValues = new Set<ExportFormat>(['png', 'jpg', 'webp'])
+  return options.filter((option) => rasterValues.has(option.value) || (isIconEntry(entry.task) && option.value === 'ico'))
+}
+
+function canExportAdjustedEntry(entry: { task: GenerationTask; asset: GeneratedAsset } | null): boolean {
+  if (!entry) return false
+  if (isGifEntry(entry.task, entry.asset)) return false
+  return selectedPreviewFilter.value.value !== 'none'
+}
+
+function openImageViewer(): void {
+  if (!selected.value) return
+  viewerZoom.value = 1
+  viewerOpen.value = true
+}
+
+function closeImageViewer(): void {
+  viewerOpen.value = false
+  viewerZoom.value = 1
+}
+
+function adjustViewerZoom(delta: number): void {
+  viewerZoom.value = Math.min(4, Math.max(0.5, Number((viewerZoom.value + delta).toFixed(2))))
+}
 
 function reusePrompt(task: GenerationTask): void {
   store.setActivePrompt(task.prompt)
@@ -98,15 +223,30 @@ function retryTask(task: GenerationTask): void {
 }
 
 function clearHistory(): void {
-  if (!window.confirm('确定清空所有历史记录？此操作不可恢复。')) return
+  if (!window.confirm('确定清空资产库？此操作不可恢复。')) return
   store.clearHistory()
 }
 
+async function deleteAsset(task: GenerationTask, asset: GeneratedAsset, closeDetail = false): Promise<void> {
+  if (!window.confirm('确定删除这张图片？此操作不可恢复。')) return
+  await store.removeGeneratedAsset(task.id, asset.id)
+  if (closeDetail || selected.value?.asset.id === asset.id) {
+    selected.value = null
+    if (exportOpen.value === 'selected') exportOpen.value = null
+  }
+}
+
 function openHistoryExport(): void {
-  const options = getExportFormatOptions(selected.value?.task.mode)
-  exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
-    ? store.settings.defaultExportFormat
-    : options[0]?.value ?? 'png'
+  if (isIconSelected.value) {
+    iconExportKind.value = 'ico'
+  } else {
+    const options = selected.value ? getSelectedExportFormatOptions(selected.value) : getExportFormatOptions()
+    exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
+      ? store.settings.defaultExportFormat
+      : options[0]?.value ?? 'png'
+  }
+  exportSource.value = 'original'
+  selectedIcoExportSizes.value = availableIcoExportSizes.value.map((preset) => preset.width)
   exportOpen.value = 'selected'
 }
 
@@ -115,6 +255,7 @@ function openAllHistoryExport(): void {
   exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
     ? store.settings.defaultExportFormat
     : options[0]?.value ?? 'png'
+  selectedIcoExportSizes.value = iconSizePresets.map((preset) => preset.width)
   exportOpen.value = 'all'
 }
 
@@ -131,13 +272,53 @@ async function chooseHistoryExportDir(): Promise<void> {
 }
 
 async function confirmHistoryExport(): Promise<void> {
+  // ICON 资产使用独立的格式体系
+  if (isIconSelected.value && exportOpen.value === 'selected') {
+    if ((iconExportKind.value === 'ico' || iconExportKind.value === 'zip') && !selectedIcoExportSizes.value.length) {
+      store.notify('请至少勾选一个导出尺寸', 'error')
+      return
+    }
+    if (iconExportKind.value === 'png') {
+      await store.downloadAsset(selected.value!.asset, 'png', 1, selected.value!.task)
+    } else if (iconExportKind.value === 'ico') {
+      await store.downloadIconBundle(selected.value!.asset, selectedIcoExportSizes.value, 'ico')
+    } else if (iconExportKind.value === 'zip') {
+      await store.downloadIconBundle(selected.value!.asset, selectedIcoExportSizes.value, 'png')
+    }
+    exportOpen.value = null
+    return
+  }
+
+  if (exportFormat.value === 'ico' && !selectedIcoExportSizes.value.length) {
+    store.notify('请至少勾选一个 ICO 导出尺寸', 'error')
+    return
+  }
+
   if (exportOpen.value === 'all') {
-    await store.downloadAllAssets(exportFormat.value)
+    await store.downloadAllAssets(
+      exportFormat.value,
+      exportFormat.value === 'ico' ? { iconSizes: selectedIcoExportSizes.value } : undefined,
+    )
     exportOpen.value = null
     return
   }
   if (!selected.value) return
-  await store.downloadAsset(selected.value.asset, exportFormat.value, 1, selected.value.task)
+  const adjusted = exportSource.value === 'adjusted' && canExportAdjustedEntry(selected.value)
+  if (exportSource.value === 'adjusted' && !adjusted) {
+    store.notify('当前图片不支持导出调整后版本，请改为导出原图', 'error')
+    return
+  }
+  await store.downloadAsset(
+    selected.value.asset,
+    exportFormat.value,
+    1,
+    selected.value.task,
+    exportFormat.value === 'ico'
+      ? { iconSizes: selectedIcoExportSizes.value }
+      : adjusted
+        ? { canvasFilter: selectedPreviewFilter.value.canvasFilter, titleSuffix: '-filtered' }
+        : undefined,
+  )
   exportOpen.value = null
 }
 </script>
@@ -146,9 +327,9 @@ async function confirmHistoryExport(): Promise<void> {
   <div class="page-wide">
     <div class="page-header">
       <div>
-        <p class="page-kicker">Local Gallery</p>
-        <h1 class="page-title">历史记录</h1>
-        <p class="page-desc">查看所有本地生成结果，筛选、复用提示词或导出图片。</p>
+        <p class="page-kicker">Asset Library</p>
+        <h1 class="page-title">资产库</h1>
+        <p class="page-desc">管理所有本地生成资源，筛选、复用提示词、导出或删除单张图片。</p>
       </div>
       <div class="btn-row">
         <button class="btn-soft" type="button" @click="openAllHistoryExport">
@@ -157,7 +338,7 @@ async function confirmHistoryExport(): Promise<void> {
         </button>
         <button class="btn-danger" type="button" @click="clearHistory">
           <Trash2 :size="16" />
-          清空历史
+          清空资产库
         </button>
       </div>
     </div>
@@ -201,6 +382,15 @@ async function confirmHistoryExport(): Promise<void> {
             <Star :size="15" :fill="entry.task.isFavorite ? 'currentColor' : 'none'" />
           </button>
           <button
+            class="delete-button"
+            type="button"
+            :aria-label="`删除图片 ${entry.asset.title}`"
+            :title="`删除图片 ${entry.asset.title}`"
+            @click.stop="deleteAsset(entry.task, entry.asset)"
+          >
+            <Trash2 :size="15" />
+          </button>
+          <button
             class="image-card"
             type="button"
             @click="selected = { task: entry.task, asset: entry.asset }"
@@ -222,8 +412,8 @@ async function confirmHistoryExport(): Promise<void> {
       </div>
     </div>
     <div v-else class="empty-state card">
-      <strong>暂无历史记录</strong>
-      <span>在工作台生成结果后会自动出现在这里。</span>
+      <strong>暂无资产</strong>
+      <span>在工作台生成结果后会自动进入资产库。</span>
     </div>
 
     <div v-if="selected" class="modal-overlay" @click.self="selected = null">
@@ -236,12 +426,50 @@ async function confirmHistoryExport(): Promise<void> {
           <button class="btn-icon" type="button" @click="selected = null">×</button>
         </div>
         <div class="modal-body detail-grid">
-          <img :src="selected.asset.dataUrl" :alt="selected.asset.title" />
+          <div class="detail-preview-wrap">
+            <button class="detail-preview-button" type="button" @click="openImageViewer">
+              <img :src="selected.asset.dataUrl" :alt="selected.asset.title" :style="selectedPreviewStyle" />
+              <span>
+                <ZoomIn :size="15" />
+                放大查看
+              </span>
+            </button>
+            <div class="detail-preview-meta">
+              <span>{{ selected.asset.format.toUpperCase() }}</span>
+              <span>{{ selectedAssetSizeLabel }}</span>
+              <span>{{ modeLabels[selected.task.mode] }}</span>
+            </div>
+          </div>
           <div class="stack">
             <div class="detail-row"><span>生成类型</span><strong>{{ modeLabels[selected.task.mode] }}</strong></div>
             <div class="detail-row"><span>模型</span><strong>{{ selected.task.modelId }}</strong></div>
             <div class="detail-row"><span>尺寸</span><strong>{{ selected.asset.width }} x {{ selected.asset.height }}</strong></div>
             <div class="detail-row"><span>状态</span><strong :class="{ 'status-error': selected.task.status === 'failed' }">{{ selected.task.status === 'failed' ? '失败' : selected.task.status === 'completed' ? '完成' : selected.task.status }}</strong></div>
+            <div class="field">
+              <label>滤镜预览</label>
+              <div class="filter-chip-row">
+                <button
+                  v-for="item in previewFilters"
+                  :key="item.value"
+                  class="filter-chip"
+                  :class="{ active: previewFilter === item.value }"
+                  type="button"
+                  @click="previewFilter = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            </div>
+            <div v-if="selected.task.mode === 'gif' || selected.asset.format === 'gif'" class="prompt-box info-box">
+              GIF 动图保持原图导出，不提供调整后版本。
+            </div>
+            <div v-else class="field">
+              <label>导出来源</label>
+              <div class="source-toggle">
+                <button class="filter-chip" :class="{ active: exportSource === 'original' }" type="button" @click="exportSource = 'original'">导出原图</button>
+                <button class="filter-chip" :class="{ active: exportSource === 'adjusted' }" type="button" :disabled="previewFilter === 'none'" @click="exportSource = 'adjusted'">导出调整后图片</button>
+              </div>
+            </div>
             <div v-if="selected.task.error" class="prompt-box error-box">{{ selected.task.error }}</div>
             <div class="prompt-box">{{ selected.task.prompt }}</div>
           </div>
@@ -267,6 +495,33 @@ async function confirmHistoryExport(): Promise<void> {
             <Download :size="15" />
             导出到本地
           </button>
+          <button class="btn-danger" type="button" @click="deleteAsset(selected.task, selected.asset, true)">
+            <Trash2 :size="15" />
+            删除图片
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="viewerOpen && selected" class="modal-overlay viewer-overlay" @click.self="closeImageViewer">
+      <div class="viewer-panel">
+        <div class="viewer-toolbar">
+          <div>
+            <strong>{{ selected.asset.title }}</strong>
+            <span>{{ selectedAssetSizeLabel }} · {{ selectedPreviewFilter.label }}</span>
+          </div>
+          <div class="btn-row">
+            <button class="btn-soft" type="button" @click="adjustViewerZoom(-0.25)">缩小</button>
+            <button class="btn-soft" type="button" @click="viewerZoom = 1">{{ Math.round(viewerZoom * 100) }}%</button>
+            <button class="btn-soft" type="button" @click="adjustViewerZoom(0.25)">
+              <ZoomIn :size="15" />
+              放大
+            </button>
+            <button class="btn-icon" type="button" @click="closeImageViewer">×</button>
+          </div>
+        </div>
+        <div class="viewer-stage">
+          <img :src="selected.asset.dataUrl" :alt="`${selected.asset.title} 放大查看`" :style="viewerImageStyle" />
         </div>
       </div>
     </div>
@@ -293,16 +548,61 @@ async function confirmHistoryExport(): Promise<void> {
           </div>
           <div class="field">
             <label for="history-export-format">格式</label>
-            <select id="history-export-format" v-model="exportFormat">
+            <select v-if="isIconSelected && exportOpen === 'selected'" id="history-export-format" v-model="iconExportKind">
+              <option v-for="option in iconExportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <select v-else id="history-export-format" v-model="exportFormat">
               <option v-for="option in availableExportFormatOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </div>
-          <p v-if="exportFormat === 'ico'" class="muted">ICO 会自动打包常用图标尺寸，并跳过超过当前源图尺寸的规格。</p>
+          <template v-if="isIconSelected && exportOpen === 'selected'">
+            <p class="muted">PNG 导出母图；ICO 将选中尺寸打包为一个图标文件；ZIP 将每个尺寸导出为独立 PNG。</p>
+            <div v-if="iconExportKind !== 'png'" class="field">
+              <label>导出尺寸</label>
+              <div class="ico-size-checks">
+                <label v-for="preset in availableIcoExportSizes" :key="preset.id" class="ico-size-check">
+                  <input
+                    :aria-label="`导出尺寸 ${preset.name}`"
+                    :value="preset.width"
+                    v-model="selectedIcoExportSizes"
+                    type="checkbox"
+                  />
+                  <span>{{ preset.name }}<small v-if="preset.hint"> · {{ preset.hint }}</small></span>
+                </label>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <div v-if="exportOpen === 'selected'" class="field">
+              <label>导出来源</label>
+              <div class="source-toggle">
+                <button class="filter-chip" :class="{ active: exportSource === 'original' }" type="button" @click="exportSource = 'original'">原图</button>
+                <button class="filter-chip" :class="{ active: exportSource === 'adjusted' }" type="button" :disabled="!canExportAdjustedEntry(selected)" @click="exportSource = 'adjusted'">调整后图片</button>
+              </div>
+            </div>
+            <p v-if="exportFormat === 'ico'" class="muted">
+              {{ exportOpen === 'all' ? 'ICO 会按勾选尺寸逐个打包，每张源图会自动跳过超过自身尺寸的规格。' : 'ICO 会按勾选尺寸打包，并自动跳过超过当前源图尺寸的规格。' }}
+            </p>
+            <div v-if="exportFormat === 'ico'" class="field">
+              <label>导出尺寸</label>
+              <div class="ico-size-checks">
+                <label v-for="preset in availableIcoExportSizes" :key="preset.id" class="ico-size-check">
+                  <input
+                    :aria-label="`ICO 尺寸 ${preset.name}`"
+                    :value="preset.width"
+                    v-model="selectedIcoExportSizes"
+                    type="checkbox"
+                  />
+                  <span>{{ preset.name }}</span>
+                </label>
+              </div>
+            </div>
+          </template>
           <p class="muted">{{ exportOpen === 'all' ? '导出将包含全部已完成结果，并保留可用的提示词元数据。' : '导出将使用当前结果并保留可用的提示词元数据。' }}</p>
         </div>
         <div class="modal-foot">
           <button class="btn-soft" type="button" @click="exportOpen = null">取消</button>
-          <button class="btn-primary" type="button" @click="confirmHistoryExport">{{ exportOpen === 'all' ? '确认导出全部' : '确认导出' }}</button>
+          <button class="btn-primary" type="button" @click="confirmHistoryExport">{{ historyExportButtonLabel }}</button>
         </div>
       </div>
     </div>
@@ -321,6 +621,7 @@ async function confirmHistoryExport(): Promise<void> {
 .search-box {
   position: relative;
   flex: 1 1 260px;
+  min-width: 0;
 }
 
 .search-box svg {
@@ -417,6 +718,7 @@ async function confirmHistoryExport(): Promise<void> {
   border-radius: var(--radius-md);
   text-align: left;
   transition: border-color 160ms, box-shadow 160ms, transform 160ms;
+  min-width: 0;
 }
 
 .image-card:hover {
@@ -425,11 +727,11 @@ async function confirmHistoryExport(): Promise<void> {
   transform: translateY(-2px);
 }
 
-.favorite-button {
+.favorite-button,
+.delete-button {
   position: absolute;
   z-index: 2;
   top: 10px;
-  right: 10px;
   display: grid;
   place-items: center;
   width: 32px;
@@ -441,6 +743,14 @@ async function confirmHistoryExport(): Promise<void> {
   box-shadow: var(--elev-subtle);
 }
 
+.favorite-button {
+  right: 10px;
+}
+
+.delete-button {
+  left: 10px;
+}
+
 .favorite-button.active {
   color: var(--accent);
   border-color: var(--accent);
@@ -450,6 +760,12 @@ async function confirmHistoryExport(): Promise<void> {
 .favorite-button:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.delete-button:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(184, 76, 76, .12);
 }
 
 .thumb {
@@ -469,12 +785,17 @@ async function confirmHistoryExport(): Promise<void> {
   -webkit-line-clamp: 2;
   overflow: hidden;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .image-info small {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-text.error,
@@ -503,15 +824,66 @@ async function confirmHistoryExport(): Promise<void> {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 18px;
+  grid-template-columns: minmax(320px, 1.25fr) minmax(320px, 0.95fr);
+  gap: 20px;
+  align-items: start;
 }
 
-.detail-grid img {
+.detail-preview-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-preview-button {
+  position: relative;
+  display: block;
   width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.detail-preview-button img {
+  width: 100%;
+  min-height: 320px;
+  max-height: 68vh;
+  object-fit: contain;
+  background: rgba(6, 10, 18, .45);
   border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.detail-preview-button span {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+  background: rgba(6, 10, 18, .78);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+}
+
+.detail-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.detail-preview-meta span {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
 }
 
 .detail-row {
@@ -520,10 +892,18 @@ async function confirmHistoryExport(): Promise<void> {
   gap: 12px;
   border-bottom: 1px solid var(--border-soft);
   padding-bottom: 10px;
+  min-width: 0;
 }
 
 .detail-row span {
   color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.detail-row strong {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .prompt-box {
@@ -532,12 +912,91 @@ async function confirmHistoryExport(): Promise<void> {
   border-radius: var(--radius-md);
   background: rgba(6, 10, 18, .42);
   line-height: 1.7;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .error-box {
   color: var(--danger);
   border-color: rgba(184, 76, 76, .42);
   background: rgba(184, 76, 76, .1);
+}
+
+.info-box {
+  color: var(--fg-2);
+  border-color: var(--border);
+}
+
+.filter-chip-row,
+.source-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.viewer-overlay {
+  z-index: 120;
+}
+
+.viewer-panel {
+  width: min(1180px, 96vw);
+  height: min(88vh, 860px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(6, 10, 18, .94);
+  box-shadow: var(--elev-raised);
+}
+
+.viewer-toolbar {
+  min-width: 0;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.viewer-toolbar > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.viewer-toolbar strong,
+.viewer-toolbar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-toolbar span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.viewer-stage {
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  text-align: center;
+}
+
+.viewer-stage img {
+  display: inline-block;
+  height: auto;
+  object-fit: contain;
+  transition: width 140ms ease;
 }
 
 @media (max-width: 980px) {

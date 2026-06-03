@@ -90,6 +90,35 @@ impl AppState {
         Ok(())
     }
 
+    pub async fn delete_asset(&self, task_id: &str, asset_id: &str) -> Result<(), AppError> {
+        let row = sqlx::query("SELECT payload FROM generation_tasks WHERE id = ?1")
+            .bind(task_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        let Some(row) = row else {
+            return Ok(());
+        };
+
+        let payload: String = row.try_get("payload")?;
+        let mut task: GenerationTask =
+            serde_json::from_str(&payload).map_err(|error| AppError::Unknown(error.to_string()))?;
+        let before_count = task.assets.len();
+        task.assets.retain(|asset| asset.id != asset_id);
+        if task.assets.len() == before_count {
+            return Ok(());
+        }
+
+        if task.assets.is_empty() {
+            sqlx::query("DELETE FROM generation_tasks WHERE id = ?1")
+                .bind(task_id)
+                .execute(&self.pool)
+                .await?;
+            return Ok(());
+        }
+
+        self.insert_task(&task).await
+    }
+
     pub async fn save_setting(&self, key: &str, value: &str) -> Result<(), AppError> {
         sqlx::query("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?1, ?2, datetime('now'))")
             .bind(key)

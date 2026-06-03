@@ -1,5 +1,6 @@
 use tauri::Manager;
 
+pub mod api_endpoint;
 pub mod commands;
 pub mod error;
 pub mod generation;
@@ -25,9 +26,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::create_generation_task,
             commands::clear_generation_tasks,
+            commands::delete_generation_asset,
             commands::export_generated_asset,
+            commands::export_icon_bundle,
             commands::load_app_state,
             commands::list_generation_tasks,
+            commands::list_model_catalog,
             commands::polish_prompt,
             commands::save_app_state,
             commands::test_model_profile,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {
   CircleHelp,
-  Clock3,
+  ClipboardList,
   Home,
   Images,
   Layers3,
@@ -20,7 +20,8 @@ const navItems = [
   { to: '/', label: '首页', icon: Home },
   { to: '/workspace', label: '工作台', icon: Layers3 },
   { to: '/tools', label: '工具库', icon: Wrench },
-  { to: '/history', label: '历史', icon: Clock3, badge: computed(() => store.tasks.length) },
+  { to: '/history', label: '资产库', icon: Images, badge: computed(() => store.historyAssetCount) },
+  { to: '/operations', label: '操作记录', icon: ClipboardList, badge: computed(() => store.tasks.filter((task) => task.status === 'failed').length) },
   { to: '/settings', label: '设置', icon: Settings },
   { to: '/about', label: '关于帮助', icon: CircleHelp },
 ]

@@ -57,6 +57,22 @@ fn exports_ico_data_to_requested_directory() {
 }
 
 #[test]
+fn exports_gif_data_url_with_gif_bytes() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let data_url = "data:image/gif;base64,R0lGODlhAQABAPAAABQ4pv///yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==";
+
+    let output = export_asset_data_url(data_url, temp_dir.path(), "Loop Preview", "gif")
+        .expect("gif asset should export");
+
+    assert_eq!(
+        output.file_name().and_then(|value| value.to_str()),
+        Some("Loop_Preview.gif")
+    );
+    let bytes = std::fs::read(output).expect("exported gif");
+    assert!(bytes.starts_with(b"GIF"));
+}
+
+#[test]
 fn exports_metadata_json_sidecar_to_requested_directory() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
 

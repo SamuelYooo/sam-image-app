@@ -587,6 +587,28 @@ input[type="range"] {
   background: transparent;
 }
 
+.ico-size-checks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ico-size-check {
+  min-height: 38px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--fg-2);
+}
+
+.ico-size-check input[type="checkbox"] {
+  flex: 0 0 auto;
+}
+
 .tool-card {
   padding: 15px;
   cursor: pointer;
@@ -800,6 +822,16 @@ input[type="range"] {
   }
 
   .directory-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .ico-size-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .ico-size-checks {
     grid-template-columns: 1fr;
   }
 }

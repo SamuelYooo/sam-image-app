@@ -1,13 +1,53 @@
-design/
-docs/
-.omx/
-.codegraph/
-.tmp/
 node_modules/
 dist/
-.cargo-target*/
-src-tauri/target*/
+dist-ssr/
+release/
+target/
+.cargo-target/
+.cargo-target-test/
 *.log
-ui-*.png
-test-results/
-playwright-report/
+*-runtime-check.png
+.tmp/
+..codegraph/
+.claude/
+.omc/
+openspec/
+CLAUDE.md
+docs/
+
+# Rust
+/target
+**/target
+
+# Node
+*.local
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Logs
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# SQLite
+*.db
+*.db-journal
+
+gitfork/
