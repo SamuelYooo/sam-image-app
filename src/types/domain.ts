@@ -27,11 +27,11 @@ export interface ModelProfile {
   provider: 'openai-compatible' | 'local-preview'
   endpoint: string
   apiPath?: string
-  apiProtocol?: 'openai-chat' | 'anthropic-messages' | 'openai-images' | 'dashscope-wanxiang' | 'openai-image-edits' | 'multimodal-chat' | 'mgtv-storyboard'
+  apiProtocol?: 'openai-chat' | 'anthropic-messages' | 'openai-images' | 'dashscope-wanxiang' | 'openai-image-edits' | 'multimodal-chat' | 'mgtv-storyboard' | 'openai-audio-speech'
   apiKey: string
   apiSecret?: string
   model: string
-  kind: 'image' | 'text'
+  kind: 'image' | 'text' | 'tts'
   isPrimary: boolean
   status: 'untested' | 'connected' | 'failed'
   lastCheckedAt?: string
@@ -40,7 +40,7 @@ export interface ModelProfile {
 export interface ModelCatalogItem {
   id: string
   name: string
-  kind: 'image' | 'text' | 'unknown'
+  kind: 'image' | 'text' | 'tts' | 'unknown'
   source: 'remote' | 'builtin'
 }
 
@@ -81,6 +81,7 @@ export interface GeneratedAsset {
   dataUrl: string
   localPath?: string
   createdAt: string
+  isFavorite?: boolean
 }
 
 export interface GenerationTask {

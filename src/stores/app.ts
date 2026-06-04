@@ -153,11 +153,15 @@ function normalizeDefaultImageModelId(value: unknown, modelList: ModelProfile[])
 }
 
 function defaultModelApiPath(kind: ModelProfile['kind']): string {
-  return kind === 'text' ? 'v1/chat/completions' : 'v1/images/generations'
+  if (kind === 'text') return 'v1/chat/completions'
+  if (kind === 'tts') return 'v1/audio/speech'
+  return 'v1/images/generations'
 }
 
 function defaultModelApiProtocol(kind: ModelProfile['kind']): NonNullable<ModelProfile['apiProtocol']> {
-  return kind === 'text' ? 'openai-chat' : 'openai-images'
+  if (kind === 'text') return 'openai-chat'
+  if (kind === 'tts') return 'openai-audio-speech'
+  return 'openai-images'
 }
 
 function splitLegacyEndpoint(endpoint: string, kind: ModelProfile['kind']): Pick<ModelProfile, 'endpoint' | 'apiPath'> {
@@ -344,6 +348,7 @@ export const useAppStore = defineStore('app', () => {
 
   const imageModels = computed(() => models.value.filter((model) => model.kind === 'image'))
   const textModels = computed(() => models.value.filter((model) => model.kind === 'text'))
+  const ttsModels = computed(() => models.value.filter((model) => model.kind === 'tts'))
   const primaryImageModel = computed(() => imageModels.value.find((model) => model.isPrimary) ?? imageModels.value[0])
   const primaryTextModel = computed(() => textModels.value.find((model) => model.isPrimary) ?? textModels.value[0])
   const defaultImageModel = computed(() => imageModels.value.find((model) => model.id === settings.value.defaultImageModelId) ?? primaryImageModel.value)
@@ -355,6 +360,11 @@ export const useAppStore = defineStore('app', () => {
   const allAssets = computed(() => tasks.value.flatMap((task) => task.assets.map((asset) => ({ task, asset }))))
   const completedAssets = computed(() => allAssets.value.filter(({ task }) => task.status === 'completed'))
   const favoriteTasks = computed(() => tasks.value.filter((task) => task.isFavorite))
+  const favoriteAssets = computed(() =>
+    tasks.value
+      .flatMap((task) => task.assets)
+      .filter((asset) => asset.isFavorite),
+  )
 
   function snapshotState(): PersistedState {
     return {
@@ -706,6 +716,19 @@ export const useAppStore = defineStore('app', () => {
     notify(`已设为主文本模型：${target.name}`)
   }
 
+  function setPrimaryTtsModel(id: string): void {
+    const target = models.value.find((model) => model.id === id && model.kind === 'tts')
+    if (!target) {
+      notify('请选择有效的语音模型', 'error')
+      return
+    }
+    models.value = models.value.map((model) => (
+      model.kind === 'tts' ? { ...model, isPrimary: model.id === id } : model
+    ))
+    persist()
+    notify(`已设为主语音模型：${target.name}`)
+  }
+
   function modelConnectionValidationMessage(model: ModelProfile): string | null {
     if (model.provider === 'local-preview') return null
     if (!model.endpoint.trim()) return model.kind === 'text' ? '请填写文本模型 API 地址' : '请填写 API 地址'
@@ -860,6 +883,18 @@ export const useAppStore = defineStore('app', () => {
     notify(task.isFavorite ? `已收藏：${task.prompt}` : `已取消收藏：${task.prompt}`, task.isFavorite ? 'success' : 'info')
   }
 
+  function toggleAssetFavorite(assetId: string): void {
+    for (const task of tasks.value) {
+      const asset = task.assets.find((item) => item.id === assetId)
+      if (asset) {
+        asset.isFavorite = !asset.isFavorite
+        persist()
+        notify(asset.isFavorite ? '已加入收藏' : '已取消收藏', asset.isFavorite ? 'success' : 'info')
+        return
+      }
+    }
+  }
+
   async function downloadAllAssets(
     format: ExportFormat = settings.value.defaultExportFormat,
     options?: { iconSizes?: number[]; canvasFilter?: string; titleSuffix?: string },
@@ -881,11 +916,12 @@ export const useAppStore = defineStore('app', () => {
     format: ExportFormat = settings.value.defaultExportFormat,
     scale = 1,
     task?: GenerationTask,
-    options?: { iconSizes?: number[]; canvasFilter?: string; titleSuffix?: string },
+    options?: { iconSizes?: number[]; canvasFilter?: string; titleSuffix?: string; customTitle?: string },
   ): Promise<void> {
     const exportScale = format === 'ico' ? 1 : scale
     const exportData = await prepareExportAsset(asset, format, exportScale, options)
-    const exportTitle = `${asset.title}${options?.titleSuffix ?? ''}`
+    const baseTitle = options?.customTitle?.trim() || asset.title
+    const exportTitle = `${baseTitle}${options?.titleSuffix ?? ''}`
     const metadataJson = settings.value.includePromptMetadata && task ? createExportMetadataJson(task, asset, exportData, exportScale) : undefined
     const result = await invokeOptional<{ path: string; metadataPath?: string }>('export_generated_asset', {
       request: {
@@ -919,17 +955,16 @@ export const useAppStore = defineStore('app', () => {
   async function downloadIconBundle(
     asset: GeneratedAsset,
     selectedSizes: number[],
-    format: 'png' | 'ico' = 'png',
+    projectName?: string,
   ): Promise<void> {
     if (!selectedSizes.length) {
       notify('请至少选择一个导出尺寸', 'error')
       return
     }
 
+    const baseName = (projectName ?? '').trim() || asset.title || 'icon'
     const image = await loadImageFromDataUrl(asset.dataUrl)
     const entries: Array<{ name: string; dataUrl: string }> = []
-    const ext = format === 'ico' ? 'ico' : 'png'
-    const baseName = asset.title || 'icon'
 
     for (const size of selectedSizes.sort((a, b) => a - b)) {
       const { canvas, context } = createCanvas(size, size)
@@ -937,23 +972,18 @@ export const useAppStore = defineStore('app', () => {
       context.imageSmoothingQuality = 'high'
       context.drawImage(image, 0, 0, size, size)
 
-      if (format === 'ico') {
-        const pngBytes = await canvasToPngBytes(canvas)
-        const icoBytes = buildIcoFile([{ size, bytes: pngBytes }])
-        entries.push({ name: `${baseName}_${size}x${size}.ico`, dataUrl: bytesToDataUrl(icoBytes, 'image/x-icon') })
-      } else {
-        entries.push({ name: `${baseName}_${size}x${size}.png`, dataUrl: canvas.toDataURL('image/png') })
-      }
+      // 每个尺寸生成独立的单帧 ICO 文件
+      const pngBytes = await canvasToPngBytes(canvas)
+      const icoBytes = buildIcoFile([{ size, bytes: pngBytes }])
+      entries.push({ name: `${baseName}_${size}x${size}.ico`, dataUrl: bytesToDataUrl(icoBytes, 'image/x-icon') })
     }
-
-    const bundleName = baseName
 
     // Tauri 模式：后端打包 ZIP 写入本地
     const result = await invokeOptional<string>('export_icon_bundle', {
       request: {
         entries,
         outputDir: settings.value.defaultOutputDir,
-        bundleName,
+        bundleName: baseName,
       },
     }).catch((error: unknown) => {
       console.warn('Tauri icon bundle export failed; using browser download fallback', error)
@@ -961,7 +991,7 @@ export const useAppStore = defineStore('app', () => {
     })
 
     if (result) {
-      notify(`已导出 ${selectedSizes.length} 个 ${ext.toUpperCase()} 图标到 ${result}`)
+      notify(`已导出 ${selectedSizes.length} 个 ICO 图标到 ${result}`)
       return
     }
 
@@ -978,9 +1008,9 @@ export const useAppStore = defineStore('app', () => {
     const zipBytes = buildZipFile(fileBuffers)
     const blob = new Blob([zipBytes.buffer as ArrayBuffer], { type: 'application/zip' })
     const url = URL.createObjectURL(blob)
-    triggerBrowserDownload(url, `${bundleName}.zip`)
+    triggerBrowserDownload(url, `${baseName}.zip`)
     URL.revokeObjectURL(url)
-    notify(`已导出 ${selectedSizes.length} 个 ${ext.toUpperCase()} 图标到浏览器下载目录`)
+    notify(`已导出 ${selectedSizes.length} 个 ICO 图标到浏览器下载目录`)
   }
 
   async function prepareExportAsset(
@@ -1060,6 +1090,7 @@ export const useAppStore = defineStore('app', () => {
     activeMode,
     imageModels,
     textModels,
+    ttsModels,
     primaryImageModel,
     primaryTextModel,
     defaultImageModel,
@@ -1070,6 +1101,7 @@ export const useAppStore = defineStore('app', () => {
     historyAssetCount,
     completedAssets,
     favoriteTasks,
+    favoriteAssets,
     promptSyncSources,
     resolveMode,
     setMode,
@@ -1087,6 +1119,7 @@ export const useAppStore = defineStore('app', () => {
     saveModel,
     setPrimaryImageModel,
     setPrimaryTextModel,
+    setPrimaryTtsModel,
     testModel,
     removeModel,
     saveSettings,
@@ -1099,6 +1132,7 @@ export const useAppStore = defineStore('app', () => {
     removeGeneratedAsset,
     recordGenerationTask,
     toggleTaskFavorite,
+    toggleAssetFavorite,
     downloadAllAssets,
     downloadAsset,
     downloadIconBundle,

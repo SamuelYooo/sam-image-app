@@ -62,7 +62,7 @@ describe('SettingsPage model editor layout', () => {
   it('can trigger connection tests for all configured image and text models', () => {
     const source = readFileSync(settingsPagePath, 'utf8')
 
-    expect(source).toContain('const configuredModels = computed(() => [...store.imageModels, ...store.textModels].filter(isConfiguredModel))')
+    expect(source).toContain('const configuredModels = computed(() => [...store.imageModels, ...store.textModels, ...store.ttsModels].filter(isConfiguredModel))')
     expect(source).toContain('async function testAllConfiguredModels(): Promise<void>')
     expect(source).toContain('for (const model of models)')
     expect(source).toContain('await store.testModel(model.id)')

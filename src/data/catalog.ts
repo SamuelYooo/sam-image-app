@@ -148,9 +148,8 @@ export const toolGroups: Array<{
         style: '自然',
         subtitle: '参考重绘 · 风格变体',
         negativeSeed: '结构错乱、主体走形、风格混杂、细节崩坏、噪点',
-        flowCopy: '图生图读取参考图与重绘幅度，在保留原结构的基础上生成新的风格变体。',
-        promptHint: '描述想要的目标风格与改动，例如「转成清新水彩，保留人物姿态」。',
-        referenceRequired: true,
+        flowCopy: '图生图读取参考图与重绘幅度，在保留原结构的基础上生成新的风格变体。无参考图时按提示词直接创作。',
+        promptHint: '描述想要的目标风格与改动，例如「转成清新水彩，保留人物姿态」。无参考图时描述画面主体即可。',
         recommendedSize: { width: 1024, height: 1024 },
         recommendedAspect: '与原图一致',
         extraControls: [
@@ -246,7 +245,7 @@ export const toolGroups: Array<{
         promptHint: '描述要保留的主体，例如「保留角色轮廓，转成复古 GB 掌机画风」。',
         referenceRequired: true,
         recommendedSize: { width: 1024, height: 1024 },
-        recommendedAspect: '1:1 方形',
+        recommendedAspect: '与原图一致',
         extraControls: [
           {
             key: 'pixelBlockSize',
@@ -530,7 +529,7 @@ export const toolGroups: Array<{
         promptHint: '描述着装与表情要求，例如「深色正装、自然微笑」，背景与规格由下方参数控制。',
         referenceRequired: true,
         recommendedSize: { width: 1024, height: 1280 },
-        recommendedAspect: '约 5:6（一寸/二寸）',
+        recommendedAspect: '约 5:7（实际输出由证件照规格决定）',
         extraControls: [
           {
             key: 'backgroundColor',
@@ -737,10 +736,8 @@ export const toolGroups: Array<{
         style: '摄影',
         subtitle: '画质增强 · 清晰放大',
         negativeSeed: '过度锐化、涂抹感、噪点放大、色彩失真、边缘光晕',
-        flowCopy: '图片增强读取参考图与锐化、降噪、放大参数，提升清晰度并放大成像。',
-        promptHint: '说明诉求，例如「让模糊的旧照片更清晰，肤质保持自然」。',
-        referenceRequired: true,
-        recommendedSize: { width: 1536, height: 1536 },
+        flowCopy: '图片增强读取参考图与锐化、降噪、放大参数，提升清晰度并放大成像。无参考图时按提示词直接生成高清大图。',
+        promptHint: '说明诉求，例如「让模糊的旧照片更清晰，肤质保持自然」。无参考图时直接描述想要的高清场景。',
         recommendedAspect: '与原图一致',
         extraControls: [
           {
@@ -858,9 +855,8 @@ export const toolGroups: Array<{
         style: '插画',
         subtitle: '真人转卡通 · 保留神韵',
         negativeSeed: '五官走形、神似度低、线条脏乱、比例失调、表情僵硬',
-        flowCopy: '人像卡通化读取参考图与卡通程度、风格参数，将真人转换为卡通插画。',
-        promptHint: '描述目标画风，例如「转成日漫风，保留发型与笑容，背景简洁」。',
-        referenceRequired: true,
+        flowCopy: '人像卡通化读取参考图与卡通程度、风格参数，将真人转换为卡通插画。无参考图时按提示词直接生成卡通人像。',
+        promptHint: '描述目标画风，例如「转成日漫风，保留发型与笑容，背景简洁」。无参考图时描述想要的角色。',
         recommendedSize: { width: 1024, height: 1024 },
         recommendedAspect: '1:1 方形',
         extraControls: [
@@ -905,9 +901,8 @@ export const toolGroups: Array<{
         style: '赛博',
         subtitle: '艺术风格 · 一键转换',
         negativeSeed: '主体糊成一团、风格不统一、细节丢失、色彩脏、纹理杂乱',
-        flowCopy: '风格转换读取参考图与风格、强度参数，在保留主体的前提下套用目标艺术风格。',
-        promptHint: '点明目标风格，例如「转成梵高笔触的星空感，保留建筑轮廓」。',
-        referenceRequired: true,
+        flowCopy: '风格转换读取参考图与风格、强度参数，在保留主体的前提下套用目标艺术风格。无参考图时按提示词直接创作。',
+        promptHint: '点明目标风格，例如「转成梵高笔触的星空感，保留建筑轮廓」。无参考图时描述想要的画面与风格。',
         recommendedSize: { width: 1024, height: 1024 },
         recommendedAspect: '与原图一致',
         extraControls: [
@@ -1128,13 +1123,19 @@ export const exportFormatOptions: Array<{ value: ExportFormat; label: string }> 
   { value: 'gif', label: 'GIF' },
 ]
 
-export type IconExportKind = 'png' | 'ico' | 'zip'
+export type IconExportKind = 'png' | 'ico'
 
 export const iconExportFormatOptions: Array<{ value: IconExportKind; label: string }> = [
-  { value: 'png', label: 'PNG 单张' },
+  { value: 'png', label: 'PNG 母图' },
   { value: 'ico', label: 'ICO 多尺寸' },
-  { value: 'zip', label: 'ZIP 多尺寸' },
 ]
+
+/** 生成默认的项目名称：icon-YYYYMMDD-HHmmss */
+export function defaultIconProjectName(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `icon-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+}
 
 export function getExportFormatOptions(mode?: GenerationMode): Array<{ value: ExportFormat; label: string }> {
   void mode // ICON 模式使用 iconExportFormatOptions 独立处理，此处仅返回通用格式

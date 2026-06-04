@@ -140,16 +140,19 @@ test('workspace icon mode uses master size and shows export size presets', async
   await expect(page.locator('.icon-size-card').filter({ hasText: '512 x 512' })).toBeVisible()
 })
 
-test('workspace icon mode can export a selected-size ico bundle', async ({ page }) => {
+test('workspace icon mode can export a multi-size ico zip bundle', async ({ page }) => {
   await page.goto('/workspace?mode=icon&prompt=ICO 多尺寸导出测试图标')
 
   await page.getByRole('button', { name: '开始生成' }).click()
   await expect(page.locator('.sample').first()).toBeVisible()
 
   await page.getByRole('button', { name: '导出', exact: true }).click()
-  await page.getByLabel('格式').selectOption('ico')
-  await expect(page.getByText(/ICO 将选中尺寸打包为一个图标文件/)).toBeVisible()
+  // ICON 模式默认就是 ICO 格式
+  await expect(page.getByLabel('格式')).toHaveValue('ico')
   await expect(page.getByLabel('倍率')).toHaveCount(0)
+  // 项目名称默认是时间戳格式
+  const projectName = await page.getByLabel('项目名称').inputValue()
+  expect(projectName).toMatch(/^icon-\d{8}-\d{6}$/)
   await expect(page.getByLabel('导出尺寸 16 x 16')).toBeChecked()
   await expect(page.getByLabel('导出尺寸 64 x 64')).toBeChecked()
   await page.getByLabel('导出尺寸 32 x 32').uncheck()
@@ -158,14 +161,12 @@ test('workspace icon mode can export a selected-size ico bundle', async ({ page 
   await page.getByLabel('导出尺寸 256 x 256').uncheck()
   await page.getByLabel('导出尺寸 512 x 512').uncheck()
 
-  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出 ICO' }).click(), 2)
-  const download = findDownload(downloads, '.ico')
-  expect(download.suggestedFilename()).toMatch(/\.ico$/)
-  const downloadedPath = await download.path()
-  expect(downloadedPath).toBeTruthy()
-  const content = await readFile(downloadedPath!)
-  expect(Array.from(content.subarray(0, 4))).toEqual([0, 0, 1, 0])
-  expect(content.readUInt16LE(4)).toBe(2)
+  // 浏览器模式：每个尺寸独立 ICO 文件 → 打包为一个 ZIP 下载
+  const downloads = await collectDownloads(page, () => page.getByRole('button', { name: '导出 ICO' }).click(), 1)
+  const zipDownload = downloads[0]
+  expect(zipDownload.suggestedFilename()).toMatch(/\.zip$/)
+  const zipPath = await zipDownload.path()
+  expect(zipPath).toBeTruthy()
 })
 
 test('tool catalog opens workspace with a focused generation intent', async ({ page }) => {

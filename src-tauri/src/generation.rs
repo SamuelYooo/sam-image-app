@@ -91,6 +91,8 @@ pub struct GeneratedAsset {
     pub data_url: String,
     pub local_path: Option<String>,
     pub created_at: String,
+    #[serde(default, rename = "isFavorite")]
+    pub is_favorite: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1387,7 +1389,7 @@ async fn remote_response_asset(
     created_at: &str,
     image: OpenAiImageData,
 ) -> Result<GeneratedAsset, GenerationError> {
-    let (mut data_url, mut format) = match image.b64_json {
+    let (data_url, format) = match image.b64_json {
         Some(payload) if !payload.trim().is_empty() => {
             let mime = image.mime_type.unwrap_or_else(|| "image/png".into());
             let format = mime
@@ -1459,6 +1461,7 @@ async fn remote_response_asset(
         data_url,
         local_path: None,
         created_at: created_at.into(),
+        is_favorite: Some(false),
     })
 }
 
@@ -1650,6 +1653,7 @@ fn create_preview_asset(
         },
         local_path: None,
         created_at: created_at.into(),
+        is_favorite: Some(false),
     }
 }
 

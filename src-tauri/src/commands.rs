@@ -756,6 +756,15 @@ fn model_catalog_endpoint(endpoint: &str) -> Result<String, AppError> {
 
 fn infer_catalog_model_kind(model_id: &str) -> &'static str {
     let id = model_id.to_lowercase();
+    // TTS 优先判定：避免被文本模型误判（例如 gpt-audio 实际是音频）
+    let tts_markers = [
+        "tts", "speech", "audio", "voice", "eleven",
+        "kokoro", "bark", "tortoise", "cosyvoice", "melo", "f5-tts",
+        "xtts", "silero", "edge-tts", "azure-speech",
+    ];
+    if tts_markers.iter().any(|marker| id.contains(marker)) {
+        return "tts";
+    }
     let image_markers = [
         "image",
         "dall-e",
@@ -779,4 +788,46 @@ fn infer_catalog_model_kind(model_id: &str) -> &'static str {
         return "text";
     }
     "unknown"
+}
+
+#[cfg(test)]
+mod infer_catalog_kind_tests {
+    use super::infer_catalog_model_kind;
+
+    #[test]
+    fn detects_image_markers() {
+        assert_eq!(infer_catalog_model_kind("gpt-image-1"), "image");
+        assert_eq!(infer_catalog_model_kind("dall-e-3"), "image");
+        assert_eq!(infer_catalog_model_kind("stable-diffusion-xl"), "image");
+        assert_eq!(infer_catalog_model_kind("flux-dev"), "image");
+    }
+
+    #[test]
+    fn detects_text_markers() {
+        assert_eq!(infer_catalog_model_kind("gpt-4o-mini"), "text");
+        assert_eq!(infer_catalog_model_kind("claude-3-5-sonnet"), "text");
+        assert_eq!(infer_catalog_model_kind("qwen-max"), "text");
+        assert_eq!(infer_catalog_model_kind("deepseek-chat"), "text");
+    }
+
+    #[test]
+    fn detects_tts_markers() {
+        assert_eq!(infer_catalog_model_kind("tts-1"), "tts");
+        assert_eq!(infer_catalog_model_kind("tts-1-hd"), "tts");
+        assert_eq!(infer_catalog_model_kind("eleven_multilingual_v2"), "tts");
+        assert_eq!(infer_catalog_model_kind("kokoro-v0_19"), "tts");
+        assert_eq!(infer_catalog_model_kind("azure-speech"), "tts");
+    }
+
+    #[test]
+    fn returns_unknown_for_ambiguous_ids() {
+        assert_eq!(infer_catalog_model_kind("custom-model-v1"), "unknown");
+        assert_eq!(infer_catalog_model_kind(""), "unknown");
+    }
+
+    #[test]
+    fn tts_takes_priority_over_text() {
+        // gpt-audio 包含 audio marker 应识别为 tts
+        assert_eq!(infer_catalog_model_kind("gpt-audio"), "tts");
+    }
 }

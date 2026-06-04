@@ -48,7 +48,7 @@ const draft = ref<ModelProfile>({
 type ModelCatalogEntry = ModelCatalogItem & {
   model: string
   provider: 'openai-compatible'
-  kind: 'image' | 'text' | 'unknown'
+  kind: 'image' | 'text' | 'tts' | 'unknown'
   endpoint: string
   apiPath: string
   apiProtocol: NonNullable<ModelProfile['apiProtocol']>
@@ -70,6 +70,9 @@ const imageProtocolOptions: ProtocolOption[] = [
   { value: 'mgtv-storyboard', label: '芒果 AIGC 分镜生图', path: 'openapi/v1/storyboard/generateByPromptV2' },
   { value: 'openai-image-edits', label: 'Images Edits / 自定义编辑', path: 'v1/images/edits' },
   { value: 'multimodal-chat', label: '多模态 Chat', path: 'v1/chat/completions' },
+]
+const ttsProtocolOptions: ProtocolOption[] = [
+  { value: 'openai-audio-speech', label: 'OpenAI Audio Speech', path: 'v1/audio/speech' },
 ]
 
 const promptSources = computed(() => Array.from(new Set(store.prompts.map((item) => item.source))))
@@ -100,12 +103,31 @@ const filteredPrompts = computed(() => {
 const enabledCoverPresetCount = computed(() => store.coverPresets.filter((preset) => preset.enabled).length)
 const filteredModelCatalog = computed(() => {
   const keyword = modelCatalogSearch.value.trim().toLowerCase()
+  // 显示所有获取到的模型，标注与当前 kind 的兼容性（不直接隐藏，避免数量不一致的困惑）
   return remoteModelCatalog.value
-    .filter((item) => item.kind === draft.value.kind || item.kind === 'unknown')
     .filter((item) => !keyword || `${item.name} ${item.model}`.toLowerCase().includes(keyword))
 })
-const protocolOptions = computed(() => (draft.value.kind === 'text' ? textProtocolOptions : imageProtocolOptions))
-const configuredModels = computed(() => [...store.imageModels, ...store.textModels].filter(isConfiguredModel))
+
+// 当前类型 vs 不匹配数量统计（用于提示）
+const modelCatalogCount = computed(() => {
+  const total = remoteModelCatalog.value.length
+  const match = remoteModelCatalog.value.filter((item) => item.kind === draft.value.kind || item.kind === 'unknown').length
+  return { total, match, other: total - match }
+})
+
+// 选中的目录模型是否与当前配置的 kind 兼容（仅已识别且不同才不兼容）
+const selectedCatalogKind = computed(() => {
+  return remoteModelCatalog.value.find((model) => model.model === selectedCatalogModelId.value)?.kind ?? 'unknown'
+})
+const selectedCatalogIncompatible = computed(() => {
+  return selectedCatalogKind.value !== 'unknown' && selectedCatalogKind.value !== draft.value.kind
+})
+const protocolOptions = computed(() => {
+  if (draft.value.kind === 'text') return textProtocolOptions
+  if (draft.value.kind === 'tts') return ttsProtocolOptions
+  return imageProtocolOptions
+})
+const configuredModels = computed(() => [...store.imageModels, ...store.textModels, ...store.ttsModels].filter(isConfiguredModel))
 const configuredModelCount = computed(() => configuredModels.value.length)
 
 type ModelStatusTone = 'ok' | 'warn' | 'error'
@@ -123,12 +145,16 @@ function promptCategoryLabel(category?: string): string {
 
 function defaultApiPath(kind: ModelCatalogEntry['kind'] | ModelProfile['kind']): string {
   const runtimeKind = kind === 'unknown' ? draft.value.kind : kind
-  return runtimeKind === 'text' ? textProtocolOptions[0].path : imageProtocolOptions[0].path
+  if (runtimeKind === 'text') return textProtocolOptions[0].path
+  if (runtimeKind === 'tts') return ttsProtocolOptions[0].path
+  return imageProtocolOptions[0].path
 }
 
 function defaultApiProtocol(kind: ModelCatalogEntry['kind'] | ModelProfile['kind']): NonNullable<ModelProfile['apiProtocol']> {
   const runtimeKind = kind === 'unknown' ? draft.value.kind : kind
-  return runtimeKind === 'text' ? 'openai-chat' : 'openai-images'
+  if (runtimeKind === 'text') return 'openai-chat'
+  if (runtimeKind === 'tts') return 'openai-audio-speech'
+  return 'openai-images'
 }
 
 function applyProtocol(protocol: NonNullable<ModelProfile['apiProtocol']>): void {
@@ -151,13 +177,31 @@ function apiKeyLabel(model: ModelProfile): string {
   return model.apiProtocol === 'mgtv-storyboard' ? 'Access Key' : 'API Key'
 }
 
+function modelKindLabel(kind: ModelCatalogEntry['kind'] | ModelProfile['kind']): string {
+  const labels: Record<string, string> = {
+    image: '图像',
+    text: '文本',
+    tts: '语音',
+    unknown: '未知',
+  }
+  return labels[kind] ?? kind
+}
+
+function setPrimaryLabel(kind: ModelProfile['kind']): string {
+  if (kind === 'text') return '设为主文本模型'
+  if (kind === 'tts') return '设为主语音模型'
+  return '设为主图像模型'
+}
+
 function modelIdLabel(model: ModelProfile): string {
   return model.apiProtocol === 'mgtv-storyboard' ? 'Style ID' : '模型 ID'
 }
 
 function modelIdPlaceholder(model: ModelProfile): string {
   if (model.apiProtocol === 'mgtv-storyboard') return '35'
-  return model.kind === 'text' ? 'gpt-4o-mini' : 'gpt-image-1'
+  if (model.kind === 'text') return 'gpt-4o-mini'
+  if (model.kind === 'tts') return 'tts-1'
+  return 'gpt-image-1'
 }
 
 function isModelTesting(id: string): boolean {
@@ -209,16 +253,26 @@ async function testAllConfiguredModels(): Promise<void> {
 }
 
 function newModel(kind: ModelProfile['kind'] = 'image'): void {
+  const defaultName = kind === 'text'
+    ? 'OpenAI Compatible Text'
+    : kind === 'tts'
+      ? 'OpenAI Compatible TTS'
+      : 'OpenAI Compatible Image'
+  const defaultModel = kind === 'text'
+    ? 'gpt-4o-mini'
+    : kind === 'tts'
+      ? 'tts-1'
+      : 'gpt-image-1'
   draft.value = {
     id: createId('model'),
-    name: kind === 'text' ? 'OpenAI Compatible Text' : 'OpenAI Compatible Image',
+    name: defaultName,
     provider: 'openai-compatible',
     endpoint: 'https://api.openai.com',
     apiPath: defaultApiPath(kind),
     apiProtocol: defaultApiProtocol(kind),
     apiKey: '',
     apiSecret: '',
-    model: kind === 'text' ? 'gpt-4o-mini' : 'gpt-image-1',
+    model: defaultModel,
     kind,
     isPrimary: false,
     status: 'untested',
@@ -566,7 +620,7 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
               </div>
               <div class="grid grid-2">
                 <div class="field"><label for="model-draft-name">模型名称</label><input id="model-draft-name" v-model="draft.name" /></div>
-                <div class="field"><label for="model-draft-kind">类型</label><select id="model-draft-kind" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option></select></div>
+                <div class="field"><label for="model-draft-kind">类型</label><select id="model-draft-kind" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option><option value="tts">语音</option></select></div>
                 <div class="field"><label for="model-draft-protocol">协议/接口形态</label><select id="model-draft-protocol" v-model="draft.apiProtocol" @change="applyProtocol(draft.apiProtocol ?? defaultApiProtocol(draft.kind))"><option v-for="option in protocolOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
                 <div class="field"><label for="model-draft-endpoint">上游 BASE_URL</label><input id="model-draft-endpoint" v-model="draft.endpoint" placeholder="https://your-relay.example.com" /></div>
                 <div class="field"><label for="model-draft-api-path">接口路径</label><input id="model-draft-api-path" v-model="draft.apiPath" placeholder="v1/images/generations" /></div>
@@ -577,9 +631,9 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
                   <input
                     v-model="draft.isPrimary"
                     type="checkbox"
-                    :aria-label="draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型'"
+                    :aria-label="setPrimaryLabel(draft.kind)"
                   />
-                  {{ draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型' }}
+                  {{ setPrimaryLabel(draft.kind) }}
                 </label>
               </div>
               <div class="btn-row">
@@ -600,7 +654,7 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
           </div>
           <div class="grid grid-2">
             <div class="field"><label for="model-draft-name-new-image">模型名称</label><input id="model-draft-name-new-image" v-model="draft.name" /></div>
-            <div class="field"><label for="model-draft-kind-new-image">类型</label><select id="model-draft-kind-new-image" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option></select></div>
+            <div class="field"><label for="model-draft-kind-new-image">类型</label><select id="model-draft-kind-new-image" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option><option value="tts">语音</option></select></div>
             <div class="field"><label for="model-draft-protocol-new-image">协议/接口形态</label><select id="model-draft-protocol-new-image" v-model="draft.apiProtocol" @change="applyProtocol(draft.apiProtocol ?? defaultApiProtocol(draft.kind))"><option v-for="option in protocolOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
             <div class="field"><label for="model-draft-endpoint-new-image">上游 BASE_URL</label><input id="model-draft-endpoint-new-image" v-model="draft.endpoint" placeholder="https://your-relay.example.com" /></div>
             <div class="field"><label for="model-draft-api-path-new-image">接口路径</label><input id="model-draft-api-path-new-image" v-model="draft.apiPath" placeholder="v1/images/generations" /></div>
@@ -611,9 +665,9 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
               <input
                 v-model="draft.isPrimary"
                 type="checkbox"
-                :aria-label="draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型'"
+                :aria-label="setPrimaryLabel(draft.kind)"
               />
-              {{ draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型' }}
+              {{ setPrimaryLabel(draft.kind) }}
             </label>
           </div>
           <div class="btn-row">
@@ -698,7 +752,7 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
               </div>
               <div class="grid grid-2">
                 <div class="field"><label for="model-draft-name-text">模型名称</label><input id="model-draft-name-text" v-model="draft.name" /></div>
-                <div class="field"><label for="model-draft-kind-text">类型</label><select id="model-draft-kind-text" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option></select></div>
+                <div class="field"><label for="model-draft-kind-text">类型</label><select id="model-draft-kind-text" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option><option value="tts">语音</option></select></div>
                 <div class="field"><label for="model-draft-protocol-text">协议/接口形态</label><select id="model-draft-protocol-text" v-model="draft.apiProtocol" @change="applyProtocol(draft.apiProtocol ?? defaultApiProtocol(draft.kind))"><option v-for="option in protocolOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
                 <div class="field"><label for="model-draft-endpoint-text">上游 BASE_URL</label><input id="model-draft-endpoint-text" v-model="draft.endpoint" placeholder="https://your-relay.example.com" /></div>
                 <div class="field"><label for="model-draft-api-path-text">接口路径</label><input id="model-draft-api-path-text" v-model="draft.apiPath" placeholder="v1/chat/completions" /></div>
@@ -709,9 +763,9 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
                   <input
                     v-model="draft.isPrimary"
                     type="checkbox"
-                    :aria-label="draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型'"
+                    :aria-label="setPrimaryLabel(draft.kind)"
                   />
-                  {{ draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型' }}
+                  {{ setPrimaryLabel(draft.kind) }}
                 </label>
               </div>
               <div class="btn-row">
@@ -736,7 +790,7 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
           </div>
           <div class="grid grid-2">
             <div class="field"><label for="model-draft-name-new-text">模型名称</label><input id="model-draft-name-new-text" v-model="draft.name" /></div>
-            <div class="field"><label for="model-draft-kind-new-text">类型</label><select id="model-draft-kind-new-text" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option></select></div>
+            <div class="field"><label for="model-draft-kind-new-text">类型</label><select id="model-draft-kind-new-text" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option><option value="tts">语音</option></select></div>
             <div class="field"><label for="model-draft-protocol-new-text">协议/接口形态</label><select id="model-draft-protocol-new-text" v-model="draft.apiProtocol" @change="applyProtocol(draft.apiProtocol ?? defaultApiProtocol(draft.kind))"><option v-for="option in protocolOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
             <div class="field"><label for="model-draft-endpoint-new-text">上游 BASE_URL</label><input id="model-draft-endpoint-new-text" v-model="draft.endpoint" placeholder="https://your-relay.example.com" /></div>
             <div class="field"><label for="model-draft-api-path-new-text">接口路径</label><input id="model-draft-api-path-new-text" v-model="draft.apiPath" placeholder="v1/chat/completions" /></div>
@@ -747,9 +801,9 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
               <input
                 v-model="draft.isPrimary"
                 type="checkbox"
-                :aria-label="draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型'"
+                :aria-label="setPrimaryLabel(draft.kind)"
               />
-              {{ draft.kind === 'text' ? '设为主文本模型' : '设为主图像模型' }}
+              {{ setPrimaryLabel(draft.kind) }}
             </label>
           </div>
           <div class="btn-row">
@@ -757,6 +811,113 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
             <button class="btn-primary" type="button" @click="saveDraft">保存模型</button>
           </div>
         </div>
+      </div>
+
+      <div class="settings-section-block">
+        <div class="settings-section-title">
+          语音模型
+          <span class="count">{{ store.ttsModels.length }} 已配置</span>
+        </div>
+        <div class="stack">
+          <article v-for="model in store.ttsModels" :key="model.id" class="model-card" data-testid="tts-model-card">
+            <div class="model-card-head">
+              <div class="model-card-heading">
+                <h3>
+                  <span class="dot" />
+                  {{ model.name }}
+                </h3>
+                <p class="muted">{{ model.endpoint || '未配置 API 地址' }}</p>
+              </div>
+              <div class="model-card-badges">
+                <span v-if="model.isPrimary" class="primary-badge">
+                  <Star :size="12" fill="currentColor" />
+                  主模型
+                </span>
+                <button
+                  v-else
+                  class="set-primary-btn"
+                  type="button"
+                  @click="store.setPrimaryTtsModel(model.id)"
+                >
+                  设为主模型
+                </button>
+                <span class="status-pill">
+                  <span class="status-dot" :class="{ warn: modelStatusMeta(model).tone === 'warn', error: modelStatusMeta(model).tone === 'error' }" />
+                  {{ modelStatusMeta(model).label }}
+                </span>
+              </div>
+            </div>
+            <div class="model-card-body">
+              <div class="model-fields">
+                <div class="field">
+                  <label>{{ modelIdLabel(model) }}</label>
+                  <div class="field-value">{{ model.model || `未设置${modelIdLabel(model)}` }}</div>
+                </div>
+                <div class="field">
+                  <label>Provider</label>
+                  <div class="field-value">{{ model.provider }}</div>
+                </div>
+                <div class="field">
+                  <label>{{ apiKeyLabel(model) }}</label>
+                  <div class="field-value">{{ model.apiKey ? '已填写' : '未填写' }}</div>
+                </div>
+              </div>
+              <div class="model-actions">
+                <div class="btn-row">
+                  <button class="btn-soft btn-sm" type="button" @click="editModel(model)">编辑</button>
+                  <button
+                    class="btn-soft btn-sm model-test-button"
+                    :class="{ loading: isModelTesting(model.id) }"
+                    type="button"
+                    :disabled="isModelTesting(model.id)"
+                    :aria-busy="isModelTesting(model.id)"
+                    @click="testModelConnection(model.id)"
+                  >
+                    <LoaderCircle v-if="isModelTesting(model.id)" class="spin-icon" :size="14" />
+                    <TestTube2 v-else :size="14" />
+                    {{ isModelTesting(model.id) ? '检测中' : '检测连接' }}
+                  </button>
+                  <button class="btn-danger btn-sm" type="button" @click="removeModelWithConfirmation(model)">删除</button>
+                </div>
+              </div>
+            </div>
+            <div v-if="editingModelId === model.id" class="editor-card inline-editor" data-testid="model-editor">
+              <div class="inline-editor-head">
+                <h3>编辑 {{ model.name }}</h3>
+                <button class="btn-soft btn-sm" type="button" @click="closeModelEditor">取消</button>
+              </div>
+              <div class="grid grid-2">
+                <div class="field"><label :for="`model-draft-name-tts-${model.id}`">模型名称</label><input :id="`model-draft-name-tts-${model.id}`" v-model="draft.name" /></div>
+                <div class="field"><label :for="`model-draft-kind-tts-${model.id}`">类型</label><select :id="`model-draft-kind-tts-${model.id}`" v-model="draft.kind" @change="applyDraftKind(draft.kind)"><option value="image">图像</option><option value="text">文本</option><option value="tts">语音</option></select></div>
+                <div class="field"><label :for="`model-draft-protocol-tts-${model.id}`">协议/接口形态</label><select :id="`model-draft-protocol-tts-${model.id}`" v-model="draft.apiProtocol" @change="applyProtocol(draft.apiProtocol ?? defaultApiProtocol(draft.kind))"><option v-for="option in protocolOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+                <div class="field"><label :for="`model-draft-endpoint-tts-${model.id}`">上游 BASE_URL</label><input :id="`model-draft-endpoint-tts-${model.id}`" v-model="draft.endpoint" placeholder="https://your-relay.example.com" /></div>
+                <div class="field"><label :for="`model-draft-api-path-tts-${model.id}`">接口路径</label><input :id="`model-draft-api-path-tts-${model.id}`" v-model="draft.apiPath" placeholder="v1/audio/speech" /></div>
+                <div class="field"><label :for="`model-draft-id-tts-${model.id}`">{{ modelIdLabel(draft) }}</label><input :id="`model-draft-id-tts-${model.id}`" v-model="draft.model" :placeholder="modelIdPlaceholder(draft)" /></div>
+                <div class="field"><label :for="`model-draft-api-key-tts-${model.id}`">{{ apiKeyLabel(draft) }}</label><input :id="`model-draft-api-key-tts-${model.id}`" v-model="draft.apiKey" type="password" placeholder="sk-..." /></div>
+                <label class="toggle-line">
+                  <input
+                    v-model="draft.isPrimary"
+                    type="checkbox"
+                    :aria-label="setPrimaryLabel(draft.kind)"
+                  />
+                  {{ setPrimaryLabel(draft.kind) }}
+                </label>
+              </div>
+              <div class="btn-row">
+                <button v-if="draft.apiProtocol !== 'mgtv-storyboard'" class="btn-soft" type="button" @click="openModelCatalog">获取模型</button>
+                <button class="btn-primary" type="button" @click="saveDraft">保存模型</button>
+              </div>
+            </div>
+          </article>
+          <div v-if="!store.ttsModels.length" class="empty-state">
+            <strong>暂无语音模型</strong>
+            <span>添加一个 TTS 模型后，未来的语音合成功能会走远端模型。</span>
+          </div>
+        </div>
+        <button class="btn-soft add-row-btn" type="button" @click="newModel('tts')">
+          <Plus :size="14" />
+          新增语音模型
+        </button>
       </div>
     </section>
 
@@ -1027,13 +1188,23 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
             <span>{{ modelCatalogLoading ? '正在获取模型列表...' : modelCatalogNotice || '选择一个模型填入当前草稿。' }}</span>
             <button class="btn-soft btn-sm" type="button" :disabled="modelCatalogLoading" @click="openModelCatalog">刷新</button>
           </div>
+          <p v-if="!modelCatalogLoading && modelCatalogCount.total > 0" class="muted">
+            共 {{ modelCatalogCount.total }} 个模型
+            <template v-if="modelCatalogCount.match > 0 && modelCatalogCount.other > 0">
+              · {{ modelCatalogCount.match }} 个匹配「{{ modelKindLabel(draft.kind) }}」
+              · {{ modelCatalogCount.other }} 个其他类型
+            </template>
+          </p>
           <input v-model="modelCatalogSearch" class="model-fetch-search" placeholder="搜索模型…" />
           <div class="model-fetch-grid">
             <button
               v-for="item in filteredModelCatalog"
               :key="`${item.source}:${item.model}`"
               class="model-fetch-item"
-              :class="{ selected: selectedCatalogModelId === item.model }"
+              :class="{
+                selected: selectedCatalogModelId === item.model,
+                'model-fetch-incompatible': item.kind !== 'unknown' && item.kind !== draft.kind,
+              }"
               type="button"
               @click="selectedCatalogModelId = item.model"
             >
@@ -1041,15 +1212,29 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
               <span class="mf-info">
                 <strong class="mf-name">{{ item.name }}</strong>
                 <span class="mf-id">{{ item.model }}</span>
-                <span class="mf-source">接口返回</span>
+                <span class="mf-kind" :class="`mf-kind-${item.kind}`">{{ modelKindLabel(item.kind) }}</span>
+                <span
+                  v-if="item.kind !== 'unknown' && item.kind !== draft.kind"
+                  class="mf-hint"
+                >切换到「{{ modelKindLabel(item.kind) }}」模式以使用</span>
               </span>
             </button>
           </div>
           <p v-if="!filteredModelCatalog.length && !modelCatalogLoading" class="muted">没有匹配的模型。</p>
         </div>
+        <p v-if="selectedCatalogIncompatible" class="muted model-catalog-blocked">
+          当前在配置「{{ modelKindLabel(draft.kind) }}」模型，所选模型是「{{ modelKindLabel(selectedCatalogKind) }}」类型，请先切换类型再确认。
+        </p>
         <div class="modal-foot">
           <button class="btn-soft" type="button" @click="modelCatalogOpen = false">取消</button>
-          <button class="btn-primary" type="button" @click="applyCatalogModel">确认选择</button>
+          <button
+            class="btn-primary"
+            type="button"
+            :disabled="!selectedCatalogModelId || selectedCatalogIncompatible"
+            @click="applyCatalogModel"
+          >
+            确认选择
+          </button>
         </div>
       </div>
     </div>
@@ -1617,14 +1802,60 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
   font-size: 11px;
 }
 
-.mf-source {
+.mf-kind {
   width: max-content;
-  padding: 2px 6px;
+  padding: 2px 8px;
   color: var(--accent);
   background: var(--accent-soft);
   border: 1px solid var(--border-soft);
   border-radius: 999px;
   font-size: 10px;
+  font-weight: 600;
+}
+
+.mf-kind-text {
+  color: #5b8fb9;
+  background: rgba(87, 166, 255, 0.12);
+  border-color: rgba(87, 166, 255, 0.32);
+}
+
+.mf-kind-tts {
+  color: #b48fb9;
+  background: rgba(199, 140, 230, 0.14);
+  border-color: rgba(199, 140, 230, 0.34);
+}
+
+.mf-kind-unknown {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+}
+
+.mf-hint {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.model-fetch-incompatible {
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.model-fetch-incompatible.selected {
+  opacity: 1;
+}
+
+.model-catalog-blocked {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--warn, #f0b400);
+  background: rgba(240, 180, 0, 0.08);
+  border: 1px solid rgba(240, 180, 0, 0.3);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .cover-settings-list {

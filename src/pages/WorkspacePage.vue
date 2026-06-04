@@ -18,7 +18,7 @@ import {
   Upload,
   WandSparkles,
 } from 'lucide-vue-next'
-import { aspectPresets, defaultToolForMode, findToolEntry, getAvailableIcoExportSizes, getExportFormatOptions, iconExportFormatOptions, iconSizePresets, modeLabels, stylePresets, threeDStylePresets, toolGroups } from '@/data/catalog'
+import { aspectPresets, defaultIconProjectName, defaultToolForMode, findToolEntry, getAvailableIcoExportSizes, getExportFormatOptions, iconExportFormatOptions, iconSizePresets, modeLabels, stylePresets, threeDStylePresets, toolGroups } from '@/data/catalog'
 import type { IconExportKind } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { containsChineseText } from '@/domain/language'
@@ -70,10 +70,10 @@ const iconExportKind = ref<IconExportKind>('ico')
 const exportScale = ref(1)
 const selectedIcoExportSizes = ref<number[]>([])
 const isIconExport = computed(() => (actionTask.value?.mode ?? mode.value) === 'icon')
+const iconProjectName = ref(defaultIconProjectName())
 const iconExportButtonLabel = computed(() => {
   if (!isIconExport.value) return '导出图片'
-  const labels: Record<IconExportKind, string> = { png: '导出 PNG', ico: '导出 ICO', zip: '导出 ZIP' }
-  return labels[iconExportKind.value]
+  return iconExportKind.value === 'png' ? '导出 PNG' : '导出 ICO'
 })
 const extraOptions = reactive<Record<string, string | number>>({})
 const retryNotice = ref('')
@@ -99,7 +99,9 @@ const workspaceTitle = computed(() => activeTool.value?.title ?? `${currentModeL
 const workspaceSubtitle = computed(() => activeTool.value?.subtitle ?? modeDescriptionFallback.value)
 const activeToolControls = computed(() => activeTool.value?.extraControls ?? [])
 const activeToolTips = computed(() => activeTool.value?.tips ?? [])
-const referenceRequired = computed(() => activeTool.value?.referenceRequired ?? mode.value === 'img2img')
+// 参考图是否必填：仅在工具显式声明 referenceRequired: true 时必填
+// 工具名带「去/换/修」的对象类工具需要参考图；「转换/增强/卡通化」类工具可纯提示词创作
+const referenceRequired = computed(() => Boolean(activeTool.value?.referenceRequired))
 const recommendedSizeLabel = computed(() => {
   const tool = activeTool.value
   if (!tool?.recommendedSize) return tool?.recommendedAspect ?? ''
@@ -377,8 +379,8 @@ function applyModeDefaults(next: GenerationMode, useDefaultSize = true): void {
     return
   }
 
-  if (next === 'icon') {
-    // ICON 模式始终使用 1024x1024 母图尺寸，导出时再缩放到各规格
+  if (next === 'icon' && useDefaultSize) {
+    // ICON 模式默认使用 1024x1024 母图尺寸，导出时再缩放到各规格
     width.value = 1024
     height.value = 1024
   }
@@ -802,15 +804,9 @@ async function downloadSelected(): Promise<void> {
   }
   if (isIconExport.value) {
     if (iconExportKind.value === 'png') {
-      await store.downloadAsset(asset, 'png', exportScale.value, actionTask.value ?? undefined)
-    } else if (iconExportKind.value === 'ico') {
-      if (!selectedIcoExportSizes.value.length) {
-        store.notify('请至少勾选一个导出尺寸', 'error')
-        return
-      }
-      await store.downloadAsset(asset, 'ico', 1, actionTask.value ?? undefined, { iconSizes: selectedIcoExportSizes.value })
+      await store.downloadAsset(asset, 'png', exportScale.value, actionTask.value ?? undefined, { customTitle: iconProjectName.value })
     }
-    // 'zip' 由 downloadIconBundle 单独处理
+    // ICO 走 downloadIconBundle（统一打包 ZIP）
     exportOpen.value = false
     return
   }
@@ -835,6 +831,7 @@ function openExportDialog(): void {
   }
   if (isIconExport.value) {
     iconExportKind.value = 'ico'
+    iconProjectName.value = defaultIconProjectName()
   } else {
     const options = availableExportFormatOptions.value
     exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
@@ -856,8 +853,7 @@ async function downloadIconBundle(): Promise<void> {
     store.notify('请至少选择一个导出尺寸', 'error')
     return
   }
-  const bundleFormat = iconExportKind.value === 'ico' ? 'ico' : 'png'
-  await store.downloadIconBundle(asset, selectedIcoExportSizes.value, bundleFormat)
+  await store.downloadIconBundle(asset, selectedIcoExportSizes.value, iconProjectName.value)
   exportOpen.value = false
 }
 
@@ -1438,7 +1434,11 @@ async function chooseWorkspaceExportDir(): Promise<void> {
             </select>
           </div>
           <template v-if="isIconExport">
-            <p class="muted">PNG 导出 1024×1024 母图；ICO 将选中尺寸打包为一个图标文件；ZIP 将每个尺寸导出为独立 PNG。</p>
+            <div class="field">
+              <label for="workspace-icon-project-name">项目名称</label>
+              <input id="workspace-icon-project-name" v-model="iconProjectName" placeholder="默认使用时间戳命名" />
+              <p class="field-note">PNG 导出文件名为 <code>{{ iconProjectName || defaultIconProjectName() }}.png</code>；ICO 每个尺寸导出为 <code>{{ iconProjectName || defaultIconProjectName() }}_尺寸x尺寸.ico</code>，全部打包为一个 ZIP。</p>
+            </div>
             <div v-if="iconExportKind !== 'png'" class="field">
               <label>导出尺寸</label>
               <div class="ico-size-checks">
@@ -1466,7 +1466,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
           </template>
         </div>
         <div class="modal-foot">
-          <button class="btn-primary" type="button" @click="isIconExport && iconExportKind === 'zip' ? downloadIconBundle() : downloadSelected()">{{ iconExportButtonLabel }}</button>
+          <button class="btn-primary" type="button" @click="isIconExport && iconExportKind === 'ico' ? downloadIconBundle() : downloadSelected()">{{ iconExportButtonLabel }}</button>
         </div>
       </div>
     </div>

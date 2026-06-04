@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Download, Eye, FolderOpen, RotateCcw, Search, Star, Trash2, ZoomIn } from 'lucide-vue-next'
-import { getAvailableIcoExportSizes, getExportFormatOptions, iconExportFormatOptions, iconSizePresets, modeLabels } from '@/data/catalog'
+import { getAvailableIcoExportSizes, getExportFormatOptions, defaultIconProjectName, iconExportFormatOptions, iconSizePresets, modeLabels } from '@/data/catalog'
 import type { IconExportKind } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
@@ -23,6 +23,7 @@ const store = useAppStore()
 const search = ref('')
 const filter = ref<'all' | GenerationMode>('all')
 const sortMode = ref<'newest' | 'oldest' | 'model'>('newest')
+const favoritesOnly = ref(false)
 const visibleCount = ref(8)
 const selected = ref<{ task: GenerationTask; asset: GeneratedAsset } | null>(null)
 const exportOpen = ref<'selected' | 'all' | null>(null)
@@ -32,11 +33,12 @@ const viewerOpen = ref(false)
 const viewerZoom = ref(1)
 const selectedIcoExportSizes = ref<number[]>([])
 const iconExportKind = ref<IconExportKind>('ico')
+const iconProjectName = ref(defaultIconProjectName())
 const isIconSelected = computed(() => selected.value?.task.mode === 'icon')
 const historyExportButtonLabel = computed(() => {
   if (exportOpen.value === 'all') return '确认导出全部'
   if (isIconSelected.value) {
-    const labels: Record<IconExportKind, string> = { png: '导出 PNG', ico: '导出 ICO', zip: '导出 ZIP' }
+    const labels: Record<IconExportKind, string> = { png: '导出 PNG', ico: '导出 ICO' }
     return labels[iconExportKind.value]
   }
   return '确认导出'
@@ -72,6 +74,8 @@ const filteredTasks = computed(() => {
   const keyword = search.value.trim().toLowerCase()
   return store.historyTasks.filter((task) => {
     if (filter.value !== 'all' && task.mode !== filter.value) return false
+    // 只看收藏模式：要求 task 内至少有 1 张 asset.isFavorite 的图片
+    if (favoritesOnly.value && !task.assets.some((asset) => asset.isFavorite)) return false
     if (!keyword) return true
     return `${task.prompt} ${task.modelId} ${task.style}`.toLowerCase().includes(keyword)
   })
@@ -88,15 +92,28 @@ const sortedTasks = computed(() => {
   })
 })
 
-const visibleEntries = computed(() => sortedTasks.value
-  .flatMap((task) => task.assets.map((asset) => ({ task, asset })))
-  .slice(0, visibleCount.value))
-const hasMoreTasks = computed(() => visibleEntries.value.length < sortedTasks.value.reduce((sum, task) => sum + task.assets.length, 0))
+const visibleEntries = computed(() => {
+  // "只看收藏" 模式：只显示被收藏的 asset，不显示未收藏的
+  return sortedTasks.value
+    .flatMap((task) => task.assets
+      .filter((asset) => favoritesOnly.value ? asset.isFavorite : true)
+      .map((asset) => ({ task, asset })))
+    .slice(0, visibleCount.value)
+})
+const hasMoreTasks = computed(() => {
+  const total = sortedTasks.value.reduce((sum, task) => {
+    const count = favoritesOnly.value
+      ? task.assets.filter((asset) => asset.isFavorite).length
+      : task.assets.length
+    return sum + count
+  }, 0)
+  return visibleEntries.value.length < total
+})
 
 const stats = computed(() => ({
   total: store.historyAssetCount,
   today: store.historyTasks.filter((task) => new Date(task.createdAt).toDateString() === new Date().toDateString()).reduce((sum, task) => sum + task.assets.length, 0),
-  favorites: store.favoriteTasks.length,
+  favorites: store.favoriteAssets.length,
 }))
 
 watch([search, filter, sortMode], () => {
@@ -239,6 +256,7 @@ async function deleteAsset(task: GenerationTask, asset: GeneratedAsset, closeDet
 function openHistoryExport(): void {
   if (isIconSelected.value) {
     iconExportKind.value = 'ico'
+    iconProjectName.value = defaultIconProjectName()
   } else {
     const options = selected.value ? getSelectedExportFormatOptions(selected.value) : getExportFormatOptions()
     exportFormat.value = options.some((option) => option.value === store.settings.defaultExportFormat)
@@ -274,16 +292,14 @@ async function chooseHistoryExportDir(): Promise<void> {
 async function confirmHistoryExport(): Promise<void> {
   // ICON 资产使用独立的格式体系
   if (isIconSelected.value && exportOpen.value === 'selected') {
-    if ((iconExportKind.value === 'ico' || iconExportKind.value === 'zip') && !selectedIcoExportSizes.value.length) {
+    if (iconExportKind.value === 'ico' && !selectedIcoExportSizes.value.length) {
       store.notify('请至少勾选一个导出尺寸', 'error')
       return
     }
     if (iconExportKind.value === 'png') {
-      await store.downloadAsset(selected.value!.asset, 'png', 1, selected.value!.task)
+      await store.downloadAsset(selected.value!.asset, 'png', 1, selected.value!.task, { customTitle: iconProjectName.value })
     } else if (iconExportKind.value === 'ico') {
-      await store.downloadIconBundle(selected.value!.asset, selectedIcoExportSizes.value, 'ico')
-    } else if (iconExportKind.value === 'zip') {
-      await store.downloadIconBundle(selected.value!.asset, selectedIcoExportSizes.value, 'png')
+      await store.downloadIconBundle(selected.value!.asset, selectedIcoExportSizes.value, iconProjectName.value)
     }
     exportOpen.value = null
     return
@@ -360,6 +376,11 @@ async function confirmHistoryExport(): Promise<void> {
           <option value="model">按模型</option>
         </select>
       </div>
+      <label class="favorites-toggle" :class="{ active: favoritesOnly }">
+        <input v-model="favoritesOnly" type="checkbox" />
+        <Star :size="14" :fill="favoritesOnly ? 'currentColor' : 'none'" />
+        只看收藏
+      </label>
     </div>
 
     <div class="stats-row">
@@ -370,16 +391,16 @@ async function confirmHistoryExport(): Promise<void> {
 
     <div v-if="sortedTasks.length">
       <div class="image-grid">
-        <article v-for="entry in visibleEntries" :key="entry.asset.id" class="history-card">
+        <article v-for="entry in visibleEntries" :key="entry.asset.id" class="history-card" :class="{ 'history-card-fav': entry.asset.isFavorite }">
           <button
             class="favorite-button"
-            :class="{ active: entry.task.isFavorite }"
+            :class="{ active: entry.asset.isFavorite }"
             type="button"
-            :aria-label="entry.task.isFavorite ? '取消收藏' : '收藏'"
-            :title="`${entry.task.isFavorite ? '取消收藏' : '收藏'} ${entry.task.prompt}`"
-            @click="store.toggleTaskFavorite(entry.task.id)"
+            :aria-label="entry.asset.isFavorite ? '取消收藏' : '收藏'"
+            :title="`${entry.asset.isFavorite ? '取消收藏' : '收藏'} ${entry.task.prompt}`"
+            @click="store.toggleAssetFavorite(entry.asset.id)"
           >
-            <Star :size="15" :fill="entry.task.isFavorite ? 'currentColor' : 'none'" />
+            <Star :size="15" :fill="entry.asset.isFavorite ? 'currentColor' : 'none'" />
           </button>
           <button
             class="delete-button"
@@ -478,10 +499,10 @@ async function confirmHistoryExport(): Promise<void> {
           <button
             class="btn-soft"
             type="button"
-            @click="store.toggleTaskFavorite(selected.task.id)"
+            @click="store.toggleAssetFavorite(selected.asset.id)"
           >
-            <Star :size="15" :fill="selected.task.isFavorite ? 'currentColor' : 'none'" />
-            {{ selected.task.isFavorite ? '取消收藏' : '收藏' }}
+            <Star :size="15" :fill="selected.asset.isFavorite ? 'currentColor' : 'none'" />
+            {{ selected.asset.isFavorite ? '取消收藏' : '收藏' }}
           </button>
           <button class="btn-soft" type="button" @click="reusePrompt(selected.task)">
             <Eye :size="15" />
@@ -556,7 +577,11 @@ async function confirmHistoryExport(): Promise<void> {
             </select>
           </div>
           <template v-if="isIconSelected && exportOpen === 'selected'">
-            <p class="muted">PNG 导出母图；ICO 将选中尺寸打包为一个图标文件；ZIP 将每个尺寸导出为独立 PNG。</p>
+            <div class="field">
+              <label for="history-icon-project-name">项目名称</label>
+              <input id="history-icon-project-name" v-model="iconProjectName" placeholder="默认使用时间戳命名" />
+            </div>
+            <p class="muted">PNG 导出文件名为 <code>{{ iconProjectName || defaultIconProjectName() }}.png</code>；ICO 每个尺寸导出为 <code>{{ iconProjectName || defaultIconProjectName() }}_尺寸x尺寸.ico</code>，全部打包为一个 ZIP。</p>
             <div v-if="iconExportKind !== 'png'" class="field">
               <label>导出尺寸</label>
               <div class="ico-size-checks">
@@ -588,12 +613,12 @@ async function confirmHistoryExport(): Promise<void> {
               <div class="ico-size-checks">
                 <label v-for="preset in availableIcoExportSizes" :key="preset.id" class="ico-size-check">
                   <input
-                    :aria-label="`ICO 尺寸 ${preset.name}`"
+                    :aria-label="`导出尺寸 ${preset.name}`"
                     :value="preset.width"
                     v-model="selectedIcoExportSizes"
                     type="checkbox"
                   />
-                  <span>{{ preset.name }}</span>
+                  <span>{{ preset.name }}<small v-if="preset.hint"> · {{ preset.hint }}</small></span>
                 </label>
               </div>
             </div>
@@ -695,6 +720,35 @@ async function confirmHistoryExport(): Promise<void> {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.favorites-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.favorites-toggle input {
+  display: none;
+}
+
+.favorites-toggle.active {
+  color: var(--warn, #f0b400);
+  border-color: var(--warn, #f0b400);
+  background: rgba(240, 180, 0, 0.08);
+}
+
+.history-card-fav {
+  border-color: var(--warn, #f0b400);
+  box-shadow: 0 0 0 1px var(--warn, #f0b400);
 }
 
 .load-more-row {
