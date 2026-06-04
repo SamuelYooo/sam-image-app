@@ -16,7 +16,7 @@ SamImage 3.0 是一个面向创作者的本地 AI 图像工具，覆盖从提示
 ![工具库](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192131438.png)
 
 ### 资产库
-![资产库](docs/screenshots/history.png)
+![资产库](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192316579.png)
 
 ### 操作记录
 ![操作记录](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192135664.png)
