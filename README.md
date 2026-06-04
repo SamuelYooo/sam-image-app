@@ -7,25 +7,25 @@ SamImage 3.0 是一个面向创作者的本地 AI 图像工具，覆盖从提示
 ## 系统截图
 
 ### 首页
-![首页](docs/screenshots/home.png)
+![首页](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192120264.png)
 
 ### 工作台
-![工作台](docs/screenshots/workspace.png)
+![工作台](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192127052.png)
 
 ### 工具库
-![工具库](docs/screenshots/tools.png)
+![工具库](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192131438.png)
 
 ### 资产库
 ![资产库](docs/screenshots/history.png)
 
 ### 操作记录
-![操作记录](docs/screenshots/operations.png)
+![操作记录](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192135664.png)
 
 ### 设置 - 模型配置
-![设置-模型配置](docs/screenshots/settings-models.png)
+![设置-模型配置](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192139218.png)
 
 ### 关于帮助
-![关于帮助](docs/screenshots/about.png)
+![关于帮助](https://gitee.com/SamuelYou/pic/raw/master/images/20260604192145070.png)
 
 > 截图采集：`node scripts/capture-screenshots.cjs`（需要先启动 `npm run dev`）
 
