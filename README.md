@@ -243,9 +243,9 @@ SamImage 3.0 通过「协议自适应」层与主流生图大模型对接。在�
 
 | 中转站 | BASE_URL 示例 | 特点 |
 |---|---|---|
-| one-api / new-api（自建） | `https://your-relay.example.com` | 自托管，最稳定 |
-| freeapi.dgbmc.top | `https://freeapi.dgbmc.top` | 国内访问快 |
-| API2D | `https://api.api2d.net` | 支持 GPT-Image-2、Grok、SD、Midjourney 等 |
+|        |               |      |
+|        |               |      |
+|        |               |      |
 
 在 SamImage 设置中：
 1. 选择「OpenAI 通用标准」或「OpenAI Images」协议
