@@ -8,6 +8,7 @@ import {
   Settings,
   Wrench,
 } from 'lucide-vue-next'
+import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -102,6 +103,9 @@ onBeforeUnmount(() => {
           <strong>SamImage 3.0</strong>
           <span>/</span>
           <span>{{ route.name }}</span>
+        </div>
+        <div class="topbar-actions">
+          <ThemeSwitcher />
         </div>
       </div>
 

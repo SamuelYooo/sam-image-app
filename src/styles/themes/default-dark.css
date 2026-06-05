@@ -1,0 +1,55 @@
+html.theme-default.dark {
+  --bg: #080b12;
+  --bg-mid: #0d1220;
+  --bg-glow-1: rgba(87, 166, 255, 0.18);
+  --bg-glow-2: rgba(157, 124, 255, 0.14);
+  --bg-glow-3: rgba(46, 232, 200, 0.10);
+  --surface: rgba(18, 24, 38, 0.86);
+  --surface-2: rgba(25, 33, 50, 0.82);
+  --surface-3: rgba(36, 46, 68, 0.78);
+  --fg: #edf3ff;
+  --fg-2: #b9c6db;
+  --muted: #7d8da8;
+  --border: rgba(130, 154, 190, 0.18);
+  --border-soft: rgba(130, 154, 190, 0.10);
+  --border-glow: rgba(87, 166, 255, 0.42);
+  --accent: #57a6ff;
+  --accent-on: #06111f;
+  --accent-soft: rgba(87, 166, 255, 0.13);
+  --accent-2: #9d7cff;
+  --accent-3: #2ee8c8;
+  --success: #42d392;
+  --warn: #f6c453;
+  --danger: #ff6b7a;
+  --elev-raised: 0 18px 56px rgba(0, 0, 0, 0.44), 0 0 0 1px var(--border);
+  --focus-ring: 0 0 0 3px rgba(87, 166, 255, 0.34);
+  --tint: rgba(6, 10, 18, 0.34);
+  --tint-strong: rgba(6, 10, 18, 0.54);
+  --decor-sweep: rgba(255, 255, 255, 0.18);
+  --decor-line: rgba(255, 255, 255, 0.08);
+  --decor-blend: screen;
+  --decor-border: rgba(255, 255, 255, 0.24);
+  --decor-glow: linear-gradient(145deg, rgba(255, 255, 255, 0.24), rgba(87, 166, 255, 0.18));
+
+  /* component tokens */
+  --sidebar-bg: linear-gradient(180deg, rgba(11, 15, 25, 0.82), rgba(14, 19, 31, 0.68));
+  --topbar-bg: rgba(8, 11, 18, 0.34);
+  --hover-bg: rgba(255, 255, 255, 0.055);
+  --nav-active-bg: linear-gradient(180deg, rgba(87, 166, 255, 0.22), rgba(87, 166, 255, 0.10));
+  --nav-active-shadow: inset 0 1px 0 rgba(255, 255, 255, .13), 0 8px 20px rgba(87, 166, 255, .12);
+  --badge-bg: rgba(255, 255, 255, 0.052);
+  --btn-ghost-bg: rgba(255, 255, 255, 0.04);
+  --btn-primary-border: rgba(255, 255, 255, 0.18);
+  --btn-primary-shadow: 0 12px 28px rgba(87, 166, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, .42);
+  --btn-primary-shadow-hover: 0 16px 34px rgba(87, 166, 255, 0.32), inset 0 1px 0 rgba(255, 255, 255, .48);
+  --btn-danger-bg: rgba(255, 107, 122, 0.09);
+  --btn-danger-border: rgba(255, 107, 122, 0.32);
+  --card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.038));
+  --card-shadow: 0 0 0 1px rgba(255, 255, 255, .015);
+  --card-hover-shadow: 0 16px 32px rgba(0, 0, 0, 0.34), 0 0 0 1px var(--border-glow);
+  --input-bg: rgba(6, 10, 18, 0.54);
+  --input-focus-bg: rgba(8, 13, 24, 0.82);
+  --modal-overlay-bg: rgba(4, 8, 16, 0.70);
+  --modal-bg: linear-gradient(180deg, rgba(28, 36, 55, 0.98), rgba(14, 19, 31, 0.98));
+  --toast-bg: rgba(25, 33, 50, 0.96);
+}

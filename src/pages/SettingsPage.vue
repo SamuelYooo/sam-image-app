@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Download, FolderOpen, LoaderCircle, Moon, Plus, RotateCcw, Save, Star, Sun, TestTube2, Trash2, Upload } from 'lucide-vue-next'
+import { Download, FolderOpen, LoaderCircle, Plus, RotateCcw, Save, Star, TestTube2, Trash2, Upload } from 'lucide-vue-next'
 import { exportFormatOptions, stylePresets } from '@/data/catalog'
 import { useAppStore } from '@/stores/app'
 import { pickDirectory } from '@/services/tauri'
@@ -1067,29 +1067,6 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
         <div class="card-body stack">
           <h2>系统设置</h2>
           <div class="field">
-            <label>主题外观</label>
-            <div class="theme-selector">
-              <button
-                class="theme-option"
-                :class="{ active: store.settings.theme === 'light' }"
-                type="button"
-                @click="store.saveSettings({ theme: 'light' })"
-              >
-                <Sun :size="20" />
-                <span>浅色</span>
-              </button>
-              <button
-                class="theme-option"
-                :class="{ active: store.settings.theme === 'dark' }"
-                type="button"
-                @click="store.saveSettings({ theme: 'dark' })"
-              >
-                <Moon :size="20" />
-                <span>深色</span>
-              </button>
-            </div>
-          </div>
-          <div class="field">
             <label for="default-output-dir">默认输出目录</label>
             <div class="directory-picker">
               <input id="default-output-dir" v-model="store.settings.defaultOutputDir" />
@@ -1912,40 +1889,6 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
 
 .add-row-btn {
   justify-self: stretch;
-}
-
-.theme-selector {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.theme-option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 52px;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  color: var(--fg-2);
-  font-size: 14px;
-  font-weight: 600;
-  transition: border-color 160ms, background 160ms, color 160ms, box-shadow 160ms;
-}
-
-.theme-option:hover {
-  border-color: var(--accent);
-  color: var(--fg);
-}
-
-.theme-option.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 @media (max-width: 920px) {

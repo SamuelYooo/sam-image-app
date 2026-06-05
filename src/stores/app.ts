@@ -84,7 +84,6 @@ const defaultState: PersistedState = {
     defaultStyle: '自然',
     autoSaveHistory: true,
     includePromptMetadata: true,
-    theme: 'light',
   },
 }
 
