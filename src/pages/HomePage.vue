@@ -377,7 +377,7 @@ async function chooseRecentExportDir(): Promise<void> {
   justify-content: space-between;
   gap: 12px;
   padding: 11px 14px;
-  background: rgba(6, 10, 18, 0.42);
+  background: var(--tint);
   border-radius: var(--radius-sm);
 }
 
@@ -438,7 +438,7 @@ async function chooseRecentExportDir(): Promise<void> {
 
 .recent-card:hover {
   border-color: var(--accent);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34), 0 0 0 1px var(--border-glow);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border-glow);
   transform: translateY(-2px);
 }
 
@@ -517,7 +517,7 @@ async function chooseRecentExportDir(): Promise<void> {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(6, 10, 18, .42);
+  background: var(--tint);
   line-height: 1.7;
 }
 

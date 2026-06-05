@@ -123,5 +123,5 @@ export interface AppSettings {
   defaultStyle: string
   autoSaveHistory: boolean
   includePromptMetadata: boolean
-  theme: 'dark'
+  theme: 'light' | 'dark'
 }

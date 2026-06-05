@@ -1,13 +1,20 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import AppShell from '@/components/AppShell.vue'
 import { useAppStore } from '@/stores/app'
 
 const store = useAppStore()
 
+function applyTheme(theme: 'light' | 'dark'): void {
+  document.documentElement.dataset.theme = theme
+}
+
 onMounted(() => {
+  applyTheme(store.settings.theme)
   void store.loadPersistedTasks()
 })
+
+watch(() => store.settings.theme, applyTheme)
 </script>
 
 <template>

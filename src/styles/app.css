@@ -1,6 +1,46 @@
 @import "tailwindcss";
 
 :root {
+  /* light theme (default) */
+  --bg: #f5f7fb;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(240, 244, 252, 0.90);
+  --surface-3: rgba(228, 234, 246, 0.88);
+  --fg: #1a2236;
+  --fg-2: #4a5672;
+  --muted: #7c879e;
+  --border: rgba(140, 160, 195, 0.22);
+  --border-soft: rgba(140, 160, 195, 0.12);
+  --border-glow: rgba(66, 133, 244, 0.36);
+  --accent: #3b82f6;
+  --accent-on: #ffffff;
+  --accent-soft: rgba(59, 130, 246, 0.10);
+  --accent-2: #7c5ce0;
+  --accent-3: #0ea5a0;
+  --success: #22c55e;
+  --warn: #e5a520;
+  --danger: #ef4444;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+  --titlebar-h: 0px;
+  --shell-nav-h: 72px;
+  --app-topbar-h: 54px;
+  --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --elev-raised: 0 8px 30px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border);
+  --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.28);
+  --tint: rgba(0, 0, 0, 0.03);
+  --tint-strong: rgba(0, 0, 0, 0.06);
+  --decor-sweep: rgba(0, 0, 0, 0.10);
+  --decor-line: rgba(0, 0, 0, 0.06);
+  --decor-blend: multiply;
+  --decor-border: rgba(0, 0, 0, 0.12);
+  --decor-glow: linear-gradient(145deg, rgba(0, 0, 0, 0.06), var(--accent-soft));
+}
+
+[data-theme="dark"] {
   --bg: #080b12;
   --surface: rgba(18, 24, 38, 0.86);
   --surface-2: rgba(25, 33, 50, 0.82);
@@ -19,17 +59,15 @@
   --success: #42d392;
   --warn: #f6c453;
   --danger: #ff6b7a;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-pill: 999px;
-  --titlebar-h: 0px;
-  --shell-nav-h: 72px;
-  --app-topbar-h: 54px;
-  --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --elev-raised: 0 18px 56px rgba(0, 0, 0, 0.44), 0 0 0 1px var(--border);
   --focus-ring: 0 0 0 3px rgba(87, 166, 255, 0.34);
+  --tint: rgba(6, 10, 18, 0.34);
+  --tint-strong: rgba(6, 10, 18, 0.54);
+  --decor-sweep: rgba(255, 255, 255, 0.18);
+  --decor-line: rgba(255, 255, 255, 0.08);
+  --decor-blend: screen;
+  --decor-border: rgba(255, 255, 255, 0.24);
+  --decor-glow: linear-gradient(145deg, rgba(255, 255, 255, 0.24), rgba(87, 166, 255, 0.18));
 }
 
 *,
@@ -57,12 +95,20 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   background:
+    radial-gradient(circle at 18% 10%, rgba(59, 130, 246, 0.06), transparent 28%),
+    radial-gradient(circle at 82% 8%, rgba(124, 92, 224, 0.05), transparent 30%),
+    radial-gradient(circle at 72% 92%, rgba(14, 165, 160, 0.04), transparent 34%),
+    linear-gradient(135deg, #f0f4fa 0%, #f8fafc 48%, #f0f4fa 100%);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+[data-theme="dark"] body {
+  background:
     radial-gradient(circle at 18% 10%, rgba(87, 166, 255, 0.18), transparent 28%),
     radial-gradient(circle at 82% 8%, rgba(157, 124, 255, 0.14), transparent 30%),
     radial-gradient(circle at 72% 92%, rgba(46, 232, 200, 0.10), transparent 34%),
     linear-gradient(135deg, #070a11 0%, #0d1220 48%, #070a11 100%);
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 button,
@@ -834,4 +880,121 @@ input[type="range"] {
   .ico-size-checks {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Light theme overrides for hardcoded dark values ── */
+
+/* sidebar */
+:root .sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(240, 244, 252, 0.80));
+  border-bottom-color: var(--border);
+}
+
+/* nav hover / active */
+:root .nav-link:hover,
+:root .btn-ghost:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:root .nav-link.active {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.14), rgba(59, 130, 246, 0.06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 4px 12px rgba(59, 130, 246, .10);
+}
+
+/* badges */
+:root .badge,
+:root .chip {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* model status */
+:root .model-status {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+:root .status-pill {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* topbar */
+:root .app-topbar {
+  background: rgba(245, 247, 251, 0.60);
+}
+
+/* buttons */
+:root .btn-soft,
+:root .btn-ghost {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+:root .btn-icon {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:root .btn-primary {
+  color: #ffffff;
+  border-color: rgba(59, 130, 246, 0.30);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.22), inset 0 1px 0 rgba(255, 255, 255, .30);
+}
+
+:root .btn-primary:hover {
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.30), inset 0 1px 0 rgba(255, 255, 255, .36);
+}
+
+:root .btn-danger {
+  background: rgba(239, 68, 68, 0.06);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* cards */
+:root .card,
+:root .tool-card,
+:root .panel {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root .tool-card:hover,
+:root .select-card.active,
+:root .image-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border-glow);
+}
+
+/* inputs */
+:root input:not([type="checkbox"]):not([type="radio"]),
+:root textarea,
+:root select {
+  background: rgba(255, 255, 255, 0.80);
+}
+
+:root input:not([type="checkbox"]):not([type="radio"]):focus,
+:root textarea:focus,
+:root select:focus {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+/* scrollbar */
+:root ::-webkit-scrollbar-thumb {
+  background: rgba(140, 160, 195, 0.28);
+}
+
+/* modal */
+:root .modal-overlay {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+:root .modal {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+}
+
+/* toast */
+:root .toast {
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.10), 0 0 0 1px var(--border);
+}
+
+/* ico size check */
+:root .ico-size-check {
+  background: rgba(0, 0, 0, 0.03);
 }

@@ -777,7 +777,7 @@ async function confirmHistoryExport(): Promise<void> {
 
 .image-card:hover {
   border-color: var(--accent);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34), 0 0 0 1px var(--border-glow);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border-glow);
   transform: translateY(-2px);
 }
 
@@ -791,7 +791,7 @@ async function confirmHistoryExport(): Promise<void> {
   width: 32px;
   height: 32px;
   color: var(--fg-2);
-  background: rgba(6, 10, 18, .76);
+  background: var(--tint-strong);
   border: 1px solid var(--border);
   border-radius: 999px;
   box-shadow: var(--elev-subtle);
@@ -904,7 +904,7 @@ async function confirmHistoryExport(): Promise<void> {
   min-height: 320px;
   max-height: 68vh;
   object-fit: contain;
-  background: rgba(6, 10, 18, .45);
+  background: var(--tint);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
@@ -918,7 +918,7 @@ async function confirmHistoryExport(): Promise<void> {
   align-items: center;
   gap: 6px;
   color: var(--fg);
-  background: rgba(6, 10, 18, .78);
+  background: var(--tint-strong);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   font-size: 12px;
@@ -964,7 +964,7 @@ async function confirmHistoryExport(): Promise<void> {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(6, 10, 18, .42);
+  background: var(--tint);
   line-height: 1.7;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1005,7 +1005,7 @@ async function confirmHistoryExport(): Promise<void> {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: rgba(6, 10, 18, .94);
+  background: var(--surface);
   box-shadow: var(--elev-raised);
 }
 

@@ -242,7 +242,7 @@ function clearHistory(): void {
   padding: 16px;
   display: grid;
   gap: 5px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.035));
+  background: var(--tint);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
@@ -264,7 +264,7 @@ function clearHistory(): void {
   align-items: center;
   min-width: 0;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--tint);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
 }
@@ -277,7 +277,7 @@ function clearHistory(): void {
   gap: 9px;
   padding: 0 11px;
   color: var(--muted);
-  background: rgba(6, 10, 18, 0.54);
+  background: var(--tint-strong);
   border: 1px solid var(--border);
   border-radius: 10px;
 }
@@ -300,7 +300,7 @@ function clearHistory(): void {
 .operation-search:focus-within {
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
-  background: rgba(8, 13, 24, 0.82);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .operation-search input:not([type="checkbox"]):not([type="radio"]):focus {
@@ -438,7 +438,7 @@ function clearHistory(): void {
   overflow: auto;
   padding: 10px;
   color: var(--fg-2);
-  background: rgba(6, 10, 18, 0.46);
+  background: var(--tint);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   font-size: 12px;

@@ -1757,7 +1757,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   padding: 8px;
   color: var(--fg-2);
   text-align: left;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--tint);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
@@ -1808,7 +1808,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 .icon-size-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--tint);
   padding: 10px 12px;
   display: grid;
   gap: 4px;
@@ -1853,7 +1853,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   gap: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--tint);
   color: var(--fg-2);
 }
 
@@ -1947,7 +1947,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   display: block;
   overflow: hidden;
   aspect-ratio: 4 / 3;
-  background: radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.12), transparent 30%), rgba(6, 10, 18, 0.42);
+  background: var(--tint);
 }
 
 .sample-media img {
@@ -1963,9 +1963,9 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 18px);
-  mix-blend-mode: screen;
+    linear-gradient(90deg, transparent, var(--decor-sweep), transparent),
+    repeating-linear-gradient(90deg, var(--decor-line) 0 1px, transparent 1px 18px);
+  mix-blend-mode: var(--decor-blend);
   opacity: 0.72;
   animation: gifPreviewSweep 1.1s linear infinite;
   pointer-events: none;
@@ -1982,16 +1982,16 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 .sample-media-3d img {
   transform-origin: 50% 58%;
   animation: threeDPreviewTilt 4.2s ease-in-out infinite;
-  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.34)) saturate(1.08);
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.12)) saturate(1.08);
 }
 
 .sample-media-3d::after {
   content: "";
   position: absolute;
   inset: 12% 8%;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border: 1px solid var(--decor-border);
   transform: perspective(900px) rotateX(58deg) rotateZ(-8deg);
-  box-shadow: 0 26px 48px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 20px 36px rgba(0, 0, 0, 0.10);
   pointer-events: none;
 }
 
@@ -2056,7 +2056,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   overflow: hidden;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
-  background: linear-gradient(145deg, rgba(14, 184, 166, 0.20), rgba(87, 166, 255, 0.12)), rgba(6, 10, 18, 0.58);
+  background: linear-gradient(145deg, rgba(14, 184, 166, 0.20), rgba(87, 166, 255, 0.12)), var(--tint-strong);
 }
 
 .mode-preview-idle {
@@ -2069,11 +2069,11 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   z-index: 2;
   font-size: 44px;
   letter-spacing: 0.08em;
-  color: rgba(237, 243, 255, 0.88);
+  color: var(--fg);
 }
 
 .mode-preview-gif {
-  background: linear-gradient(145deg, rgba(20, 184, 166, 0.34), rgba(163, 230, 53, 0.18)), rgba(6, 10, 18, 0.62);
+  background: linear-gradient(145deg, rgba(20, 184, 166, 0.34), rgba(163, 230, 53, 0.18)), var(--tint-strong);
 }
 
 .gif-preview-strip {
@@ -2086,8 +2086,8 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 
 .gif-preview-strip span {
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.10);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.20);
+  border: 1px solid var(--border);
   animation: gifFramePop 1.2s ease-in-out infinite;
 }
 
@@ -2105,7 +2105,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
 
 .mode-preview-3d {
   perspective: 900px;
-  background: radial-gradient(circle at 40% 18%, rgba(249, 115, 22, 0.28), transparent 34%), rgba(18, 24, 38, 0.92);
+  background: radial-gradient(circle at 40% 18%, rgba(249, 115, 22, 0.18), transparent 34%), var(--tint-strong);
 }
 
 .three-d-preview-scene {
@@ -2131,9 +2131,9 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   position: absolute;
   inset: 0;
   border-radius: 14px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.24), rgba(87, 166, 255, 0.18));
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.28);
+  background: var(--decor-glow);
+  border: 1px solid var(--decor-border);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.10);
 }
 
 .three-d-preview-cube::before {
@@ -2367,7 +2367,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(6, 10, 18, .38);
+  background: var(--tint);
   min-width: 0;
 }
 
@@ -2439,7 +2439,7 @@ async function chooseWorkspaceExportDir(): Promise<void> {
   line-height: 1.7;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(6, 10, 18, .42);
+  background: var(--tint);
   overflow-wrap: anywhere;
 }
 
