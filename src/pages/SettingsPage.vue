@@ -952,7 +952,7 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
         <div class="card-body stack">
           <div>
             <h3>从开源仓库同步</h3>
-            <p class="muted">同步失败时会保留本地已有提示词，不会清空用户数据。</p>
+            <p class="muted">支持同步 glidea、EvoLinkAI、freestylefly 三个开源仓库；同步失败时会保留本地已有提示词，不会清空用户数据。</p>
           </div>
           <div class="sync-grid">
             <article v-for="source in store.promptSyncSources" :key="source.key" class="sync-card">
@@ -964,6 +964,7 @@ function modelStatusMeta(model: ModelProfile): { label: string; tone: ModelStatu
               <button class="btn-primary btn-sm" type="button" @click="store.syncPromptSource(source.key)">同步-{{ source.label }}</button>
             </article>
           </div>
+          <p class="muted">感谢 glidea、EvoLinkAI、freestylefly 社区维护和分享这些可复用提示词资源。</p>
         </div>
       </div>
       <div class="prompt-filters">

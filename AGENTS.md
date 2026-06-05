@@ -4,7 +4,7 @@
 
 \> \*\*目标模型\*\*：Claude / Codex / Claw 等代码生成模型  
 \> \*\*技术栈\*\*：React 19.2 + Rust (stable) + Tauri v2  
-\> \*\*规范来源\*\*：https://v2.tauri.org.cn/ + https://rust-lang.org/
+\> \*\*规范来源\*\*：https://v2.tauri.app/ + https://rust-lang.org/
 
 ## 🧠 角色定义
 
@@ -22,7 +22,7 @@
 | --- | --- | --- |
 |\------|\-----------|\------|
 | Rust 工具链 | \*\*stable\*\* (≥1.85) + \*\*2024 Edition\*\* | \[rust-lang.org\](https://rust-lang.org) |
-| Tauri | \*\*2.x\*\* (禁止 v1 API) | \[v2.tauri.org.cn\](https://v2.tauri.org.cn) |
+| Tauri | \*\*2.x\*\* (禁止 v1 API) | \[v2.tauri.app\](https://v2.tauri.app) |
 | 异步运行时 | tokio 1.x (Tauri 内置) | 官方默认 |
 | 错误处理 | \`thiserror\` 2.x + \`anyhow\` 1.x (测试) | 社区标准 |
 | 类型导出 | \`specta\` 2.x + \`tauri-specta\` 2.x | 官方推荐 |
@@ -482,11 +482,97 @@ describe('useMyCommand', () => {
     
 
 
+## 🛠️ Tauri 项目必做配置（被实战验证）
+
+以下两项在本项目迭代中验证过必要性，新项目脚手架后必须立即补齐，缺一项就会触发可观测的稳定性问题。
+
+### 1. `main.rs` 设置 Windows 子系统（消除 release 黑窗口）
+
+**症状**：`cargo tauri build` 出来的 release 可执行文件启动时，伴随一个黑色 cmd 窗口在后台运行。
+
+**根因**：Rust 在 Windows 上默认使用 `console` 子系统，运行时分配控制台。GUI 应用必须显式声明 `windows` 子系统。
+
+**修复**（在 `src-tauri/src/main.rs` 文件首行）：
+
+```rust
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+```
+
+**为什么用 `cfg_attr(not(debug_assertions), ...)`**：
+- **release 构建**：使用 `windows` 子系统，**无黑窗口**
+- **debug 构建**（`cargo tauri dev`）：保留 `console` 子系统，**保留控制台输出**，方便看 `println!` / `log` / `eprintln!`
+
+**反例**（避免）：裸写 `#![windows_subsystem = "windows"]` 会让所有构建都隐藏窗口，调试时看不到日志。
+
+### 2. dev 启动前端口预检 + 退出时进程树清理
+
+**症状 A**：第二次跑 `npm run tauri:dev` 报 `Error: Port 3030 is already in use`，`beforeDevCommand` 终止，整个 dev 会话崩。
+
+**症状 B**：dev 跑起来后 Ctrl+C 退出，下次启动仍然撞 A。
+
+**根因**：
+- A：上一次 dev 残留的 vite / cargo / sam-image 进程仍在监听 3030
+- B：Windows 上 npm 起的 vite 不会随 npm 退出而退出（POSIX 信号传播在 Win32 上失效），留下孤儿进程
+
+**修复方案**（在 `scripts/` 下新增 / 改造两个脚本）：
+
+| 文件 | 职责 |
+| --- | --- |
+| `scripts/predev-check.cjs` | dev 子命令前跑：探测 3030（与 `tauri.conf.json` devUrl 一致）是否 LISTEN；占用则列 PID → 询问用户（默认 Y）→ `taskkill /T /F` 杀进程树 → 循环等释放 |
+| `scripts/tauri-cli.cjs` | 包装 Tauri CLI：dev 子命令时先调 predev-check；注册 `SIGINT` / `SIGTERM` handler，退出时 `taskkill /T /F /PID <tauri-cli-pid>` 杀整个进程树 |
+
+**关键决策**：
+
+- **必须用 `taskkill /T /F`，不能用 `process.kill`**：Windows 上必须杀进程树才能连带杀掉孙子进程（npm → vite）
+- **端口释放要循环探测**（每 250ms 一次，最多 5s），不能假设 `taskkill` 返回即释放
+- **仅 `dev` 子命令走预检**；`build` / `bundle` / `info` 不预检，避免影响 CI
+- **prompt 在非 TTY 下默认 Y**，便于自动化场景
+- **端口号 `3030` 写在 predev-check 顶部常量**（可用 `TAURI_DEV_PORT` 环境变量覆盖），新增项目时需同步改 `vite.config.ts` / `tauri.conf.json` 的 devUrl
+
+**用户视角**：
+
+| 场景 | 表现 |
+| --- | --- |
+| 端口被占 | `⚠️ 端口 3030 已被占用（PID: xxx）` → 自动 kill → `✓ 端口 3030 已释放` → 正常启动 |
+| 端口干净 | 零输出，直接进 BeforeDevCommand |
+| Ctrl+C 退出 | 2-3 秒内 3030 不再 LISTENING，下次启动无需预检清理 |
+| 用户拒绝 kill | 退出码 1，npm 显示非零退出，dev 会话不启动 |
+
+### 3. 关联文件速查
+
+| 文件 | 角色 |
+| --- | --- |
+| `src-tauri/src/main.rs:1` | `windows_subsystem` 属性 |
+| `scripts/predev-check.cjs` | 端口预检脚本（独立文件） |
+| `scripts/tauri-cli.cjs` | Tauri CLI 包装器（含进程树清理） |
+| `package.json` 的 `tauri` 字段 | 指向包装器（`node scripts/tauri-cli.cjs`），无需新增 script |
+| `src-tauri/tauri.conf.json` | devUrl 与 vite 端口一致（默认 `127.0.0.1:3030`） |
+
+### 4. 新项目脚手架后的必做清单
+
+```bash
+# 1. main.rs 顶部加 windows_subsystem
+sed -i '1i #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]\n' src-tauri/src/main.rs
+
+# 2. 复制本项目 scripts/predev-check.cjs 和 scripts/tauri-cli.cjs 到新项目
+
+# 3. 修改 package.json 的 tauri 字段指向包装器
+#    "tauri": "node scripts/tauri-cli.cjs"
+
+# 4. 验证三个场景
+npm run tauri:dev                                    # 干净端口应直接启动
+node -e "require('http').createServer().listen(3030)" &
+npm run tauri:dev                                    # 应自动 kill 占用进程
+# 在跑着的 dev 终端按 Ctrl+C，等 3s
+netstat -ano | grep ":3030" | grep LISTENING        # 应无输出
+```
+
+
 ## 📚 参考资源
 
 | 资源 | 链接 |
 | --- | --- |
-| Tauri v2 官方文档（中文） | [https://v2.tauri.org.cn/](https://v2.tauri.org.cn/) |
+| Tauri v2 官方文档 | [https://v2.tauri.app/](https://v2.tauri.app/) |
 | Rust 官方文档 | [https://rust-lang.org/](https://rust-lang.org/) |
 | Rust 书籍（The Book） | [https://doc.rust-lang.org/book/](https://doc.rust-lang.org/book/) |
 | Specta 类型导出 | [https://github.com/oscartbeaumont/specta](https://github.com/oscartbeaumont/specta) |
